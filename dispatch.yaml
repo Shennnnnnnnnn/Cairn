@@ -16,7 +16,8 @@ runtime:
   # Healthcheck timeout for each worker process before a task is assigned.
   healthcheck_timeout: 20
   # Prompt set loaded from cairn/src/cairn/dispatcher/prompts/.
-  prompt_group: "default"
+  # Use "zh" for Chinese prompts, "default" for English.
+  prompt_group: "zh"
 
 tasks:
   bootstrap:
@@ -70,4 +71,13 @@ workers:
     max_running: 2
     priority: 0
     env: {}
+
+  # Gemini CLI worker — requires `gemini` CLI installed and authenticated locally.
+  # Uncomment to enable.
+  # - name: "gemini"
+  #   type: "gemini"
+  #   task_types: [bootstrap, reason, explore]
+  #   max_running: 2
+  #   priority: 1
+  #   env: {}
 

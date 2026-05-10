@@ -11,12 +11,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 TaskType = Literal["reason", "explore", "bootstrap"]
-WorkerType = Literal["claudecode", "codex", "pi", "mock"]
+WorkerType = Literal["claudecode", "codex", "gemini", "pi", "mock"]
 CompletedAction = Literal["remove", "stop"]
 
 WORKER_ENV_KEYS: dict[WorkerType, tuple[str, ...]] = {
     "claudecode": (),  # claude CLI uses local auth; no API keys required
-    "codex": (),  # codex CLI uses local config; no API keys required
+    "codex": (),       # codex CLI uses local config; no API keys required
+    "gemini": (),      # gemini CLI uses local auth; no API keys required
     "pi": (
         "PI_MODEL",
         "PI_BASE_URL",
