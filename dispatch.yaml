@@ -1,10 +1,8 @@
 # Cairn server API endpoint.
-server: "http://cairn-server:8000"
+server: "http://127.0.0.1:8000"
 
 # Shared environment variables merged into every worker.
-common_env:
-  TSEC_SERVER_HOST: "10.0.0.44:8000"
-  TSEC_AGENT_TOKEN: "xxx"
+common_env: {}
 
 runtime:
   # Scheduler tick interval in seconds.
@@ -38,8 +36,10 @@ tasks:
     conclude_timeout: 90
 
 container:
-  # Base worker container. The dispatcher execs agent commands inside one container per project.
-  image: "ghcr.io/oritera/cairn-worker-container:latest"
+  # Set runner to "local" to run worker commands directly on the host (no Docker required).
+  # Set runner to "docker" (default) to run workers inside containers.
+  runner: "local"
+  image: "cairn-worker-local:latest"
   network_mode: "host"
   # "stop" keeps finished containers for inspection; "remove" is cleaner but loses post-run state.
   completed_action: "stop"
@@ -47,39 +47,27 @@ container:
   # cap_add:
   #   - "NET_RAW"
   #   - "NET_ADMIN"
+  # Mount host directories into the worker container.
+  # Format: "host_path:container_path[:mode]"  mode is ro (read-only) or rw (read-write, default)
+  # volumes:
+  #   - "/path/to/your/app:/workspace/target:ro"    # App files to reverse-engineer (read-only)
+  #   - "/path/to/output:/workspace/output:rw"       # Output directory for analysis artifacts
 
 
 workers:
   # Worker priority is ascending: lower numbers are preferred first.
   # max_running is per-worker concurrency. Slower backends such as Pi usually benefit from lower values.
-  - name: "claudecode_deepseek-v4-pro"
+  - name: "claudecode"
     type: "claudecode"
     task_types: [bootstrap, reason, explore]
     max_running: 2
     priority: 0
-    env:
-      ANTHROPIC_MODEL: "deepseek-v4-pro"
-      ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic"
-      ANTHROPIC_AUTH_TOKEN: "sk-xxx"
+    env: {}
 
-  - name: "codex_qwen3.6-plus"
+  - name: "codex"
     type: "codex"
     task_types: [bootstrap,reason,explore]
     max_running: 2
     priority: 0
-    env:
-      CODEX_MODEL: "qwen3.6-plus"
-      CODEX_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-      OPENAI_API_KEY: "sk-xxx"
+    env: {}
 
-  - name: "pi_qwen3.6-plus"
-    type: "pi"
-    task_types: [bootstrap,reason,explore]
-    max_running: 2
-    priority: 0
-    env:
-      PI_MODEL: "qwen3.6-plus"
-      PI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-      PI_API_KEY: "sk-xxx"
-      PI_PROVIDER_API: "openai-completions"
-      PI_MODEL_CONTEXT_WINDOW: "262144"

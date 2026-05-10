@@ -15,16 +15,8 @@ WorkerType = Literal["claudecode", "codex", "pi", "mock"]
 CompletedAction = Literal["remove", "stop"]
 
 WORKER_ENV_KEYS: dict[WorkerType, tuple[str, ...]] = {
-    "claudecode": (
-        "ANTHROPIC_MODEL",
-        "ANTHROPIC_BASE_URL",
-        "ANTHROPIC_AUTH_TOKEN",
-    ),
-    "codex": (
-        "CODEX_MODEL",
-        "CODEX_BASE_URL",
-        "OPENAI_API_KEY",
-    ),
+    "claudecode": (),  # claude CLI uses local auth; no API keys required
+    "codex": (),  # codex CLI uses local config; no API keys required
     "pi": (
         "PI_MODEL",
         "PI_BASE_URL",
@@ -152,6 +144,9 @@ class ContainerConfig(BaseModel):
     network_mode: str
     completed_action: CompletedAction
     cap_add: list[str] = Field(default_factory=list)
+    volumes: list[str] = Field(default_factory=list)
+    # Set to "local" to run worker commands directly on the host instead of in Docker containers.
+    runner: str = Field(default="docker")
 
 
 class RuntimeConfig(BaseModel):
@@ -210,14 +205,13 @@ class DispatchConfig(BaseModel):
     def merge_common_env(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
-        common_env = data.get("common_env")
-        if common_env is None:
-            common_env = {}
+        common_env = data.get("common_env") or {}
         workers = data.get("workers")
         if not isinstance(common_env, dict) or not isinstance(workers, list):
-            return data
+            return {**data, "common_env": common_env}
 
         merged = dict(data)
+        merged["common_env"] = common_env
         merged_workers: list[Any] = []
         for worker in workers:
             if not isinstance(worker, dict):
