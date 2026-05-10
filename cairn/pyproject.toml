@@ -26,6 +26,4 @@ build-backend = "uv_build"
 dev = [
 ]
 
-[[tool.uv.index]]
-url = "https://mirrors.aliyun.com/pypi/simple"
-default = true
+
