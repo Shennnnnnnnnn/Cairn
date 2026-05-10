@@ -1,0 +1,5 @@
+FROM ghcr.io/oritera/cairn-worker-container:latest
+
+# Upgrade codex-cli to match the host version that supports chat_completions wire API
+USER root
+RUN npm install -g @openai/codex@0.130.0

@@ -13,6 +13,7 @@ from cairn.dispatcher.models import ReasonCheckpoint, RunningTask
 from cairn.dispatcher.protocol.client import CairnClient
 from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
+from cairn.dispatcher.runtime.local_runner import LocalProcessManager
 from cairn.dispatcher.runtime.startup_healthcheck import format_failure_summary, run_startup_healthchecks
 from cairn.dispatcher.scheduler.worker_select import choose_worker
 from cairn.dispatcher.tasks.bootstrap import run_bootstrap_task
@@ -41,7 +42,10 @@ class DispatcherLoop:
         self.config_path = config_path
         self.config = DispatchConfig.load(config_path)
         self.client = CairnClient(self.config.server)
-        self.container_manager = ContainerManager(self.config.container)
+        if self.config.container.runner == "local":
+            self.container_manager = LocalProcessManager(self.config.container)
+        else:
+            self.container_manager = ContainerManager(self.config.container)
         self.executor = ThreadPoolExecutor(max_workers=self.config.runtime.max_workers)
         self.cleanup_executor = ThreadPoolExecutor(max_workers=max(1, min(8, self.config.runtime.max_workers)))
         self.futures: dict[Future[str], RunningTask] = {}
