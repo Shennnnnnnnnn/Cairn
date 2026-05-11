@@ -14,7 +14,7 @@ runtime:
   # Per-project worker cap. Prevents one project from monopolizing the whole dispatcher.
   max_project_workers: 4
   # Healthcheck timeout for each worker process before a task is assigned.
-  healthcheck_timeout: 20
+  healthcheck_timeout: 60
   # Prompt set loaded from cairn/src/cairn/dispatcher/prompts/.
   # Use "zh" for Chinese prompts, "default" for English.
   prompt_group: "zh"
@@ -58,17 +58,17 @@ container:
 workers:
   # Worker priority is ascending: lower numbers are preferred first.
   # max_running is per-worker concurrency. Slower backends such as Pi usually benefit from lower values.
-  - name: "claudecode"
-    type: "claudecode"
-    task_types: [bootstrap, reason, explore]
-    max_running: 2
-    priority: 0
-    env: {}
+  # - name: "claudecode"
+  #   type: "claudecode"
+  #   task_types: [bootstrap, reason, explore]
+  #   max_running: 2
+  #   priority: 0
+  #   env: {}
 
   - name: "codex"
     type: "codex"
     task_types: [bootstrap,reason,explore]
-    max_running: 2
+    max_running: 4
     priority: 0
     env: {}
 

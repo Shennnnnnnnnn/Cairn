@@ -48,6 +48,7 @@ class LocalManagedProcess:
             self.command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,  # prevent interactive CLI tools from reading stdin
             env=merged_env,
             text=True,
             start_new_session=True,  # put in its own process group for clean kill
