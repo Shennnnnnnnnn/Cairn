@@ -13,7 +13,6 @@ class CodexDriver(RegexSessionDriver):
             "codex",
             "exec",
             "--dangerously-bypass-approvals-and-sandbox",
-            "--",
             "Reply with exactly: pong",
         ]
 
@@ -23,7 +22,6 @@ class CodexDriver(RegexSessionDriver):
                 "codex",
                 "exec",
                 "--dangerously-bypass-approvals-and-sandbox",
-                "--",
                 prompt,
             ]
         )
@@ -35,6 +33,5 @@ class CodexDriver(RegexSessionDriver):
             "resume",
             session,
             "--dangerously-bypass-approvals-and-sandbox",
-            "--",
             prompt,
         ]
