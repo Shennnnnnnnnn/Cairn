@@ -188,3 +188,11 @@ class LocalProcessManager:
         # Instead, LocalManagedProcess.communicate() enforces the timeout natively.
         LOG.debug("local exec command=%s", command)
         return LocalManagedProcess(command, env, timeout_seconds=timeout_seconds)
+
+    def write_text_file(self, container_name: str, path: str, content: str) -> None:
+        """Write a text file directly to the host filesystem (local runner equivalent of ContainerManager.write_text_file)."""
+        import pathlib
+        target = pathlib.Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        LOG.debug("local write_text_file path=%s", path)
