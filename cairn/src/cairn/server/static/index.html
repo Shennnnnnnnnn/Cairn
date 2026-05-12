@@ -356,6 +356,12 @@
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M8 2v3M16 2v3"/><path d="M3.5 9.5h17"/><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M8 13h3M8 16h6"/></svg>
             <span x-text="formatDate(p.created_at)"></span>
           </div>
+          <template x-if="p.scheduled_start_at && !scheduledStartIsDue(p.scheduled_start_at)">
+            <div class="mt-1 flex items-center gap-1.5 text-[11px] text-sky-600">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+              <span x-text="`${t('scheduledFor')} ${formatDate(p.scheduled_start_at)}`"></span>
+            </div>
+          </template>
           <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-end gap-1.5">
             <div class="flex items-center justify-end gap-1.5 flex-wrap">
               <button type="button" @click.stop="viewProjectYaml(p.id, p.title)"
@@ -364,7 +370,7 @@
                 <span x-text="t('snapshot')"></span>
               </button>
               <template x-if="p.status !== 'completed'">
-                <button type="button" @click.stop="toggleProjectStopById(p.id, p.status)"
+                <button type="button" @click.stop="toggleProjectStopById(p.id, p.status, p.title)"
                   class="px-2 py-1 rounded-lg border text-[11px] transition flex items-center gap-1"
                   :class="p.status === 'active'
                     ? 'border-amber-200 text-amber-600 hover:bg-amber-50'
@@ -802,6 +808,15 @@
       <input x-model="newProject.title" :placeholder="t('projectTitlePlaceholder')" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300">
       <textarea x-model="newProject.origin" :placeholder="t('originPlaceholder')" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300"></textarea>
       <textarea x-model="newProject.goal" :placeholder="t('goalPlaceholder')" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300"></textarea>
+      <button type="button" @click="toggleScheduledStart(newProject)" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] transition"
+        :class="newProject.scheduled_start_enabled ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+        <span x-text="t('scheduledStartToggle')"></span>
+      </button>
+      <label x-show="newProject.scheduled_start_enabled" x-cloak class="block">
+        <span class="text-[11px] text-slate-400 mb-1 block font-medium" x-text="t('scheduledStartLabel')"></span>
+        <input type="datetime-local" x-model="newProject.scheduled_start_at" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition text-slate-600">
+      </label>
 
       <div>
         <div class="flex items-center justify-between mb-2">
@@ -923,6 +938,15 @@
     <p class="text-xs text-slate-400 mb-4" x-text="projectLabel(reopenForm.projectId, reopenForm.projectTitle)"></p>
     <div class="space-y-3">
       <textarea x-model="reopenForm.description" :placeholder="t('reopenPlaceholder')" rows="3" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300"></textarea>
+      <button type="button" @click="toggleScheduledStart(reopenForm)" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] transition"
+        :class="reopenForm.scheduled_start_enabled ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+        <span x-text="t('scheduledStartToggle')"></span>
+      </button>
+      <label x-show="reopenForm.scheduled_start_enabled" x-cloak class="block">
+        <span class="text-[11px] text-slate-400 mb-1 block font-medium" x-text="t('scheduledStartLabel')"></span>
+        <input type="datetime-local" x-model="reopenForm.scheduled_start_at" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition text-slate-600">
+      </label>
       <div class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-500">
         <span x-text="t('actor')"></span>: <span class="font-medium text-slate-700" x-text="actorName()"></span>
       </div>
@@ -931,6 +955,27 @@
       <button @click="showReopenModal = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition" x-text="t('cancel')"></button>
       <button @click="reopenProject()" :disabled="!reopenForm.projectId || !reopenForm.description"
         class="px-5 py-2 text-sm bg-sky-500 text-white rounded-xl font-medium hover:bg-sky-600 transition disabled:opacity-30 shadow-sm shadow-sky-200" x-text="t('reopen')"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Resume -->
+<div x-show="showResumeModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showResumeModal = false">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
+    <h3 class="text-base font-semibold text-slate-700 mb-1" x-text="t('resumeTitle')"></h3>
+    <p class="text-xs text-slate-400 mb-4" x-text="projectLabel(resumeForm.projectId, resumeForm.projectTitle)"></p>
+    <button type="button" @click="toggleScheduledStart(resumeForm)" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] transition"
+      :class="resumeForm.scheduled_start_enabled ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+      <span x-text="t('scheduledStartToggle')"></span>
+    </button>
+    <label x-show="resumeForm.scheduled_start_enabled" x-cloak class="mt-3 block">
+      <span class="text-[11px] text-slate-400 mb-1 block font-medium" x-text="t('scheduledStartLabel')"></span>
+      <input type="datetime-local" x-model="resumeForm.scheduled_start_at" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition text-slate-600">
+    </label>
+    <div class="flex justify-end gap-2 mt-5">
+      <button @click="showResumeModal = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition" x-text="t('cancel')"></button>
+      <button @click="resumeProject()" class="px-5 py-2 text-sm bg-teal-500 text-white rounded-xl font-medium hover:bg-teal-600 transition shadow-sm shadow-teal-200" x-text="t('resume')"></button>
     </div>
   </div>
 </div>
@@ -1111,6 +1156,10 @@ function cairnApp() {
         addHintTitle: 'Add Hint', hintPlaceholder: 'Hint content…',
         reopenTitle: 'Reopen Project', reopenDesc: 'Optionally describe why you are reopening this project.',
         reopenPlaceholder: 'Reason for reopening (optional)',
+        resumeTitle: 'Resume Project',
+        scheduledStartToggle: 'Scheduled start',
+        scheduledStartLabel: 'Start time (optional)',
+        scheduledFor: 'Scheduled for',
         renameTitle: 'Rename Project', renamePlaceholder: 'Project title',
         save: 'Save',
         localPrefsTitle: 'Local Preferences', actorNameLabel: 'Actor Name',
@@ -1169,6 +1218,10 @@ function cairnApp() {
         addHintTitle: '添加提示', hintPlaceholder: '提示内容…',
         reopenTitle: '重新打开项目', reopenDesc: '可选：描述重新打开此项目的原因。',
         reopenPlaceholder: '重新打开的原因（可选）',
+        resumeTitle: '恢复项目',
+        scheduledStartToggle: '定时开启',
+        scheduledStartLabel: '开始时间（可选）',
+        scheduledFor: '计划开始',
         renameTitle: '重命名项目', renamePlaceholder: '项目标题',
         save: '保存',
         localPrefsTitle: '本地偏好设置', actorNameLabel: '用户名',
@@ -1217,6 +1270,7 @@ function cairnApp() {
     showCompleteModal: false,
     showHintModal: false,
     showReopenModal: false,
+    showResumeModal: false,
     showRenameModal: false,
     showLocalPrefs: false,
     showSettings: false,
@@ -1225,12 +1279,13 @@ function cairnApp() {
     exportProjectId: '',
     showDeleteModal: false,
 
-    newProject: { title: '', origin: '', goal: '', hints: [{ content: '' }] },
+    newProject: { title: '', origin: '', goal: '', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content: '' }] },
     intentForm: { description: '' },
     concludeForm: { description: '', intentId: '' },
     completeForm: { description: '' },
     hintForm: { content: '' },
-    reopenForm: { projectId: '', projectTitle: '', description: '' },
+    reopenForm: { projectId: '', projectTitle: '', description: '', scheduled_start_enabled: false, scheduled_start_at: '' },
+    resumeForm: { projectId: '', projectTitle: '', scheduled_start_enabled: false, scheduled_start_at: '' },
     renameForm: { projectId: '', originalTitle: '', title: '' },
     localPrefs: { actor_name: 'Human', layout_mode: 'dagre_tb' },
     settingsForm: { intent_timeout: 5, reason_timeout: 5 },
@@ -1714,6 +1769,10 @@ function cairnApp() {
 
     async toggleProjectStop() {
       if (!this.selectedProjectId || !this.project || this.project.project.status === 'completed') return;
+      if (this.project.project.status === 'stopped') {
+        this.openResumeProject(this.selectedProjectId, this.project.project.title);
+        return;
+      }
       const nextStatus = this.project.project.status === 'active' ? 'stopped' : 'active';
       try {
         await this.setProjectStatus(this.selectedProjectId, nextStatus);
@@ -1722,8 +1781,12 @@ function cairnApp() {
       }
     },
 
-    async toggleProjectStopById(projectId, currentStatus) {
+    async toggleProjectStopById(projectId, currentStatus, projectTitle = '') {
       if (!projectId || currentStatus === 'completed') return;
+      if (currentStatus === 'stopped') {
+        this.openResumeProject(projectId, projectTitle);
+        return;
+      }
       const nextStatus = currentStatus === 'active' ? 'stopped' : 'active';
       try {
         await this.setProjectStatus(projectId, nextStatus);
@@ -1733,15 +1796,19 @@ function cairnApp() {
     },
 
     async setProjectStatus(projectId, status, options = {}) {
-      const { reload = true, toast = true } = options;
-      const updated = await this.api('PUT', `/projects/${projectId}/status`, { status });
+      const { reload = true, toast = true, scheduled_start_at = null } = options;
+      const body = { status };
+      if (scheduled_start_at) body.scheduled_start_at = scheduled_start_at;
+      const updated = await this.api('PUT', `/projects/${projectId}/status`, body);
       const projectSummary = this.projects.find(item => item.id === projectId);
       if (projectSummary) {
         projectSummary.status = updated.status;
+        projectSummary.scheduled_start_at = updated.scheduled_start_at;
         projectSummary.reason = updated.reason;
       }
       if (this.selectedProjectId === projectId && this.project) {
         this.project.project.status = updated.status;
+        this.project.project.scheduled_start_at = updated.scheduled_start_at;
         this.project.project.reason = updated.reason;
         if (!this.projectIsActive()) {
           this.showIntentModal = false;
@@ -1753,7 +1820,9 @@ function cairnApp() {
         }
       }
       if (reload) await this.loadProjects();
-      if (toast) this.showToast(status === 'stopped' ? 'Project stopped' : 'Project resumed');
+      if (toast) {
+        this.showToast(status === 'stopped' ? 'Project stopped' : (scheduled_start_at ? 'Project scheduled' : 'Project resumed'));
+      }
       return updated;
     },
 
@@ -1782,8 +1851,27 @@ function cairnApp() {
 
     openReopenProject(projectId, projectTitle = '') {
       if (!projectId) return;
-      this.reopenForm = { projectId, projectTitle, description: '' };
+      this.reopenForm = { projectId, projectTitle, description: '', scheduled_start_enabled: false, scheduled_start_at: '' };
       this.showReopenModal = true;
+    },
+
+    openResumeProject(projectId, projectTitle = '') {
+      if (!projectId) return;
+      this.resumeForm = { projectId, projectTitle, scheduled_start_enabled: false, scheduled_start_at: '' };
+      this.showResumeModal = true;
+    },
+
+    async resumeProject() {
+      const projectId = this.resumeForm.projectId || this.selectedProjectId;
+      if (!projectId) return;
+      try {
+        const scheduledStart = this.resumeForm.scheduled_start_enabled ? this.toApiTimestamp(this.resumeForm.scheduled_start_at) : null;
+        await this.setProjectStatus(projectId, 'active', { scheduled_start_at: scheduledStart });
+        this.showResumeModal = false;
+        this.resumeForm = { projectId: '', projectTitle: '', scheduled_start_enabled: false, scheduled_start_at: '' };
+      } catch (e) {
+        this.showToast(e.message, 'error');
+      }
     },
 
     openRenameProject(projectId, projectTitle = '') {
@@ -2173,12 +2261,15 @@ function cairnApp() {
       if (!projectId) return;
       try {
         const actor = this.actorName();
-        await this.api('POST', `/projects/${projectId}/reopen`, {
+        const body = {
           description: this.reopenForm.description,
           creator: actor,
-        });
+        };
+        const scheduledStart = this.reopenForm.scheduled_start_enabled ? this.toApiTimestamp(this.reopenForm.scheduled_start_at) : null;
+        if (scheduledStart) body.scheduled_start_at = scheduledStart;
+        await this.api('POST', `/projects/${projectId}/reopen`, body);
         this.showReopenModal = false;
-        this.reopenForm = { projectId: '', projectTitle: '', description: '' };
+        this.reopenForm = { projectId: '', projectTitle: '', description: '', scheduled_start_enabled: false, scheduled_start_at: '' };
         await this.loadProjects();
         if (this.selectedProjectId === projectId && this.view === 'graph') {
           await this.loadProject(projectId);
@@ -3374,6 +3465,27 @@ function cairnApp() {
     formatTime(ts) { if (!ts) return ''; return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}); },
     formatDate(ts) { if (!ts) return ''; const d = new Date(ts); return d.toLocaleDateString([],{year:'numeric',month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); },
     formatTimelineDate(ts) { if (!ts) return ''; return new Date(ts).toLocaleDateString([],{year:'numeric',month:'short',day:'numeric'}); },
+    scheduledStartIsDue(ts) { return !ts || new Date(ts).getTime() <= Date.now(); },
+    currentLocalDateTimeValue() {
+      const date = new Date();
+      date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+      return date.toISOString().slice(0, 16);
+    },
+    toggleScheduledStart(form) {
+      form.scheduled_start_enabled = !form.scheduled_start_enabled;
+      if (form.scheduled_start_enabled && !form.scheduled_start_at) {
+        form.scheduled_start_at = this.currentLocalDateTimeValue();
+      }
+      if (!form.scheduled_start_enabled) {
+        form.scheduled_start_at = '';
+      }
+    },
+    toApiTimestamp(localValue) {
+      if (!localValue) return null;
+      const date = new Date(localValue);
+      if (Number.isNaN(date.getTime())) throw new Error('Invalid start time');
+      return date.toISOString();
+    },
     formatDurationMs(ms) {
       const totalSeconds = Math.max(0, Math.round(ms / 1000));
       const hours = Math.floor(totalSeconds / 3600);
@@ -3389,11 +3501,13 @@ function cairnApp() {
         const actor = this.actorName();
         const hintContents = this.newProject.hints.filter(h => h.content?.trim());
         const body = { title: this.newProject.title, origin: this.newProject.origin, goal: this.newProject.goal };
+        const scheduledStart = this.newProject.scheduled_start_enabled ? this.toApiTimestamp(this.newProject.scheduled_start_at) : null;
+        if (scheduledStart) body.scheduled_start_at = scheduledStart;
         const hints = hintContents.map(h => ({ content: h.content.trim(), creator: actor }));
         if (hints.length > 0) body.hints = hints;
         const data = await this.api('POST', '/projects', body);
         this.showNewProject = false;
-        this.newProject = { title:'', origin:'', goal:'', hints: [{ content:'' }] };
+        this.newProject = { title:'', origin:'', goal:'', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content:'' }] };
         await this.loadProjects();
         await this.openProject(data.project.id);
         this.showToast('Project created');

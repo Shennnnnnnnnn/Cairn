@@ -4,6 +4,7 @@ import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -126,9 +127,9 @@ class DispatcherLoop:
                 len(self.futures),
             )
             return
-        active = [summary for summary in summaries if summary.status == "active"]
+        active = [summary for summary in summaries if summary.status == "active" and self._project_start_is_due(summary)]
         if not active:
-            self._log_changed("dispatch/global", logging.INFO, "skip dispatch because no active projects")
+            self._log_changed("dispatch/global", logging.INFO, "skip dispatch because no active projects are due")
             return
 
         running_projects = self._ordered_projects(
@@ -566,6 +567,31 @@ class DispatcherLoop:
         active_ids = {summary.id for summary in summaries if summary.status == "active"}
         return len(self.runtime_project_ids & active_ids)
 
+    def _project_start_is_due(self, summary: ProjectSummary) -> bool:
+        if summary.scheduled_start_at is None:
+            return True
+        try:
+            scheduled = datetime.fromisoformat(summary.scheduled_start_at.replace("Z", "+00:00"))
+        except ValueError:
+            LOG.warning(
+                "ignoring invalid scheduled_start_at project=%s scheduled_start_at=%s",
+                summary.id,
+                summary.scheduled_start_at,
+            )
+            return True
+        if scheduled.tzinfo is None:
+            scheduled = scheduled.replace(tzinfo=timezone.utc)
+        if scheduled <= datetime.now(timezone.utc):
+            return True
+        self._log_changed(
+            f"project:{summary.id}:skip:scheduled_start",
+            logging.DEBUG,
+            "skip project=%s because scheduled_start_at=%s is not due",
+            summary.id,
+            summary.scheduled_start_at,
+        )
+        return False
+
     def _project_open_intent_count(self, project: ProjectDetail) -> int:
         return sum(1 for intent in project.intents if intent.to is None)
 
@@ -776,6 +802,8 @@ class DispatcherLoop:
     def _initialize_reason_checkpoints(self, summaries: list[ProjectSummary]) -> None:
         for summary in summaries:
             if summary.status != "active":
+                continue
+            if not self._project_start_is_due(summary):
                 continue
             if summary.id in self.reason_checkpoints:
                 continue

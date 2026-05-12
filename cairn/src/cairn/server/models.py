@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+
+def normalize_optional_utc_timestamp(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("must be an ISO 8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    parsed = parsed.astimezone(timezone.utc).replace(microsecond=0)
+    return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class Settings(BaseModel):
@@ -48,6 +65,7 @@ class ProjectMeta(BaseModel):
     title: str
     status: Literal["active", "stopped", "completed"]
     created_at: str
+    scheduled_start_at: str | None = None
     reason: ProjectReason | None = None
 
 
@@ -84,6 +102,7 @@ class CreateProjectRequest(BaseModel):
     origin: str
     goal: str
     hints: list[CreateHintInline] | None = None
+    scheduled_start_at: str | None = None
 
     @field_validator("title", "origin", "goal")
     @classmethod
@@ -92,6 +111,11 @@ class CreateProjectRequest(BaseModel):
         if not text:
             raise ValueError("must not be empty")
         return text
+
+    @field_validator("scheduled_start_at")
+    @classmethod
+    def validate_scheduled_start_at(cls, value: str | None) -> str | None:
+        return normalize_optional_utc_timestamp(value)
 
 
 class CreateHintRequest(BaseModel):
@@ -209,6 +233,12 @@ class ConcludeResponse(BaseModel):
 
 class UpdateProjectStatusRequest(BaseModel):
     status: Literal["active", "stopped"]
+    scheduled_start_at: str | None = None
+
+    @field_validator("scheduled_start_at")
+    @classmethod
+    def validate_scheduled_start_at(cls, value: str | None) -> str | None:
+        return normalize_optional_utc_timestamp(value)
 
 
 class UpdateProjectTitleRequest(BaseModel):
@@ -226,6 +256,7 @@ class UpdateProjectTitleRequest(BaseModel):
 class ReopenRequest(BaseModel):
     description: str
     creator: str
+    scheduled_start_at: str | None = None
 
     @field_validator("description", "creator")
     @classmethod
@@ -234,6 +265,11 @@ class ReopenRequest(BaseModel):
         if not text:
             raise ValueError("must not be empty")
         return text
+
+    @field_validator("scheduled_start_at")
+    @classmethod
+    def validate_scheduled_start_at(cls, value: str | None) -> str | None:
+        return normalize_optional_utc_timestamp(value)
 
 
 class ReopenResponse(BaseModel):

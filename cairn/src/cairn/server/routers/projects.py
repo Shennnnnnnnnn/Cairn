@@ -80,8 +80,8 @@ def create_project(body: CreateProjectRequest):
         now = utcnow()
 
         conn.execute(
-            "INSERT INTO projects (id, title, status, created_at) VALUES (?, ?, 'active', ?)",
-            (pid, body.title, now),
+            "INSERT INTO projects (id, title, status, created_at, scheduled_start_at) VALUES (?, ?, 'active', ?, ?)",
+            (pid, body.title, now, body.scheduled_start_at),
         )
         conn.execute(
             "INSERT INTO facts (id, project_id, description) VALUES (?, ?, ?)",
@@ -103,7 +103,14 @@ def create_project(body: CreateProjectRequest):
                 hints.append(Hint(id=hid, content=h.content, creator=h.creator, created_at=now))
 
         return ProjectDetail(
-            project=ProjectMeta(id=pid, title=body.title, status="active", created_at=now, reason=None),
+            project=ProjectMeta(
+                id=pid,
+                title=body.title,
+                status="active",
+                created_at=now,
+                scheduled_start_at=body.scheduled_start_at,
+                reason=None,
+            ),
             facts=[
                 Fact(id="origin", description=body.origin),
                 Fact(id="goal", description=body.goal),
@@ -163,12 +170,16 @@ def update_project_status(project_id: str, body: UpdateProjectStatusRequest):
         current_status = row["status"]
         if current_status == "completed":
             raise HTTPException(409, "Completed projects cannot change status")
-        if current_status == body.status:
+        if current_status == body.status and row["scheduled_start_at"] == body.scheduled_start_at:
             return project_meta_from_row(row)
 
         conn.execute(
-            "UPDATE projects SET status = ? WHERE id = ?",
-            (body.status, project_id),
+            "UPDATE projects SET status = ?, scheduled_start_at = ? WHERE id = ?",
+            (
+                body.status,
+                body.scheduled_start_at if body.status == "active" else None,
+                project_id,
+            ),
         )
         if body.status == "stopped":
             conn.execute(
@@ -270,6 +281,7 @@ def complete_project(project_id: str, body: CompleteRequest):
             """
             UPDATE projects
             SET status = 'completed',
+                scheduled_start_at = NULL,
                 reason_worker = NULL,
                 reason_trigger = NULL,
                 reason_started_at = NULL,
@@ -332,8 +344,8 @@ def reopen_project(project_id: str, body: ReopenRequest):
             )
         clear_project_reason(conn, project_id)
         conn.execute(
-            "UPDATE projects SET status = 'active' WHERE id = ?",
-            (project_id,),
+            "UPDATE projects SET status = 'active', scheduled_start_at = ? WHERE id = ?",
+            (body.scheduled_start_at, project_id),
         )
 
         updated_project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()

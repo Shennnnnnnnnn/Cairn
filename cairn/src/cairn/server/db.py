@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS projects (
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL,
+    scheduled_start_at TEXT,
     reason_worker TEXT,
     reason_trigger TEXT,
     reason_started_at TEXT,
@@ -89,6 +90,16 @@ def configure(path: Path) -> None:
     _db_path.parent.mkdir(parents=True, exist_ok=True)
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    project_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(projects)").fetchall()
+    }
+    if "scheduled_start_at" not in project_columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN scheduled_start_at TEXT")
 
 
 @contextmanager
