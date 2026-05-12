@@ -62,6 +62,7 @@ def list_projects():
                 title=row["title"],
                 status=row["status"],
                 created_at=row["created_at"],
+                scheduled_start_at=row["scheduled_start_at"],
                 reason=project_reason_from_row(row),
                 fact_count=row["fact_count"],
                 intent_count=row["intent_count"],
