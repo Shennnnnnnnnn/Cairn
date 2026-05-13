@@ -58,26 +58,25 @@ container:
 workers:
   # Worker priority is ascending: lower numbers are preferred first.
   # max_running is per-worker concurrency. Slower backends such as Pi usually benefit from lower values.
-  # - name: "claudecode"
-  #   type: "claudecode"
-  #   task_types: [bootstrap, reason, explore]
-  #   max_running: 2
-  #   priority: 0
-  #   env: {}
-
-  - name: "codex"
-    type: "codex"
-    task_types: [bootstrap,reason,explore]
-    max_running: 4
+  - name: "claudecode"
+    type: "claudecode"
+    task_types: [reason]
+    max_running: 1
     priority: 0
     env: {}
 
-  # Gemini CLI worker — requires `gemini` CLI installed and authenticated locally.
-  # Uncomment to enable.
-  # - name: "gemini"
-  #   type: "gemini"
-  #   task_types: [bootstrap, reason, explore]
-  #   max_running: 2
-  #   priority: 1
-  #   env: {}
+  - name: "codex"
+    type: "codex"
+    task_types: [bootstrap, explore]
+    max_running: 2
+    priority: 0
+    env: {}
+
+  - name: "gemini"
+    type: "gemini"
+    task_types: [explore]
+    max_running: 2
+    priority: 1
+    env: {}
+
 
