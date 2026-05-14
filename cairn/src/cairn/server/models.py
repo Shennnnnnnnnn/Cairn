@@ -73,6 +73,7 @@ class ProjectMeta(BaseModel):
     title: str
     directory_id: str | None = None
     directory_local_path: str | None = None
+    favorite: bool = False
     status: Literal["active", "stopped", "completed"]
     created_at: str
     scheduled_start_at: str | None = None
@@ -318,6 +319,10 @@ class UpdateProjectTitleRequest(BaseModel):
         if not text:
             raise ValueError("must not be empty")
         return text
+
+
+class UpdateProjectFavoriteRequest(BaseModel):
+    favorite: bool
 
 
 class ReopenRequest(BaseModel):

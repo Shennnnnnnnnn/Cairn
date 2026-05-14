@@ -309,6 +309,16 @@
         <span class="font-medium" x-text="t('uncategorized')"></span>
         <span class="text-xs tabular-nums opacity-70" x-text="uncategorizedProjects().length"></span>
       </button>
+      <button type="button"
+        @click="selectDirectory('favorites')"
+        class="mb-1 flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-sm transition"
+        :class="selectedDirectoryId === 'favorites' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-transparent text-slate-600 hover:bg-slate-50'">
+        <span class="inline-flex items-center gap-1.5 font-medium">
+          <svg class="h-3.5 w-3.5" :class="selectedDirectoryId === 'favorites' ? 'text-amber-500 fill-amber-400' : 'text-slate-400'" fill="currentColor" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M12 3.5l2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6-4.36-4.25 6.03-.88L12 3.5Z"/></svg>
+          <span x-text="t('favorites')"></span>
+        </span>
+        <span class="text-xs tabular-nums opacity-70" x-text="favoriteProjects().length"></span>
+      </button>
       <template x-for="directory in directories" :key="directory.id">
         <div @dragover.prevent @drop.prevent="assignDraggedProject(directory.id)" class="group mb-1 flex items-center gap-1 rounded-lg border transition"
           :class="selectedDirectoryId === directory.id ? 'border-brand-200 bg-brand-50' : 'border-transparent hover:bg-slate-50'">
@@ -348,9 +358,19 @@
           class="group h-full flex flex-col bg-white rounded-2xl border border-slate-200/60 p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-slate-200/50 hover:border-slate-300 hover:-translate-y-0.5">
           <div class="flex items-start justify-between mb-3">
             <span class="text-[11px] font-mono text-slate-400 tracking-wide" x-text="p.id"></span>
-            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-[0.12em]"
-              :class="projectStatusBadgeClass(p.status)"
-              x-text="p.status"></span>
+            <div class="flex items-center gap-1.5">
+              <button type="button"
+                @click.stop="toggleProjectFavorite(p)"
+                class="inline-flex h-7 w-7 items-center justify-center rounded-lg border transition focus:outline-none focus:ring-2 focus:ring-amber-100"
+                :class="p.favorite ? 'border-amber-200 bg-amber-50 text-amber-500' : 'border-slate-200 text-slate-300 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-500'"
+                :title="p.favorite ? t('removeFavorite') : t('addFavorite')"
+                :aria-label="p.favorite ? t('removeFavorite') : t('addFavorite')">
+                <svg class="h-3.5 w-3.5" :class="p.favorite ? 'fill-current' : ''" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 3.5l2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6-4.36-4.25 6.03-.88L12 3.5Z"/></svg>
+              </button>
+              <span class="px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-[0.12em]"
+                :class="projectStatusBadgeClass(p.status)"
+                x-text="p.status"></span>
+            </div>
           </div>
           <div class="mb-3 flex-1">
             <div class="title-action-trigger flex items-start gap-2">
@@ -471,6 +491,14 @@
     <div class="title-action-trigger flex items-center gap-2 min-w-0">
       <span class="text-[11px] font-mono text-slate-400" x-text="project.project.id"></span>
       <h2 class="text-[15px] font-semibold text-slate-700 truncate" x-text="project.project.title"></h2>
+      <button x-show="!replay.active" type="button"
+        @click="toggleProjectFavorite(project.project)"
+        class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition focus:outline-none focus:ring-2 focus:ring-amber-100"
+        :class="project.project.favorite ? 'border-amber-200 bg-amber-50 text-amber-500' : 'border-slate-200 text-slate-300 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-500'"
+        :title="project.project.favorite ? t('removeFavorite') : t('addFavorite')"
+        :aria-label="project.project.favorite ? t('removeFavorite') : t('addFavorite')">
+        <svg class="h-3.5 w-3.5" :class="project.project.favorite ? 'fill-current' : ''" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 3.5l2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6-4.36-4.25 6.03-.88L12 3.5Z"/></svg>
+      </button>
       <button x-show="!replay.active" @click="openRenameProject(project.project.id, project.project.title)"
         class="title-action-button inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400"
         title="Rename project"
@@ -1212,7 +1240,8 @@ function cairnApp() {
         stopActive: 'Stop Active', stopping: 'Stopping…',
         newProject: 'New Project',
         directories: 'Directories', directory: 'Directory', allDirectories: 'All directories',
-        uncategorized: 'Uncategorized', projectsCount: 'projects',
+        uncategorized: 'Uncategorized', favorites: 'Favorites', projectsCount: 'projects',
+        addFavorite: 'Add favorite', removeFavorite: 'Remove favorite',
         directoryNamePlaceholder: 'New directory', createDirectory: 'Create directory',
         newDirectoryTitle: 'New Directory',
         renameDirectoryTitle: 'Edit Directory',
@@ -1288,7 +1317,8 @@ function cairnApp() {
         stopActive: '停止全部', stopping: '停止中…',
         newProject: '新建项目',
         directories: '目录', directory: '目录', allDirectories: '全部目录',
-        uncategorized: '未归类', projectsCount: '个项目',
+        uncategorized: '未归类', favorites: '收藏', projectsCount: '个项目',
+        addFavorite: '加入收藏', removeFavorite: '取消收藏',
         directoryNamePlaceholder: '新目录', createDirectory: '创建目录',
         newDirectoryTitle: '新建目录',
         renameDirectoryTitle: '编辑目录',
@@ -1643,6 +1673,7 @@ function cairnApp() {
         if (
           this.selectedDirectoryId !== 'all'
           && this.selectedDirectoryId !== 'uncategorized'
+          && this.selectedDirectoryId !== 'favorites'
           && !this.directories.some(directory => directory.id === this.selectedDirectoryId)
         ) {
           this.selectedDirectoryId = 'all';
@@ -1663,7 +1694,15 @@ function cairnApp() {
       return this.projects.filter(project => !project.directory_id);
     },
 
+    favoriteProjects() {
+      return this.projects.filter(project => project.favorite);
+    },
+
     projectGroups() {
+      if (this.selectedDirectoryId === 'favorites') {
+        const projects = this.favoriteProjects();
+        return projects.length > 0 ? [{ id: 'favorites', name: this.t('favorites'), projects }] : [];
+      }
       if (this.selectedDirectoryId === 'uncategorized') {
         const projects = this.uncategorizedProjects();
         return projects.length > 0 ? [{ id: 'uncategorized', name: this.t('uncategorized'), projects }] : [];
@@ -2180,6 +2219,33 @@ function cairnApp() {
         await this.loadProjects();
         this.showToast('Project renamed');
       } catch (e) {
+        this.showToast(e.message, 'error');
+      }
+    },
+
+    async toggleProjectFavorite(projectLike) {
+      const projectId = projectLike?.id;
+      if (!projectId) return;
+      const nextFavorite = !Boolean(projectLike.favorite);
+      const previousFavorite = Boolean(projectLike.favorite);
+      projectLike.favorite = nextFavorite;
+      try {
+        const updated = await this.api('PUT', `/projects/${projectId}/favorite`, {
+          favorite: nextFavorite,
+        });
+        const projectSummary = this.projects.find(item => item.id === projectId);
+        if (projectSummary) projectSummary.favorite = updated.favorite;
+        if (this.selectedProjectId === projectId && this.project) {
+          this.project.project.favorite = updated.favorite;
+        }
+        await this.loadProjects();
+      } catch (e) {
+        projectLike.favorite = previousFavorite;
+        const projectSummary = this.projects.find(item => item.id === projectId);
+        if (projectSummary) projectSummary.favorite = previousFavorite;
+        if (this.selectedProjectId === projectId && this.project) {
+          this.project.project.favorite = previousFavorite;
+        }
         this.showToast(e.message, 'error');
       }
     },

@@ -216,6 +216,7 @@ def project_meta_from_row(row: sqlite3.Row) -> ProjectMeta:
         title=row["title"],
         directory_id=row["directory_id"],
         directory_local_path=row["directory_local_path"] if "directory_local_path" in keys else None,
+        favorite=bool(row["favorite"]) if "favorite" in keys else False,
         status=row["status"],
         created_at=row["created_at"],
         scheduled_start_at=row["scheduled_start_at"],

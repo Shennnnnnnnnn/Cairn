@@ -11,6 +11,7 @@ from cairn.server.models import (
     CreateDirectoryRequest,
     CreateProjectRequest,
     UpdateProjectDirectoryRequest,
+    UpdateProjectFavoriteRequest,
 )
 from cairn.server.routers.projects import (
     create_project,
@@ -18,6 +19,7 @@ from cairn.server.routers.projects import (
     delete_project_directory,
     list_project_directories,
     list_projects,
+    update_project_favorite,
     update_project_directory_assignment,
 )
 from cairn.server.routers.export import _export_yaml
@@ -128,6 +130,26 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(updated.directory_id, directory.id)
         self.assertEqual(scoped_project.directory_id, directory.id)
         self.assertEqual(directories[0].project_count, 1)
+
+    def test_project_can_be_favorited_and_lists_first(self) -> None:
+        first = create_project(
+            CreateProjectRequest(title="first", origin="origin", goal="goal")
+        )
+        second = create_project(
+            CreateProjectRequest(title="second", origin="origin", goal="goal")
+        )
+
+        updated = update_project_favorite(
+            second.project.id,
+            UpdateProjectFavoriteRequest(favorite=True),
+        )
+        projects = list_projects()
+
+        self.assertTrue(updated.favorite)
+        self.assertEqual(projects[0].id, second.project.id)
+        self.assertTrue(projects[0].favorite)
+        self.assertEqual(projects[1].id, first.project.id)
+        self.assertFalse(projects[1].favorite)
 
     def test_project_directory_can_be_cleared_and_deleted(self) -> None:
         directory = create_project_directory(CreateDirectoryRequest(name="Archive"))

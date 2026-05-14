@@ -20,6 +20,7 @@ from cairn.server.models import (
     ReasonClaimRequest,
     UpdateDirectoryRequest,
     UpdateProjectDirectoryRequest,
+    UpdateProjectFavoriteRequest,
     UpdateProjectTitleRequest,
     UpdateProjectStatusRequest,
 )
@@ -141,7 +142,7 @@ def list_projects():
                 (SELECT COUNT(*) FROM intents WHERE project_id = p.id AND concluded_at IS NULL AND worker IS NULL) AS unclaimed_intent_count,
                 (SELECT COUNT(*) FROM hints WHERE project_id = p.id) AS hint_count
             FROM projects p
-            ORDER BY p.created_at
+            ORDER BY p.favorite DESC, p.created_at
         """).fetchall()
         return [
             ProjectSummary(
@@ -149,6 +150,7 @@ def list_projects():
                 title=row["title"],
                 directory_id=row["directory_id"],
                 directory_local_path=row["directory_local_path"],
+                favorite=bool(row["favorite"]),
                 status=row["status"],
                 created_at=row["created_at"],
                 scheduled_start_at=row["scheduled_start_at"],
@@ -200,6 +202,7 @@ def create_project(body: CreateProjectRequest):
                 title=body.title,
                 directory_id=body.directory_id,
                 directory_local_path=get_directory_or_404(conn, body.directory_id)["local_path"] if body.directory_id is not None else None,
+                favorite=False,
                 status="active",
                 created_at=now,
                 scheduled_start_at=body.scheduled_start_at,
@@ -261,6 +264,26 @@ def update_project_title(project_id: str, body: UpdateProjectTitleRequest):
         conn.execute(
             "UPDATE projects SET title = ? WHERE id = ?",
             (body.title, project_id),
+        )
+        updated = conn.execute(
+            """
+            SELECT p.*,
+                (SELECT local_path FROM project_directories WHERE id = p.directory_id) AS directory_local_path
+            FROM projects p
+            WHERE p.id = ?
+            """,
+            (project_id,),
+        ).fetchone()
+        return project_meta_from_row(updated)
+
+
+@router.put("/projects/{project_id}/favorite", response_model=ProjectMeta)
+def update_project_favorite(project_id: str, body: UpdateProjectFavoriteRequest):
+    with get_conn() as conn:
+        get_project_or_404(conn, project_id)
+        conn.execute(
+            "UPDATE projects SET favorite = ? WHERE id = ?",
+            (1 if body.favorite else 0, project_id),
         )
         updated = conn.execute(
             """

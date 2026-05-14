@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     directory_id TEXT REFERENCES project_directories(id) ON DELETE SET NULL,
+    favorite INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL,
     scheduled_start_at TEXT,
@@ -113,6 +114,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE projects ADD COLUMN directory_id TEXT REFERENCES project_directories(id) ON DELETE SET NULL"
         )
+    if "favorite" not in project_columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
 
     conn.execute(
         """
