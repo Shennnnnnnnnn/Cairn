@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cairn — 架构与实现原理</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --surface2: #eef2f8;
+    --border: #dde3ee;
+    --accent: #2563eb;
+    --accent2: #6d28d9;
+    --accent3: #059669;
+    --accent4: #d97706;
+    --text: #1e2537;
+    --text-muted: #64748b;
+    --danger: #dc2626;
+    --warn: #d97706;
+    --radius: 10px;
+    --font: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.65;
+    font-size: 15px;
+  }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* ─── Hero ─── */
+  .hero {
+    text-align: center;
+    padding: 72px 0 56px;
+    position: relative;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 300px;
+    background: radial-gradient(ellipse at center, rgba(37,99,235,.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(37,99,235,.1);
+    border: 1px solid rgba(37,99,235,.25);
+    color: var(--accent);
+    border-radius: 100px;
+    padding: 4px 16px;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 52px;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    background: linear-gradient(135deg, #1e2537 0%, #2563eb 55%, #6d28d9 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero-sub {
+    font-size: 18px;
+    color: var(--text-muted);
+    margin: 12px auto 0;
+    max-width: 540px;
+  }
+  .hero-meta {
+    display: flex;
+    justify-content: center;
+    gap: 28px;
+    margin-top: 28px;
+    flex-wrap: wrap;
+  }
+  .hero-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .hero-meta-item span:first-child {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent3);
+    display: inline-block;
+  }
+
+  section { margin-bottom: 64px; }
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  h2 { font-size: 28px; font-weight: 700; margin-bottom: 20px; color: var(--text); }
+  h3 { font-size: 17px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+  p  { color: var(--text-muted); margin-bottom: 14px; }
+  p:last-child { margin-bottom: 0; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .card + .card { margin-top: 16px; }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .card-grid .card { padding: 20px; }
+  .card-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+  .ci-blue   { background: rgba(37,99,235,.1); }
+  .ci-purple { background: rgba(109,40,217,.1); }
+  .ci-green  { background: rgba(5,150,105,.1); }
+  .ci-orange { background: rgba(217,119,6,.1); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    color: var(--text-muted);
+  }
+  td:first-child { color: var(--text); font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--accent3);
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    overflow-x: auto;
+    color: var(--text);
+    line-height: 1.7;
+    margin-bottom: 16px;
+  }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+
+  .badge {
+    display: inline-block;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    letter-spacing: .04em;
+  }
+  .badge-blue   { background: rgba(37,99,235,.1);   color: #2563eb; }
+  .badge-purple { background: rgba(109,40,217,.1);  color: #6d28d9; }
+  .badge-green  { background: rgba(5,150,105,.1);   color: #059669; }
+  .badge-orange { background: rgba(217,119,6,.1);   color: #d97706; }
+  .badge-red    { background: rgba(220,38,38,.1);   color: #dc2626; }
+  .badge-gray   { background: rgba(100,116,139,.08);color: #64748b; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  svg text { font-family: var(--font); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 680px) {
+    .two-col { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 36px; }
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 48px;
+  }
+  .toc-title {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+  .toc ol { padding-left: 20px; color: var(--text-muted); font-size: 14px; line-height: 2; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step { display: flex; gap: 16px; position: relative; }
+  .step-num {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: rgba(37,99,235,.08);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; z-index: 1;
+  }
+  .step-line {
+    position: absolute;
+    left: 14px; top: 28px; bottom: -20px;
+    width: 1px;
+    background: var(--border);
+  }
+  .step:last-child .step-line { display: none; }
+  .step-content { padding-top: 4px; padding-bottom: 24px; flex: 1; }
+  .step-content h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .step-content p  { font-size: 13px; margin: 0; }
+
+  /* SVG 图表容器 */
+  .diagram-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .diagram-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--surface2);
+  }
+  .diagram-body { padding: 24px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ═══════════════════════════ HERO ═══════════════════════════ -->
+<div class="hero">
+  <div class="hero-badge">架构深度解析</div>
+  <h1>Cairn</h1>
+  <p class="hero-sub">通用状态空间搜索引擎 · 基于黑板架构的多智能体协作框架</p>
+  <div class="hero-meta">
+    <div class="hero-meta-item"><span></span>v0.2.1</div>
+    <div class="hero-meta-item"><span style="background:var(--accent2)"></span>Python 3.12+</div>
+    <div class="hero-meta-item"><span style="background:var(--accent4)"></span>FastAPI · SQLite · Docker</div>
+    <div class="hero-meta-item"><span style="background:var(--accent)"></span>Claude Code · Codex · Gemini</div>
+  </div>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <div class="toc-title">目录</div>
+  <ol>
+    <li><a href="#what">什么是 Cairn</a></li>
+    <li><a href="#concepts">核心概念 — 黑板架构</a></li>
+    <li><a href="#arch">系统架构总览</a></li>
+    <li><a href="#datamodel">数据模型</a></li>
+    <li><a href="#tasks">三种任务类型</a></li>
+    <li><a href="#dispatcher">Dispatcher 调度循环</a></li>
+    <li><a href="#workers">Worker 后端适配器</a></li>
+    <li><a href="#task-lifecycle">任务执行生命周期</a></li>
+    <li><a href="#db">数据库 Schema</a></li>
+    <li><a href="#config">配置参考</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════ 1. WHAT IS CAIRN ═══════════════════════════ -->
+<section id="what">
+  <div class="section-label">概述</div>
+  <h2>什么是 Cairn</h2>
+  <p>
+    Cairn 是一个通用问题求解引擎。它将任何具有「明确起点 + 明确目标 + 未知路径」
+    结构的问题统一建模为<strong>状态空间搜索</strong>，无需预定义角色、工作流或领域知识。
+    AI 渗透测试是第一个经过验证的应用领域：在腾讯云 Hackathon 智能渗透测试大赛中，
+    Cairn 以 54/54 全题通过成为全场唯一 AK 团队（最终排名第 3）。
+  </p>
+  <div class="card-grid" style="margin-top:24px;">
+    <div class="card">
+      <div class="card-icon ci-blue">🎯</div>
+      <h3>问题结构</h3>
+      <p>任何满足 <strong>Origin → ? → Goal</strong> 结构的问题都可用 Cairn 求解。渗透测试、CTF、漏洞研究、数学证明——形状相同，引擎通用。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon ci-purple">🧠</div>
+      <h3>无角色设计</h3>
+      <p>Agent 没有固定角色。任务在运行时从当前图状态生成，不依赖预定义的 Job Description。Agent 只接收 Prompt，返回结构化输出。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon ci-green">🐜</div>
+      <h3>信息素协调</h3>
+      <p>Agent 之间<strong>不直接通信</strong>。所有协调通过共享黑板（Stigmergy）完成，消除信息孤岛。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 2. CORE CONCEPTS ═══════════════════════════ -->
+<section id="concepts">
+  <div class="section-label">核心概念</div>
+  <h2>核心概念 — 黑板架构</h2>
+  <p>整个系统由三个原语驱动：</p>
+  <div class="card-grid" style="margin-top:16px;margin-bottom:28px;">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span class="badge badge-green" style="font-size:13px;padding:4px 10px;">事实 Fact</span>
+      </div>
+      <p>写入黑板的客观、已验证发现。每个 Fact 有全局唯一 ID。图中有两个特殊 Fact：<code>origin</code>（已知条件）和 <code>goal</code>（目标，仅在项目完成时由完成意图指向）。</p>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span class="badge badge-blue" style="font-size:13px;padding:4px 10px;">意图 Intent</span>
+      </div>
+      <p>声明的探索方向，尚未执行。Intent 具有 <code>from</code>（源 Fact 列表）和 <code>to</code>（目标 Fact，执行后填写）字段，串联 Fact 形成有向图。</p>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span class="badge badge-orange" style="font-size:13px;padding:4px 10px;">提示 Hint</span>
+      </div>
+      <p>人类在任意时间注入的判断或提示。Agent 在下次读取黑板时自动吸收所有 Hint，无需中断正在运行的任务。</p>
+    </div>
+  </div>
+
+  <!-- Fact-Intent Graph -->
+  <div class="diagram-wrap">
+    <div class="diagram-header">事实-意图图 — 从起点到目标的有向图生长过程</div>
+    <div class="diagram-body">
+<svg viewBox="0 0 900 185" width="100%" style="min-width:600px;display:block;">
+  <defs>
+    <marker id="arr-b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#059669"/>
+    </marker>
+    <marker id="arr-p" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#6d28d9"/>
+    </marker>
+    <marker id="arr-o" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  <!-- 起点 origin -->
+  <rect x="20" y="67" width="88" height="50" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="64" y="87" text-anchor="middle" fill="#059669" font-size="10" font-weight="700">事实</text>
+  <text x="64" y="103" text-anchor="middle" fill="#1e2537" font-size="11">起点</text>
+
+  <!-- 事实1 -->
+  <rect x="218" y="67" width="104" height="50" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="270" y="87" text-anchor="middle" fill="#059669" font-size="10" font-weight="700">事实</text>
+  <text x="270" y="103" text-anchor="middle" fill="#1e2537" font-size="11">f-001: 端口扫描</text>
+
+  <!-- 事实2 -->
+  <rect x="438" y="28" width="112" height="50" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="494" y="48" text-anchor="middle" fill="#059669" font-size="10" font-weight="700">事实</text>
+  <text x="494" y="64" text-anchor="middle" fill="#1e2537" font-size="11">f-002: SSH 开放</text>
+
+  <!-- 事实3 -->
+  <rect x="438" y="106" width="112" height="50" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="494" y="126" text-anchor="middle" fill="#059669" font-size="10" font-weight="700">事实</text>
+  <text x="494" y="142" text-anchor="middle" fill="#1e2537" font-size="11">f-003: HTTP 服务</text>
+
+  <!-- 事实4 -->
+  <rect x="668" y="67" width="112" height="50" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="724" y="87" text-anchor="middle" fill="#059669" font-size="10" font-weight="700">事实</text>
+  <text x="724" y="103" text-anchor="middle" fill="#1e2537" font-size="11">f-004: 获得 RCE</text>
+
+  <!-- 目标 goal -->
+  <rect x="830" y="67" width="52" height="50" rx="8" fill="rgba(109,40,217,.07)" stroke="#6d28d9" stroke-width="1.5"/>
+  <text x="856" y="87" text-anchor="middle" fill="#6d28d9" font-size="10" font-weight="700">事实</text>
+  <text x="856" y="103" text-anchor="middle" fill="#1e2537" font-size="11">目标</text>
+
+  <!-- 引导意图 origin→f001 -->
+  <path d="M108,92 L218,92" stroke="#d97706" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#arr-o)"/>
+  <rect x="125" y="70" width="78" height="18" rx="4" fill="rgba(217,119,6,.1)" stroke="rgba(217,119,6,.3)"/>
+  <text x="164" y="83" text-anchor="middle" fill="#d97706" font-size="10">引导意图</text>
+
+  <!-- 探索意图1 f001→f002 -->
+  <path d="M322,82 Q380,40 438,53" stroke="#2563eb" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#arr-b)"/>
+  <text x="364" y="42" text-anchor="middle" fill="#2563eb" font-size="10">探索 i-001</text>
+
+  <!-- 探索意图2 f001→f003 -->
+  <path d="M322,102 Q380,134 438,122" stroke="#2563eb" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#arr-b)"/>
+  <text x="364" y="148" text-anchor="middle" fill="#2563eb" font-size="10">探索 i-002</text>
+
+  <!-- 探索意图3 f002+f003→f004 -->
+  <path d="M550,53 Q610,55 668,82" stroke="#2563eb" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#arr-b)"/>
+  <path d="M550,122 Q610,118 668,105" stroke="#2563eb" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#arr-b)"/>
+  <text x="612" y="76" text-anchor="middle" fill="#2563eb" font-size="10">探索 i-003</text>
+
+  <!-- 完成意图 f004→goal -->
+  <path d="M780,92 L830,92" stroke="#6d28d9" stroke-width="1.5" fill="none" marker-end="url(#arr-p)"/>
+  <rect x="783" y="77" width="48" height="14" rx="3" fill="rgba(109,40,217,.08)" stroke="rgba(109,40,217,.3)"/>
+  <text x="807" y="88" text-anchor="middle" fill="#6d28d9" font-size="9">完成意图</text>
+</svg>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 3. SYSTEM ARCHITECTURE ═══════════════════════════ -->
+<section id="arch">
+  <div class="section-label">系统架构</div>
+  <h2>系统架构总览</h2>
+
+  <div class="diagram-wrap">
+    <div class="diagram-header">系统架构总览图</div>
+    <div class="diagram-body">
+<svg viewBox="0 0 860 465" width="100%" style="min-width:640px;display:block;">
+  <defs>
+    <marker id="sa1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="sa2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2563eb"/>
+    </marker>
+    <marker id="sa3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#059669"/>
+    </marker>
+  </defs>
+
+  <!-- 用户/浏览器 -->
+  <rect x="10" y="10" width="130" height="58" rx="8" fill="#f8fafc" stroke="#dde3ee" stroke-width="1.5"/>
+  <text x="75" y="34" text-anchor="middle" fill="#64748b" font-size="11" font-weight="700">用户 / 浏览器</text>
+  <text x="75" y="52" text-anchor="middle" fill="#94a3b8" font-size="10">Web UI (index.html)</text>
+
+  <!-- 双向箭头 用户↔服务端 -->
+  <path d="M140,36 L200,36" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#sa1)"/>
+  <path d="M200,50 L140,50" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#sa1)"/>
+  <text x="170" y="30" text-anchor="middle" fill="#94a3b8" font-size="9">REST API</text>
+
+  <!-- 服务端 -->
+  <rect x="200" y="10" width="230" height="182" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.8"/>
+  <text x="315" y="35" text-anchor="middle" fill="#2563eb" font-size="12" font-weight="700">服务端（Cairn Server）</text>
+  <text x="315" y="52" text-anchor="middle" fill="#64748b" font-size="10">FastAPI · Python</text>
+
+  <rect x="218" y="62" width="194" height="28" rx="6" fill="#ffffff" stroke="#dde3ee"/>
+  <text x="315" y="81" text-anchor="middle" fill="#475569" font-size="11">路由: projects / intents</text>
+
+  <rect x="218" y="98" width="194" height="28" rx="6" fill="#ffffff" stroke="#dde3ee"/>
+  <text x="315" y="117" text-anchor="middle" fill="#475569" font-size="11">路由: hints / export / settings</text>
+
+  <rect x="218" y="134" width="194" height="28" rx="6" fill="#f0fdf4" stroke="#059669" stroke-width="1"/>
+  <text x="315" y="153" text-anchor="middle" fill="#059669" font-size="11">SQLite — 事实 · 意图 · 提示</text>
+
+  <text x="218" y="178" fill="#94a3b8" font-size="10">端口 :8000</text>
+
+  <!-- 箭头 服务端↔调度器 -->
+  <path d="M315,192 L315,242" stroke="#2563eb" stroke-width="1.2" fill="none" marker-end="url(#sa2)"/>
+  <path d="M330,242 L330,192" stroke="#2563eb" stroke-width="1.2" fill="none" marker-end="url(#sa2)"/>
+  <text x="358" y="223" fill="#2563eb" font-size="9">读写 API</text>
+
+  <!-- 调度器 -->
+  <rect x="80" y="242" width="470" height="202" rx="10" fill="#faf5ff" stroke="#6d28d9" stroke-width="1.8"/>
+  <text x="315" y="267" text-anchor="middle" fill="#6d28d9" font-size="12" font-weight="700">调度器（Dispatcher）</text>
+  <text x="315" y="284" text-anchor="middle" fill="#64748b" font-size="10">Python · ThreadPoolExecutor</text>
+
+  <!-- 调度器子模块 -->
+  <rect x="98" y="292" width="132" height="58" rx="6" fill="#ffffff" stroke="#dde3ee"/>
+  <text x="164" y="311" text-anchor="middle" fill="#475569" font-size="11">调度主循环</text>
+  <text x="164" y="327" text-anchor="middle" fill="#94a3b8" font-size="9">任务调度 · 心跳</text>
+  <text x="164" y="340" text-anchor="middle" fill="#94a3b8" font-size="9">Worker 选择 · 取消</text>
+
+  <rect x="248" y="292" width="120" height="58" rx="6" fill="#ffffff" stroke="#dde3ee"/>
+  <text x="308" y="311" text-anchor="middle" fill="#475569" font-size="11">任务执行器</text>
+  <text x="308" y="327" text-anchor="middle" fill="#94a3b8" font-size="9">引导 / 推理</text>
+  <text x="308" y="340" text-anchor="middle" fill="#94a3b8" font-size="9">探索</text>
+
+  <rect x="388" y="292" width="140" height="58" rx="6" fill="#ffffff" stroke="#dde3ee"/>
+  <text x="458" y="311" text-anchor="middle" fill="#475569" font-size="11">容器管理器</text>
+  <text x="458" y="327" text-anchor="middle" fill="#94a3b8" font-size="9">Docker / 本地运行器</text>
+  <text x="458" y="340" text-anchor="middle" fill="#94a3b8" font-size="9">生命周期 · 清理</text>
+
+  <!-- Worker 驱动标签 -->
+  <text x="164" y="368" text-anchor="middle" fill="#94a3b8" font-size="10">Worker 驱动适配器</text>
+  <rect x="98"  y="376" width="72" height="24" rx="4" fill="rgba(37,99,235,.08)"   stroke="#2563eb"  stroke-width="1"/>
+  <text x="134" y="392" text-anchor="middle" fill="#2563eb"  font-size="10">Claude Code</text>
+  <rect x="178" y="376" width="48" height="24" rx="4" fill="rgba(5,150,105,.08)"   stroke="#059669"  stroke-width="1"/>
+  <text x="202" y="392" text-anchor="middle" fill="#059669"  font-size="10">Codex</text>
+  <rect x="234" y="376" width="52" height="24" rx="4" fill="rgba(217,119,6,.08)"   stroke="#d97706"  stroke-width="1"/>
+  <text x="260" y="392" text-anchor="middle" fill="#d97706"  font-size="10">Gemini</text>
+  <rect x="294" y="376" width="30" height="24" rx="4" fill="rgba(109,40,217,.08)"  stroke="#6d28d9"  stroke-width="1"/>
+  <text x="309" y="392" text-anchor="middle" fill="#6d28d9"  font-size="10">Pi</text>
+  <rect x="332" y="376" width="44" height="24" rx="4" fill="rgba(100,116,139,.08)" stroke="#94a3b8"  stroke-width="1"/>
+  <text x="354" y="392" text-anchor="middle" fill="#64748b"  font-size="10">Mock</text>
+
+  <!-- 调度器 → Worker 容器 -->
+  <path d="M460,444 L460,458 L680,458 L680,410" stroke="#059669" stroke-width="1.2" fill="none" marker-end="url(#sa3)"/>
+  <text x="578" y="454" fill="#059669" font-size="9">Docker exec / 本地启动</text>
+
+  <!-- Worker 容器区 -->
+  <rect x="570" y="10" width="274" height="384" rx="10" fill="#f0fdf4" stroke="#059669" stroke-width="1.8"/>
+  <text x="707" y="35" text-anchor="middle" fill="#059669" font-size="12" font-weight="700">Worker 容器</text>
+  <text x="707" y="52" text-anchor="middle" fill="#64748b" font-size="10">每个项目独立容器</text>
+
+  <!-- 项目A容器 -->
+  <rect x="586" y="62" width="242" height="152" rx="8" fill="#ffffff" stroke="#dde3ee"/>
+  <text x="707" y="82" text-anchor="middle" fill="#475569" font-size="11" font-weight="600">项目 A 容器</text>
+  <rect x="600" y="92" width="98" height="44" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1"/>
+  <text x="649" y="111" text-anchor="middle" fill="#2563eb" font-size="11">claude</text>
+  <text x="649" y="127" text-anchor="middle" fill="#64748b" font-size="9">推理任务</text>
+  <rect x="708" y="92" width="98" height="44" rx="6" fill="#f0fdf4" stroke="#059669" stroke-width="1"/>
+  <text x="757" y="111" text-anchor="middle" fill="#059669" font-size="11">codex</text>
+  <text x="757" y="127" text-anchor="middle" fill="#64748b" font-size="9">探索任务</text>
+  <rect x="600" y="146" width="98" height="44" rx="6" fill="rgba(217,119,6,.06)" stroke="#d97706" stroke-width="1"/>
+  <text x="649" y="165" text-anchor="middle" fill="#d97706" font-size="11">gemini</text>
+  <text x="649" y="181" text-anchor="middle" fill="#64748b" font-size="9">探索任务</text>
+
+  <!-- 项目B容器 -->
+  <rect x="586" y="230" width="242" height="120" rx="8" fill="#ffffff" stroke="#dde3ee"/>
+  <text x="707" y="250" text-anchor="middle" fill="#475569" font-size="11" font-weight="600">项目 B 容器</text>
+  <rect x="600" y="258" width="98" height="44" rx="6" fill="#f0fdf4" stroke="#059669" stroke-width="1"/>
+  <text x="649" y="277" text-anchor="middle" fill="#059669" font-size="11">codex</text>
+  <text x="649" y="293" text-anchor="middle" fill="#64748b" font-size="9">引导任务</text>
+  <rect x="708" y="258" width="98" height="44" rx="6" fill="#f0fdf4" stroke="#059669" stroke-width="1"/>
+  <text x="757" y="277" text-anchor="middle" fill="#059669" font-size="11">codex</text>
+  <text x="757" y="293" text-anchor="middle" fill="#64748b" font-size="9">探索任务</text>
+
+  <text x="707" y="372" text-anchor="middle" fill="#94a3b8" font-size="10">提示词 → CLI → JSON 输出</text>
+
+  <text x="80" y="456" fill="#94a3b8" font-size="10">dispatch.yaml — 全局配置</text>
+</svg>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:16px;">
+    <div class="card">
+      <h3>服务端（Cairn Server）</h3>
+      <p>纯<strong>状态持久化</strong>层，不参与决策。维护 Fact-Intent 图的一致性，通过 REST API 暴露读写接口。并发写入通过 SQLite 事务保护。内置 Web UI，可实时查看图状态、注入 Hint、控制项目生命周期。</p>
+    </div>
+    <div class="card">
+      <h3>调度器（Dispatcher）</h3>
+      <p>系统的<strong>决策中枢</strong>。每隔 <code>interval</code> 秒轮询 Server 状态，决定派发什么任务给哪个 Worker，管理容器生命周期，写入执行结果。Worker 之间的协调完全通过 Server 上的共享状态实现。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 4. DATA MODEL ═══════════════════════════ -->
+<section id="datamodel">
+  <div class="section-label">数据模型</div>
+  <h2>数据模型</h2>
+
+  <div class="diagram-wrap" style="margin-bottom:20px;">
+    <div class="diagram-header">实体关系图（ER Diagram）</div>
+    <div class="diagram-body">
+<svg viewBox="0 0 820 280" width="100%" style="min-width:600px;display:block;">
+  <defs>
+    <marker id="er1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#059669"/>
+    </marker>
+    <marker id="er2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <!-- project_directories -->
+  <rect x="10" y="10" width="170" height="106" rx="8" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"/>
+  <rect x="10" y="10" width="170" height="28" rx="8" fill="rgba(217,119,6,.12)"/>
+  <text x="95" y="29" text-anchor="middle" fill="#d97706" font-size="11" font-weight="700">项目目录</text>
+  <text x="22" y="56" fill="#475569" font-size="10">id  主键</text>
+  <text x="22" y="70" fill="#475569" font-size="10">name  唯一</text>
+  <text x="22" y="84" fill="#475569" font-size="10">local_path  本地挂载路径</text>
+  <text x="22" y="98" fill="#475569" font-size="10">created_at</text>
+  <text x="22" y="112" fill="#94a3b8" font-size="9">（可选）→ 挂载为工作目录</text>
+
+  <!-- projects -->
+  <rect x="230" y="10" width="212" height="182" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <rect x="230" y="10" width="212" height="28" rx="8" fill="rgba(37,99,235,.12)"/>
+  <text x="336" y="29" text-anchor="middle" fill="#2563eb" font-size="11" font-weight="700">项目</text>
+  <text x="242" y="56" fill="#475569" font-size="10">id  主键</text>
+  <text x="242" y="70" fill="#475569" font-size="10">title  标题</text>
+  <text x="242" y="84" fill="#475569" font-size="10">directory_id  外键 →</text>
+  <text x="242" y="98" fill="#475569" font-size="10">status  active/stopped/completed</text>
+  <text x="242" y="112" fill="#475569" font-size="10">created_at</text>
+  <text x="242" y="126" fill="#475569" font-size="10">scheduled_start_at  定时启动</text>
+  <text x="242" y="140" fill="#94a3b8" font-size="10" font-style="italic">reason_worker  推理锁</text>
+  <text x="242" y="154" fill="#94a3b8" font-size="10" font-style="italic">reason_trigger  触发原因</text>
+  <text x="242" y="168" fill="#94a3b8" font-size="10" font-style="italic">reason_last_heartbeat_at</text>
+
+  <!-- 目录→项目 FK -->
+  <path d="M180,62 L230,84" stroke="#d97706" stroke-width="1" stroke-dasharray="4,3" fill="none"/>
+  <text x="200" y="70" fill="#d97706" font-size="9">0..1</text>
+
+  <!-- 事实 facts -->
+  <rect x="500" y="10" width="162" height="90" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <rect x="500" y="10" width="162" height="28" rx="8" fill="rgba(5,150,105,.12)"/>
+  <text x="581" y="29" text-anchor="middle" fill="#059669" font-size="11" font-weight="700">事实</text>
+  <text x="512" y="54" fill="#475569" font-size="10">id  (含 origin / goal)</text>
+  <text x="512" y="68" fill="#475569" font-size="10">project_id  外键 →</text>
+  <text x="512" y="82" fill="#475569" font-size="10">description  内容</text>
+  <text x="512" y="96" fill="#94a3b8" font-size="9">主键: (id, project_id)</text>
+
+  <!-- 意图 intents -->
+  <rect x="500" y="120" width="200" height="136" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <rect x="500" y="120" width="200" height="28" rx="8" fill="rgba(37,99,235,.12)"/>
+  <text x="600" y="139" text-anchor="middle" fill="#2563eb" font-size="11" font-weight="700">意图</text>
+  <text x="512" y="162" fill="#475569" font-size="10">id</text>
+  <text x="512" y="176" fill="#475569" font-size="10">project_id  外键 →</text>
+  <text x="512" y="190" fill="#475569" font-size="10">to_fact_id  NULL = 开放意图</text>
+  <text x="512" y="204" fill="#475569" font-size="10">worker  NULL = 未认领</text>
+  <text x="512" y="218" fill="#475569" font-size="10">concluded_at  NULL = 进行中</text>
+  <text x="512" y="234" fill="#94a3b8" font-size="9">主键: (id, project_id)</text>
+  <text x="512" y="248" fill="#94a3b8" font-size="9">last_heartbeat_at  心跳时间</text>
+
+  <!-- 意图来源 intent_sources -->
+  <rect x="720" y="120" width="92" height="84" rx="8" fill="rgba(109,40,217,.06)" stroke="#6d28d9" stroke-width="1.5"/>
+  <rect x="720" y="120" width="92" height="28" rx="8" fill="rgba(109,40,217,.12)"/>
+  <text x="766" y="139" text-anchor="middle" fill="#6d28d9" font-size="10" font-weight="700">意图来源</text>
+  <text x="730" y="162" fill="#475569" font-size="9">intent_id</text>
+  <text x="730" y="174" fill="#475569" font-size="9">project_id</text>
+  <text x="730" y="186" fill="#475569" font-size="9">fact_id  外键</text>
+  <text x="730" y="198" fill="#94a3b8" font-size="8">三列联合主键</text>
+
+  <!-- 提示 hints -->
+  <rect x="500" y="264" width="162" height="14" rx="4" fill="rgba(217,119,6,.06)" stroke="#d97706" stroke-width="1"/>
+  <text x="581" y="275" text-anchor="middle" fill="#d97706" font-size="9">提示: id · project_id · content · creator · created_at</text>
+
+  <!-- FK 箭头 -->
+  <path d="M442,90 L500,55" stroke="#059669" stroke-width="1" stroke-dasharray="4,3" fill="none" marker-end="url(#er1)"/>
+  <text x="462" y="68" fill="#059669" font-size="9">1:N</text>
+  <path d="M442,132 L500,168" stroke="#2563eb" stroke-width="1" stroke-dasharray="4,3" fill="none" marker-end="url(#er2)"/>
+  <text x="455" y="148" fill="#2563eb" font-size="9">1:N</text>
+  <path d="M700,186 L720,186" stroke="#6d28d9" stroke-width="1" stroke-dasharray="4,3" fill="none"/>
+</svg>
+    </div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>实体</th><th>关键字段</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-blue">项目</span></td>
+          <td><code>status</code>, <code>reason_worker</code></td>
+          <td><code>status</code> 为 active / stopped / completed。<code>reason_worker</code> 用于 Reason 任务的乐观锁，防止并发。</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">事实</span></td>
+          <td><code>id</code>, <code>description</code></td>
+          <td>不可变的已确认发现。<code>origin</code> 和 <code>goal</code> 是系统保留 ID，在创建项目时写入。</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">意图</span></td>
+          <td><code>to_fact_id</code>, <code>worker</code>, <code>concluded_at</code></td>
+          <td><code>to_fact_id IS NULL</code> = 开放；<code>worker IS NOT NULL</code> = 已认领；<code>concluded_at IS NOT NULL</code> = 已完成。</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-purple">意图来源</span></td>
+          <td><code>fact_id</code></td>
+          <td>Intent 的来源 Fact（多对多）。一个 Intent 可以从多个 Fact 发出，表达"综合多个发现后的下一步"。</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-orange">提示</span></td>
+          <td><code>content</code>, <code>creator</code></td>
+          <td>人类注入的提示，只增不改。Agent 在每次读取图时获得所有 Hint 的完整列表。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 5. TASK TYPES ═══════════════════════════ -->
+<section id="tasks">
+  <div class="section-label">任务类型</div>
+  <h2>三种任务类型</h2>
+
+  <div class="card-grid" style="margin-bottom:24px;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div>
+          <div class="badge badge-orange" style="margin-bottom:8px;">Bootstrap 引导</div>
+          <h3 style="margin:0;">直接求解尝试</h3>
+        </div>
+        <div style="text-align:right;font-size:12px;color:var(--text-muted);">
+          <div>触发：项目初始</div>
+          <div>输出：事实 + 完成</div>
+        </div>
+      </div>
+      <p>在项目刚创建时（只有 <code>origin</code> 和 <code>goal</code> 两个事实），尝试<strong>直接一次性解决问题</strong>。Prompt 只包含 origin、goal 和 hints。成功时写入一个事实并调用 <code>complete</code> 将项目标记为已完成。失败或超时时触发 <strong>Conclude Fallback</strong>。</p>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">默认超时：<code>300s</code> + conclude <code>90s</code></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div>
+          <div class="badge badge-purple" style="margin-bottom:8px;">Reason 推理</div>
+          <h3 style="margin:0;">图状态推理</h3>
+        </div>
+        <div style="text-align:right;font-size:12px;color:var(--text-muted);">
+          <div>触发：图状态变化</div>
+          <div>输出：完成 / 新意图</div>
+        </div>
+      </div>
+      <p>读取<strong>完整的事实-意图图</strong>（YAML 格式），判断：目标是否已达成？应探索哪些新方向？输出为 <code>complete</code>、新意图列表（最多 <code>max_intents</code> 个），或 <code>noop</code>。通过 <strong>Reason Checkpoint</strong> 机制避免重复推理。</p>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">默认超时：<code>300s</code> · max_intents: <code>2</code></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div>
+          <div class="badge badge-blue" style="margin-bottom:8px;">Explore 探索</div>
+          <h3 style="margin:0;">意图执行</h3>
+        </div>
+        <div style="text-align:right;font-size:12px;color:var(--text-muted);">
+          <div>触发：有未认领意图</div>
+          <div>输出：一个事实</div>
+        </div>
+      </div>
+      <p>认领一个开放的意图，在工具环境中<strong>实际执行探索</strong>（网络扫描、漏洞利用、代码分析等），将发现写回为一个新的事实。支持并发（多个 Explore 任务同时运行）。Dispatcher 优先选择最新创建的意图。</p>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">默认超时：<code>300s</code> + conclude <code>90s</code></div>
+    </div>
+  </div>
+
+  <!-- 调度决策流程图 -->
+  <div class="diagram-wrap">
+    <div class="diagram-header">调度器任务决策流程图</div>
+    <div class="diagram-body">
+<svg viewBox="0 0 820 220" width="100%" style="min-width:600px;display:block;">
+  <defs>
+    <marker id="df" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- 开始 -->
+  <circle cx="50" cy="110" r="22" fill="rgba(37,99,235,.1)" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="50" y="115" text-anchor="middle" fill="#2563eb" font-size="11">开始</text>
+  <path d="M72,110 L108,110" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#df)"/>
+
+  <!-- 判断1：初始项目? -->
+  <polygon points="150,80 192,110 150,140 108,110" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"/>
+  <text x="150" y="107" text-anchor="middle" fill="#d97706" font-size="10">初始</text>
+  <text x="150" y="119" text-anchor="middle" fill="#d97706" font-size="10">项目?</text>
+
+  <!-- 是 → 引导 -->
+  <path d="M150,80 L150,50 L242,50" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#df)"/>
+  <text x="190" y="45" fill="#94a3b8" font-size="9">是</text>
+  <rect x="242" y="36" width="88" height="28" rx="6" fill="rgba(217,119,6,.1)" stroke="#d97706" stroke-width="1.2"/>
+  <text x="286" y="55" text-anchor="middle" fill="#d97706" font-size="11">引导任务</text>
+
+  <!-- 否 → 判断2 -->
+  <path d="M192,110 L272,110" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#df)"/>
+  <text x="228" y="106" fill="#94a3b8" font-size="9">否</text>
+
+  <!-- 判断2：有未认领意图? -->
+  <polygon points="322,80 372,110 322,140 272,110" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="322" y="107" text-anchor="middle" fill="#2563eb" font-size="10">有未认领</text>
+  <text x="322" y="119" text-anchor="middle" fill="#2563eb" font-size="10">意图?</text>
+
+  <!-- 是 → 探索 -->
+  <path d="M322,80 L322,50 L412,50" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#df)"/>
+  <text x="364" y="45" fill="#94a3b8" font-size="9">是</text>
+  <rect x="412" y="36" width="80" height="28" rx="6" fill="rgba(37,99,235,.1)" stroke="#2563eb" stroke-width="1.2"/>
+  <text x="452" y="55" text-anchor="middle" fill="#2563eb" font-size="11">探索任务</text>
+
+  <!-- 否 → 判断3 -->
+  <path d="M372,110 L442,110" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#df)"/>
+  <text x="404" y="106" fill="#94a3b8" font-size="9">否</text>
+
+  <!-- 判断3：图状态已变化? -->
+  <polygon points="502,80 562,110 502,140 442,110" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="502" y="107" text-anchor="middle" fill="#059669" font-size="10">图状态</text>
+  <text x="502" y="119" text-anchor="middle" fill="#059669" font-size="10">已变化?</text>
+
+  <!-- 是 → 推理 -->
+  <path d="M502,80 L502,50 L594,50" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#df)"/>
+  <text x="544" y="45" fill="#94a3b8" font-size="9">是</text>
+  <rect x="594" y="36" width="80" height="28" rx="6" fill="rgba(109,40,217,.1)" stroke="#6d28d9" stroke-width="1.2"/>
+  <text x="634" y="55" text-anchor="middle" fill="#6d28d9" font-size="11">推理任务</text>
+
+  <!-- 否 → 跳过 -->
+  <path d="M562,110 L634,110" stroke="#94a3b8" stroke-width="1.2" fill="none" marker-end="url(#df)"/>
+  <text x="595" y="106" fill="#94a3b8" font-size="9">否</text>
+  <rect x="634" y="96" width="62" height="28" rx="6" fill="#f8fafc" stroke="#dde3ee"/>
+  <text x="665" y="115" text-anchor="middle" fill="#64748b" font-size="11">跳过</text>
+
+  <!-- Worker 选择 -->
+  <rect x="712" y="36" width="100" height="28" rx="6" fill="#f8fafc" stroke="#dde3ee"/>
+  <text x="762" y="48" text-anchor="middle" fill="#64748b" font-size="10">Worker</text>
+  <text x="762" y="60" text-anchor="middle" fill="#64748b" font-size="10">选择</text>
+  <path d="M674,50 L712,50" stroke="#94a3b8" stroke-width="1" fill="none" marker-end="url(#df)"/>
+
+  <!-- 注释 -->
+  <text x="50" y="162" fill="#94a3b8" font-size="10">每隔 interval 秒轮询一次</text>
+  <text x="286" y="82" fill="#d97706" font-size="9">创建引导意图</text>
+  <text x="452" y="82" fill="#2563eb" font-size="9">选最新意图</text>
+  <text x="634" y="82" fill="#6d28d9" font-size="9">认领推理</text>
+
+  <!-- Reason Checkpoint 说明框 -->
+  <rect x="570" y="152" width="240" height="52" rx="6" fill="rgba(5,150,105,.05)" stroke="rgba(5,150,105,.2)"/>
+  <text x="690" y="170" text-anchor="middle" fill="#64748b" font-size="10">Reason Checkpoint 机制</text>
+  <text x="690" y="184" text-anchor="middle" fill="#94a3b8" font-size="10">事实数 / 提示数 / 开放意图数均未变</text>
+  <text x="690" y="198" text-anchor="middle" fill="#94a3b8" font-size="10">→ 跳过推理，避免重复</text>
+</svg>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 6. DISPATCHER LOOP ═══════════════════════════ -->
+<section id="dispatcher">
+  <div class="section-label">调度循环</div>
+  <h2>Dispatcher 调度循环</h2>
+
+  <div class="two-col" style="margin-bottom:20px;">
+    <div class="card">
+      <h3>并发控制策略</h3>
+      <table>
+        <thead><tr><th>限制维度</th><th>配置参数</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td>全局并发</td><td><code>max_workers</code></td><td>所有项目 Worker 总数上限</td></tr>
+          <tr><td>活跃项目数</td><td><code>max_running_projects</code></td><td>同时运行的项目数上限</td></tr>
+          <tr><td>单项目并发</td><td><code>max_project_workers</code></td><td>单个项目的 Worker 并发上限</td></tr>
+          <tr><td>Worker 并发</td><td><code>max_running</code></td><td>单个 Worker 类型的并发上限</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Worker 选择算法（五步过滤）</h3>
+      <div class="steps" style="margin-top:8px;">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-line"></div>
+          <div class="step-content">
+            <h4>任务类型匹配</h4>
+            <p>Worker 的 <code>task_types</code> 必须包含当前任务类型</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-line"></div>
+          <div class="step-content">
+            <h4>并发容量检查</h4>
+            <p>当前运行数 &lt; <code>max_running</code></p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-line"></div>
+          <div class="step-content">
+            <h4>健康状态检查</h4>
+            <p>Worker 未处于 unhealthy 冷却期（5s）</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-line"></div>
+          <div class="step-content">
+            <h4>拒绝冷却检查</h4>
+            <p>Worker 未因 rejected 进入等待期（5s）</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-line"></div>
+          <div class="step-content">
+            <h4>优先级排序</h4>
+            <p>按 <code>priority</code> 升序，同优先级按当前负载排序</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>主循环流程（DispatcherLoop.run）</h3>
+    <pre><code>while True:
+    1. _validate_server_settings()      # 验证 Server 超时配置与 interval 的一致性
+    2. _reap_futures()                  # 收割已完成任务，处理 success/failed/unhealthy/rejected
+    3. _reap_cleanup_futures()          # 收割容器清理任务
+    4. summaries = client.list_projects()
+    5. _initialize_reason_checkpoints() # 为有开放意图的项目初始化检查点
+    6. _refresh_runtime_projects()      # 同步活跃项目集合
+    7. _cancel_inactive_tasks()         # 对停止/完成项目的运行中任务发出取消信号
+    8. _queue_container_cleanups()      # 为停止/完成项目排队容器清理
+    9. _dispatch_available(summaries)   # 核心：为每个活跃项目派发任务
+    sleep(interval)</code></pre>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3>轮转调度（Round-Robin）</h3>
+    <p>Dispatcher 使用 <strong>project_cursor</strong> 实现跨项目的公平轮转调度。每次调度循环，项目列表按字典序排序后偏移 cursor，确保不同项目都有机会获得资源，防止某个项目长期占用所有 Worker 槽位。</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 7. WORKER BACKENDS ═══════════════════════════ -->
+<section id="workers">
+  <div class="section-label">Worker 后端</div>
+  <h2>Worker 后端适配器</h2>
+
+  <p>每种 Worker 通过实现 <code>WorkerDriver</code> 接口接入。接口定义了四个方法：<code>build_healthcheck</code>、<code>build_execute</code>、<code>build_conclude</code>、<code>extract_response_text</code>。</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table>
+      <thead>
+        <tr><th>Worker</th><th>类型</th><th>支持任务</th><th>Session</th><th>Conclude 回退</th><th>认证</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-blue">claudecode</span></td>
+          <td><code>SeedSessionDriver</code></td>
+          <td><span class="badge badge-purple">推理</span></td>
+          <td>✓ <code>--session-id</code></td>
+          <td>✓ <code>-r &lt;session&gt;</code></td>
+          <td>本地 claude CLI</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">codex</span></td>
+          <td><code>RegexSessionDriver</code></td>
+          <td><span class="badge badge-orange">引导</span> <span class="badge badge-blue">探索</span></td>
+          <td>✓ 正则提取</td>
+          <td>✓ <code>resume &lt;id&gt;</code></td>
+          <td>本地 codex CLI</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-orange">gemini</span></td>
+          <td><code>WorkerDriver</code></td>
+          <td><span class="badge badge-blue">探索</span></td>
+          <td>部分（stderr 提取）</td>
+          <td>✗ 不支持</td>
+          <td>GEMINI_API_KEY / gemini auth</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-purple">pi</span></td>
+          <td><code>WorkerDriver</code></td>
+          <td>全部</td>
+          <td>依配置</td>
+          <td>依配置</td>
+          <td>PI_API_KEY 等环境变量</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-gray">mock</span></td>
+          <td><code>WorkerDriver</code></td>
+          <td>全部</td>
+          <td>N/A</td>
+          <td>N/A</td>
+          <td>无（测试用）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <h3>Session 机制</h3>
+      <p>对于需要 Conclude Fallback 的任务（execute 超时或输出异常），Dispatcher 需要在同一个对话上下文中继续追问。</p>
+      <ul style="color:var(--text-muted);font-size:13px;padding-left:18px;line-height:2.2;">
+        <li><strong>SeedSessionDriver</strong>（Claude Code）：execute 前预生成 session UUID，用 <code>-r</code> 恢复</li>
+        <li><strong>RegexSessionDriver</strong>（Codex）：从 stdout/stderr 用正则提取 session ID</li>
+        <li><strong>Gemini</strong>：从 stderr 提取 Conversation ID，但不支持 conclude</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>当前分工配置</h3>
+      <table>
+        <thead><tr><th>Worker</th><th>负责任务</th><th>优先级</th><th>最大并发</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-blue">claudecode</span></td><td>推理</td><td>0（最高）</td><td>1</td></tr>
+          <tr><td><span class="badge badge-green">codex</span></td><td>引导 + 探索</td><td>0</td><td>2</td></tr>
+          <tr><td><span class="badge badge-orange">gemini</span></td><td>探索</td><td>1（次选）</td><td>2</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:10px;font-size:12px;">Claude Code 专司推理，Codex 主攻执行，Gemini 作为探索的补充备用。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 8. TASK LIFECYCLE ═══════════════════════════ -->
+<section id="task-lifecycle">
+  <div class="section-label">任务生命周期</div>
+  <h2>任务执行生命周期</h2>
+
+  <div class="diagram-wrap" style="margin-bottom:20px;">
+    <div class="diagram-header">探索 / 引导任务执行流程图</div>
+    <div class="diagram-body">
+<svg viewBox="0 0 860 318" width="100%" style="min-width:640px;display:block;">
+  <defs>
+    <marker id="tl" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- 步骤1：认领意图 -->
+  <rect x="10" y="28" width="112" height="50" rx="6" fill="#f8fafc" stroke="#dde3ee" stroke-width="1.2"/>
+  <text x="66" y="48" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">认领意图</text>
+  <text x="66" y="64" text-anchor="middle" fill="#94a3b8" font-size="9">心跳 API</text>
+  <path d="M122,53 L156,53" stroke="#94a3b8" stroke-width="1" fill="none" marker-end="url(#tl)"/>
+
+  <!-- 步骤2：确保容器运行 -->
+  <rect x="156" y="28" width="120" height="50" rx="6" fill="#f8fafc" stroke="#dde3ee" stroke-width="1.2"/>
+  <text x="216" y="48" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">确保容器运行</text>
+  <text x="216" y="64" text-anchor="middle" fill="#94a3b8" font-size="9">docker start/create</text>
+  <path d="M276,53 L310,53" stroke="#94a3b8" stroke-width="1" fill="none" marker-end="url(#tl)"/>
+
+  <!-- 步骤3：健康检查 -->
+  <rect x="310" y="28" width="112" height="50" rx="6" fill="#f8fafc" stroke="#dde3ee" stroke-width="1.2"/>
+  <text x="366" y="48" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">健康检查</text>
+  <text x="366" y="64" text-anchor="middle" fill="#94a3b8" font-size="9">"Reply: pong" 执行</text>
+  <path d="M422,53 L456,53" stroke="#94a3b8" stroke-width="1" fill="none" marker-end="url(#tl)"/>
+
+  <!-- 步骤4：执行 Worker -->
+  <rect x="456" y="28" width="120" height="50" rx="6" fill="rgba(37,99,235,.07)" stroke="#2563eb" stroke-width="1.2"/>
+  <text x="516" y="48" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="600">执行 Worker</text>
+  <text x="516" y="64" text-anchor="middle" fill="#64748b" font-size="9">CLI + 提示词（超时）</text>
+  <path d="M576,53 L610,53" stroke="#94a3b8" stroke-width="1" fill="none" marker-end="url(#tl)"/>
+
+  <!-- 步骤5：解析 JSON -->
+  <rect x="610" y="28" width="110" height="50" rx="6" fill="#f8fafc" stroke="#dde3ee" stroke-width="1.2"/>
+  <text x="665" y="48" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">解析 JSON</text>
+  <text x="665" y="64" text-anchor="middle" fill="#94a3b8" font-size="9">验证输出格式</text>
+  <path d="M720,53 L754,53" stroke="#94a3b8" stroke-width="1" fill="none" marker-end="url(#tl)"/>
+
+  <!-- 步骤6：写入事实 -->
+  <rect x="754" y="28" width="96" height="50" rx="6" fill="rgba(5,150,105,.07)" stroke="#059669" stroke-width="1.2"/>
+  <text x="802" y="48" text-anchor="middle" fill="#059669" font-size="10" font-weight="600">写入事实</text>
+  <text x="802" y="64" text-anchor="middle" fill="#64748b" font-size="9">conclude API</text>
+
+  <!-- 心跳租约 -->
+  <rect x="10" y="116" width="840" height="28" rx="6" fill="rgba(109,40,217,.05)" stroke="rgba(109,40,217,.25)" stroke-dasharray="5,3"/>
+  <text x="430" y="134" text-anchor="middle" fill="#6d28d9" font-size="10">心跳租约（HeartbeatLease）— 后台线程每 interval 秒发送心跳，防止 Server 超时自动释放意图</text>
+
+  <!-- 取消信号 -->
+  <rect x="10" y="158" width="840" height="28" rx="6" fill="rgba(220,38,38,.05)" stroke="rgba(220,38,38,.2)" stroke-dasharray="5,3"/>
+  <text x="430" y="176" text-anchor="middle" fill="#dc2626" font-size="10">取消信号（TaskCancellation）— 项目停止/完成时，主循环设置取消标志，任务在下一检查点退出</text>
+
+  <!-- 异常处理 -->
+  <text x="10" y="210" fill="#475569" font-size="11" font-weight="600">异常处理路径：</text>
+
+  <rect x="10"  y="220" width="196" height="34" rx="6" fill="rgba(220,38,38,.05)" stroke="rgba(220,38,38,.2)"/>
+  <text x="108" y="235" text-anchor="middle" fill="#dc2626" font-size="10">健康检查失败 → unhealthy</text>
+  <text x="108" y="249" text-anchor="middle" fill="#64748b" font-size="9">Worker 冷却 5s 后重试</text>
+
+  <rect x="220" y="220" width="196" height="34" rx="6" fill="rgba(220,38,38,.05)" stroke="rgba(220,38,38,.2)"/>
+  <text x="318" y="235" text-anchor="middle" fill="#dc2626" font-size="10">执行超时 → conclude 回退</text>
+  <text x="318" y="249" text-anchor="middle" fill="#64748b" font-size="9">从已有上下文提炼事实</text>
+
+  <rect x="430" y="220" width="196" height="34" rx="6" fill="rgba(220,38,38,.05)" stroke="rgba(220,38,38,.2)"/>
+  <text x="528" y="235" text-anchor="middle" fill="#dc2626" font-size="10">JSON 解析失败 → conclude 回退</text>
+  <text x="528" y="249" text-anchor="middle" fill="#64748b" font-size="9">或释放意图并标记失败</text>
+
+  <rect x="640" y="220" width="196" height="34" rx="6" fill="rgba(217,119,6,.05)" stroke="rgba(217,119,6,.25)"/>
+  <text x="738" y="235" text-anchor="middle" fill="#d97706" font-size="10">Worker 拒绝 → rejected</text>
+  <text x="738" y="249" text-anchor="middle" fill="#64748b" font-size="9">该组合冷却 5s</text>
+
+  <!-- 返回值 -->
+  <text x="10" y="278" fill="#475569" font-size="11" font-weight="600">任务返回值：</text>
+  <rect x="10"  y="286" width="62" height="16" rx="3" fill="rgba(5,150,105,.1)"   stroke="#059669" stroke-width="1"/>
+  <text x="41"  y="298" text-anchor="middle" fill="#059669" font-size="9">成功</text>
+  <rect x="82"  y="286" width="52" height="16" rx="3" fill="rgba(220,38,38,.1)"   stroke="#dc2626" stroke-width="1"/>
+  <text x="108" y="298" text-anchor="middle" fill="#dc2626" font-size="9">失败</text>
+  <rect x="144" y="286" width="72" height="16" rx="3" fill="rgba(220,38,38,.1)"   stroke="#dc2626" stroke-width="1"/>
+  <text x="180" y="298" text-anchor="middle" fill="#dc2626" font-size="9">不健康</text>
+  <rect x="226" y="286" width="62" height="16" rx="3" fill="rgba(217,119,6,.1)"   stroke="#d97706" stroke-width="1"/>
+  <text x="257" y="298" text-anchor="middle" fill="#d97706" font-size="9">被拒绝</text>
+  <rect x="298" y="286" width="72" height="16" rx="3" fill="rgba(100,116,139,.1)" stroke="#94a3b8" stroke-width="1"/>
+  <text x="334" y="298" text-anchor="middle" fill="#64748b" font-size="9">已取消</text>
+</svg>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <h3>心跳机制</h3>
+      <p><code>HeartbeatLease</code> 在后台线程中周期性地调用 Server 的心跳 API，告知 Server 该意图仍在被 Worker 处理中。若 Worker 崩溃，Server 会在 <code>intent_timeout</code> 后自动释放该意图，使其可被其他 Worker 重新认领。</p>
+    </div>
+    <div class="card">
+      <h3>Conclude 回退机制</h3>
+      <p>当 execute 阶段超时或输出无法解析时，如果 Worker 支持 session 恢复，Dispatcher 会追加一个 <strong>conclude 提示词</strong>，要求 AI 从已执行的操作中提炼出部分发现写入事实。保证即使任务不完整，也能留下可用的探索记录。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 9. DATABASE SCHEMA ═══════════════════════════ -->
+<section id="db">
+  <div class="section-label">数据库</div>
+  <h2>数据库 Schema</h2>
+  <div class="card" style="padding:0;overflow:hidden;">
+    <table>
+      <thead><tr><th>表名</th><th>主键</th><th>关键字段</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>settings</code></td>
+          <td><code>rowid=1</code></td>
+          <td><code>intent_timeout</code>, <code>reason_timeout</code></td>
+          <td>全局超时配置（秒）。Dispatcher 启动时验证与 interval 的一致性。</td>
+        </tr>
+        <tr>
+          <td><code>project_directories</code></td>
+          <td><code>id</code></td>
+          <td><code>name UNIQUE</code>, <code>local_path</code></td>
+          <td>项目目录，<code>local_path</code> 挂载为 Worker 容器的工作目录。</td>
+        </tr>
+        <tr>
+          <td><code>projects</code></td>
+          <td><code>id</code></td>
+          <td><code>status</code>, <code>reason_worker</code>, <code>scheduled_start_at</code></td>
+          <td><code>reason_worker</code> 实现乐观锁（同一时刻只允许一个推理任务）。<code>scheduled_start_at</code> 支持定时启动。</td>
+        </tr>
+        <tr>
+          <td><code>facts</code></td>
+          <td><code>(id, project_id)</code></td>
+          <td><code>description</code></td>
+          <td>不可变记录。<code>origin</code> 和 <code>goal</code> 为系统保留 ID。</td>
+        </tr>
+        <tr>
+          <td><code>intents</code></td>
+          <td><code>(id, project_id)</code></td>
+          <td><code>to_fact_id</code>, <code>worker</code>, <code>concluded_at</code></td>
+          <td><code>worker IS NULL</code> = 未认领；<code>to_fact_id IS NULL</code> = 开放；<code>concluded_at IS NOT NULL</code> = 已完成。<code>last_heartbeat_at</code> 用于超时检测。</td>
+        </tr>
+        <tr>
+          <td><code>intent_sources</code></td>
+          <td><code>(intent_id, project_id, fact_id)</code></td>
+          <td><code>fact_id</code></td>
+          <td>意图的来源事实关联表，支持一个意图由多个事实触发。</td>
+        </tr>
+        <tr>
+          <td><code>hints</code></td>
+          <td><code>(id, project_id)</code></td>
+          <td><code>content</code>, <code>creator</code></td>
+          <td>人类注入的提示，只增不改不删。</td>
+        </tr>
+        <tr>
+          <td><code>counters</code></td>
+          <td><code>name</code></td>
+          <td><code>value</code></td>
+          <td>自增计数器，用于生成 ID（projects, facts, intents, hints 各一个）。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 10. CONFIG REFERENCE ═══════════════════════════ -->
+<section id="config">
+  <div class="section-label">配置参考</div>
+  <h2>配置参考（dispatch.yaml）</h2>
+  <div class="card">
+    <pre><code><span style="color:#6d28d9">server</span>: <span style="color:#d97706">"http://127.0.0.1:8000"</span>  <span style="color:#94a3b8"># Cairn Server 地址</span>
+
+<span style="color:#6d28d9">common_env</span>: {}               <span style="color:#94a3b8"># 注入所有 Worker 的公共环境变量</span>
+
+<span style="color:#6d28d9">runtime</span>:
+  interval: 3               <span style="color:#94a3b8"># 调度循环间隔（秒）</span>
+  max_workers: 8            <span style="color:#94a3b8"># 全局 Worker 并发上限</span>
+  max_running_projects: 3   <span style="color:#94a3b8"># 同时活跃项目数上限</span>
+  max_project_workers: 4    <span style="color:#94a3b8"># 单项目 Worker 并发上限</span>
+  healthcheck_timeout: 60   <span style="color:#94a3b8"># Worker 健康检查超时（秒）</span>
+  prompt_group: "zh"        <span style="color:#94a3b8"># 提示词语言组（zh / default）</span>
+
+<span style="color:#6d28d9">tasks</span>:
+  bootstrap:
+    timeout: 300            <span style="color:#94a3b8"># 执行阶段超时</span>
+    conclude_timeout: 90    <span style="color:#94a3b8"># Conclude 回退超时</span>
+  reason:
+    timeout: 300
+    max_intents: 2          <span style="color:#94a3b8"># 每次推理最多创建的意图数</span>
+  explore:
+    timeout: 300
+    conclude_timeout: 90
+
+<span style="color:#6d28d9">container</span>:
+  runner: "local"           <span style="color:#94a3b8"># "docker" 或 "local"（直接在宿主执行）</span>
+  image: "cairn-worker-local:latest"
+  network_mode: "host"
+  completed_action: "stop"  <span style="color:#94a3b8"># "stop" 保留容器 / "remove" 清理容器</span>
+  # cap_add: [NET_RAW, NET_ADMIN]
+  # volumes: ["host:container:ro"]
+
+<span style="color:#6d28d9">workers</span>:
+  - name: "claudecode"
+    type: "claudecode"
+    task_types: [reason]
+    max_running: 1
+    priority: 0             <span style="color:#94a3b8"># 数值越小优先级越高</span>
+
+  - name: "codex"
+    type: "codex"
+    task_types: [bootstrap, explore]
+    max_running: 2
+    priority: 0
+
+  - name: "gemini"
+    type: "gemini"
+    task_types: [explore]
+    max_running: 2
+    priority: 1             <span style="color:#94a3b8"># 次级选择，codex 满载时使用</span></code></pre>
+  </div>
+</section>
+
+<hr/>
+
+<div style="text-align:center;padding:20px 0 40px;color:var(--text-muted);font-size:13px;">
+  <div style="margin-bottom:8px;">
+    <span class="badge badge-green">v0.2.1</span>
+    <span style="margin:0 12px;">·</span>
+    <span>GNU AGPLv3</span>
+    <span style="margin:0 12px;">·</span>
+    <span>腾讯云 Hackathon 2nd · 第3名 · 54/54 全题通过</span>
+  </div>
+  <div style="color:#94a3b8;font-size:12px;">架构文档生成于 2026-05-14</div>
+</div>
+
+</div>
+</body>
+</html>
