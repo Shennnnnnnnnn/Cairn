@@ -17,6 +17,21 @@ def next_project_id(conn: sqlite3.Connection) -> str:
     return f"proj_{row['value']:03d}"
 
 
+def next_directory_id(conn: sqlite3.Connection) -> str:
+    conn.execute("UPDATE counters SET value = value + 1 WHERE name = 'directory'")
+    row = conn.execute("SELECT value FROM counters WHERE name = 'directory'").fetchone()
+    return f"dir_{row['value']:03d}"
+
+
+def get_directory_or_404(conn: sqlite3.Connection, directory_id: str) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT * FROM project_directories WHERE id = ?", (directory_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Directory not found")
+    return row
+
+
 def _next_scoped_id(
     conn: sqlite3.Connection, kind: str, prefix: str, project_id: str
 ) -> str:
@@ -195,9 +210,12 @@ def project_reason_from_row(row: sqlite3.Row) -> ProjectReason | None:
 
 
 def project_meta_from_row(row: sqlite3.Row) -> ProjectMeta:
+    keys = set(row.keys())
     return ProjectMeta(
         id=row["id"],
         title=row["title"],
+        directory_id=row["directory_id"],
+        directory_local_path=row["directory_local_path"] if "directory_local_path" in keys else None,
         status=row["status"],
         created_at=row["created_at"],
         scheduled_start_at=row["scheduled_start_at"],

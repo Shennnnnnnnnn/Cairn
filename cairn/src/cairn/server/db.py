@@ -20,6 +20,7 @@ INSERT OR IGNORE INTO settings (rowid, intent_timeout, reason_timeout) VALUES (1
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
+    directory_id TEXT REFERENCES project_directories(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL,
     scheduled_start_at TEXT,
@@ -27,6 +28,13 @@ CREATE TABLE IF NOT EXISTS projects (
     reason_trigger TEXT,
     reason_started_at TEXT,
     reason_last_heartbeat_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS project_directories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    local_path TEXT,
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS facts (
@@ -72,6 +80,7 @@ CREATE TABLE IF NOT EXISTS counters (
 );
 
 INSERT OR IGNORE INTO counters (name, value) VALUES ('project', 0);
+INSERT OR IGNORE INTO counters (name, value) VALUES ('directory', 0);
 
 CREATE TABLE IF NOT EXISTS scoped_counters (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -100,6 +109,28 @@ def _migrate(conn: sqlite3.Connection) -> None:
     }
     if "scheduled_start_at" not in project_columns:
         conn.execute("ALTER TABLE projects ADD COLUMN scheduled_start_at TEXT")
+    if "directory_id" not in project_columns:
+        conn.execute(
+            "ALTER TABLE projects ADD COLUMN directory_id TEXT REFERENCES project_directories(id) ON DELETE SET NULL"
+        )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_directories (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            local_path TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    directory_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(project_directories)").fetchall()
+    }
+    if "local_path" not in directory_columns:
+        conn.execute("ALTER TABLE project_directories ADD COLUMN local_path TEXT")
+    conn.execute("INSERT OR IGNORE INTO counters (name, value) VALUES ('directory', 0)")
 
 
 @contextmanager

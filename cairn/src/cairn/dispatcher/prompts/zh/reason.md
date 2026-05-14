@@ -56,3 +56,8 @@
 ```
 {open_intents}
 ```
+
+### Current Working Directory
+```
+{working_directory}
+```

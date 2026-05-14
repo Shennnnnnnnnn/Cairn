@@ -1,19 +1,25 @@
+import sqlite3
+
 from fastapi import APIRouter, HTTPException
 
 from cairn.server.db import get_conn
 from cairn.server.models import (
     CompleteRequest,
+    CreateDirectoryRequest,
     CreateProjectRequest,
     Fact,
     Hint,
     HeartbeatRequest,
     Intent,
+    ProjectDirectory,
     ProjectDetail,
     ProjectMeta,
     ProjectSummary,
     ReopenRequest,
     ReopenResponse,
     ReasonClaimRequest,
+    UpdateDirectoryRequest,
+    UpdateProjectDirectoryRequest,
     UpdateProjectTitleRequest,
     UpdateProjectStatusRequest,
 )
@@ -25,8 +31,10 @@ from cairn.server.services import (
     expire_reason_leases,
     expire_workers,
     get_completion_intent_or_409,
+    get_directory_or_404,
     get_project_or_404,
     intent_to_model,
+    next_directory_id,
     next_fact_id,
     next_hint_id,
     next_intent_id,
@@ -41,6 +49,84 @@ from cairn.server.services import (
 router = APIRouter(tags=["projects"])
 
 
+@router.get("/project-directories", response_model=list[ProjectDirectory])
+def list_project_directories():
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT d.*,
+                (SELECT COUNT(*) FROM projects WHERE directory_id = d.id) AS project_count
+            FROM project_directories d
+            ORDER BY lower(d.name), d.created_at
+        """).fetchall()
+        return [ProjectDirectory(**dict(row)) for row in rows]
+
+
+@router.post("/project-directories", response_model=ProjectDirectory, status_code=201)
+def create_project_directory(body: CreateDirectoryRequest):
+    with get_conn() as conn:
+        directory_id = next_directory_id(conn)
+        now = utcnow()
+        try:
+            conn.execute(
+                "INSERT INTO project_directories (id, name, local_path, created_at) VALUES (?, ?, ?, ?)",
+                (directory_id, body.name, body.local_path, now),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Directory name already exists") from exc
+        return ProjectDirectory(
+            id=directory_id,
+            name=body.name,
+            local_path=body.local_path,
+            created_at=now,
+            project_count=0,
+        )
+
+
+@router.put("/project-directories/{directory_id}", response_model=ProjectDirectory)
+def update_project_directory(directory_id: str, body: UpdateDirectoryRequest):
+    with get_conn() as conn:
+        get_directory_or_404(conn, directory_id)
+        assignments = []
+        params = []
+        if "name" in body.model_fields_set:
+            assignments.append("name = ?")
+            params.append(body.name)
+        if "local_path" in body.model_fields_set:
+            assignments.append("local_path = ?")
+            params.append(body.local_path)
+        if not assignments:
+            raise HTTPException(400, "No directory fields provided")
+        params.append(directory_id)
+        try:
+            conn.execute(
+                f"UPDATE project_directories SET {', '.join(assignments)} WHERE id = ?",
+                tuple(params),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "Directory name already exists") from exc
+        row = conn.execute(
+            """
+            SELECT d.*,
+                (SELECT COUNT(*) FROM projects WHERE directory_id = d.id) AS project_count
+            FROM project_directories d
+            WHERE d.id = ?
+            """,
+            (directory_id,),
+        ).fetchone()
+        return ProjectDirectory(**dict(row))
+
+
+@router.delete("/project-directories/{directory_id}", status_code=204)
+def delete_project_directory(directory_id: str):
+    with get_conn() as conn:
+        get_directory_or_404(conn, directory_id)
+        conn.execute(
+            "UPDATE projects SET directory_id = NULL WHERE directory_id = ?",
+            (directory_id,),
+        )
+        conn.execute("DELETE FROM project_directories WHERE id = ?", (directory_id,))
+
+
 @router.get("/projects", response_model=list[ProjectSummary])
 def list_projects():
     with get_conn() as conn:
@@ -48,6 +134,7 @@ def list_projects():
         expire_reason_leases(conn)
         rows = conn.execute("""
             SELECT p.*,
+                (SELECT local_path FROM project_directories WHERE id = p.directory_id) AS directory_local_path,
                 (SELECT COUNT(*) FROM facts WHERE project_id = p.id) AS fact_count,
                 (SELECT COUNT(*) FROM intents WHERE project_id = p.id) AS intent_count,
                 (SELECT COUNT(*) FROM intents WHERE project_id = p.id AND concluded_at IS NULL AND worker IS NOT NULL) AS working_intent_count,
@@ -60,6 +147,8 @@ def list_projects():
             ProjectSummary(
                 id=row["id"],
                 title=row["title"],
+                directory_id=row["directory_id"],
+                directory_local_path=row["directory_local_path"],
                 status=row["status"],
                 created_at=row["created_at"],
                 scheduled_start_at=row["scheduled_start_at"],
@@ -77,12 +166,14 @@ def list_projects():
 @router.post("/projects", response_model=ProjectDetail, status_code=201)
 def create_project(body: CreateProjectRequest):
     with get_conn() as conn:
+        if body.directory_id is not None:
+            get_directory_or_404(conn, body.directory_id)
         pid = next_project_id(conn)
         now = utcnow()
 
         conn.execute(
-            "INSERT INTO projects (id, title, status, created_at, scheduled_start_at) VALUES (?, ?, 'active', ?, ?)",
-            (pid, body.title, now, body.scheduled_start_at),
+            "INSERT INTO projects (id, title, directory_id, status, created_at, scheduled_start_at) VALUES (?, ?, ?, 'active', ?, ?)",
+            (pid, body.title, body.directory_id, now, body.scheduled_start_at),
         )
         conn.execute(
             "INSERT INTO facts (id, project_id, description) VALUES (?, ?, ?)",
@@ -107,6 +198,8 @@ def create_project(body: CreateProjectRequest):
             project=ProjectMeta(
                 id=pid,
                 title=body.title,
+                directory_id=body.directory_id,
+                directory_local_path=get_directory_or_404(conn, body.directory_id)["local_path"] if body.directory_id is not None else None,
                 status="active",
                 created_at=now,
                 scheduled_start_at=body.scheduled_start_at,
@@ -126,7 +219,17 @@ def get_project(project_id: str):
     with get_conn() as conn:
         expire_workers(conn, project_id)
         expire_reason_leases(conn, project_id)
-        row = get_project_or_404(conn, project_id)
+        row = conn.execute(
+            """
+            SELECT p.*,
+                (SELECT local_path FROM project_directories WHERE id = p.directory_id) AS directory_local_path
+            FROM projects p
+            WHERE p.id = ?
+            """,
+            (project_id,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Project not found")
 
         facts = conn.execute(
             "SELECT * FROM facts WHERE project_id = ?", (project_id,)
@@ -159,7 +262,40 @@ def update_project_title(project_id: str, body: UpdateProjectTitleRequest):
             "UPDATE projects SET title = ? WHERE id = ?",
             (body.title, project_id),
         )
-        updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        updated = conn.execute(
+            """
+            SELECT p.*,
+                (SELECT local_path FROM project_directories WHERE id = p.directory_id) AS directory_local_path
+            FROM projects p
+            WHERE p.id = ?
+            """,
+            (project_id,),
+        ).fetchone()
+        return project_meta_from_row(updated)
+
+
+@router.patch("/projects/{project_id}/directory", response_model=ProjectMeta)
+@router.put("/projects/{project_id}/directory", response_model=ProjectMeta)
+def update_project_directory_assignment(
+    project_id: str, body: UpdateProjectDirectoryRequest
+):
+    with get_conn() as conn:
+        get_project_or_404(conn, project_id)
+        if body.directory_id is not None:
+            get_directory_or_404(conn, body.directory_id)
+        conn.execute(
+            "UPDATE projects SET directory_id = ? WHERE id = ?",
+            (body.directory_id, project_id),
+        )
+        updated = conn.execute(
+            """
+            SELECT p.*,
+                (SELECT local_path FROM project_directories WHERE id = p.directory_id) AS directory_local_path
+            FROM projects p
+            WHERE p.id = ?
+            """,
+            (project_id,),
+        ).fetchone()
         return project_meta_from_row(updated)
 
 

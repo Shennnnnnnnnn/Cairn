@@ -40,3 +40,8 @@
 ```
 {hints}
 ```
+
+## Current Working Directory
+```
+{working_directory}
+```

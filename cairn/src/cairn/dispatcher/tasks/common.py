@@ -5,6 +5,8 @@ import time
 import uuid
 from dataclasses import dataclass
 
+import yaml
+
 from cairn.dispatcher.config import WorkerConfig
 from cairn.dispatcher.protocol.client import CairnClient
 from cairn.dispatcher.runtime.cancellation import TaskCancellation
@@ -40,6 +42,23 @@ def preview(text: str, limit: int = LOG_PREVIEW_LIMIT) -> str:
 
 def did_timeout(result: ProcessResult) -> bool:
     return not result.cancelled and (result.timed_out or result.returncode in (124, 137))
+
+
+def format_project_workdir(local_path: str | None) -> str:
+    return local_path or "未配置项目目录 local_path；worker 将使用运行时默认工作目录。"
+
+
+def add_project_workdir_to_graph_yaml(graph_yaml: str, local_path: str | None) -> str:
+    data = yaml.safe_load(graph_yaml) or {}
+    if not isinstance(data, dict):
+        data = {}
+    project = data.setdefault("project", {})
+    if not isinstance(project, dict):
+        project = {}
+        data["project"] = project
+    project["current_working_directory"] = local_path
+    project["directory_local_path"] = local_path
+    return yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
 
 def cancel_reason(result: ProcessResult, cancellation: TaskCancellation | None = None) -> str | None:
@@ -114,19 +133,22 @@ def run_worker_process(
     timeout_seconds: int,
     lease: HeartbeatLease | None = None,
     cancellation: TaskCancellation | None = None,
+    workdir: str | None = None,
 ) -> ProcessResult:
     LOG.info(
-        "starting container exec container=%s worker=%s phase=%s timeout=%ss",
+        "starting container exec container=%s worker=%s phase=%s timeout=%ss workdir=%s",
         container_name,
         worker.name,
         phase,
         timeout_seconds,
+        workdir,
     )
     process = container_manager.build_exec_process(
         container_name,
         dict(worker.env),
         argv,
         timeout_seconds=timeout_seconds,
+        workdir=workdir,
     )
     process.start()
     if lease is not None:

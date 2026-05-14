@@ -11,9 +11,11 @@ from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
 from cairn.dispatcher.runtime.heartbeat import HeartbeatLease
 from cairn.dispatcher.tasks.common import (
+    add_project_workdir_to_graph_yaml,
     best_effort_release,
     cancel_reason,
     did_timeout,
+    format_project_workdir,
     project_allows_conclude_fallback,
     preview,
     run_healthcheck,
@@ -100,11 +102,12 @@ def run_explore_task(
                 "graph_yaml": write_graph_snapshot_reference(
                     container_manager,
                     container_name,
-                    export_yaml.strip(),
+                    add_project_workdir_to_graph_yaml(export_yaml, project.project.directory_local_path).strip(),
                     phase="explore_execute",
                 ),
                 "intent_id": intent.id,
                 "intent_description": intent.description,
+                "working_directory": format_project_workdir(project.project.directory_local_path),
             },
         )
 
@@ -121,6 +124,7 @@ def run_explore_task(
             timeout=config.tasks.explore.timeout,
             lease=lease,
             cancellation=cancellation,
+            workdir=project.project.directory_local_path,
         )
         execute_ms = int((time.perf_counter() - execute_started) * 1000)
         session = driver.extract_session(session, first.stdout, first.stderr)
@@ -172,6 +176,7 @@ def run_explore_task(
                     worker,
                     driver,
                     project.project.id,
+                    project.project.directory_local_path,
                     intent,
                     export_yaml,
                     session,
@@ -219,6 +224,7 @@ def run_explore_task(
                 worker,
                 driver,
                 project.project.id,
+                project.project.directory_local_path,
                 intent,
                 export_yaml,
                 session,
@@ -254,6 +260,7 @@ def _try_conclude_fallback(
     worker: WorkerConfig,
     driver,
     project_id: str,
+    project_workdir: str | None,
     intent: Intent,
     export_yaml: str,
     session: str | None,
@@ -303,11 +310,12 @@ def _try_conclude_fallback(
             "graph_yaml": write_graph_snapshot_reference(
                 container_manager,
                 container_name,
-                export_yaml.strip(),
+                add_project_workdir_to_graph_yaml(export_yaml, project_workdir).strip(),
                 phase="explore_conclude",
             ),
             "intent_id": intent.id,
             "intent_description": intent.description,
+            "working_directory": format_project_workdir(project_workdir),
         },
     )
     conclude_argv = driver.build_conclude(worker, prompt, session)
@@ -322,6 +330,7 @@ def _try_conclude_fallback(
         timeout=config.tasks.explore.conclude_timeout,
         lease=lease,
         cancellation=cancellation,
+        workdir=project_workdir,
     )
     conclude_ms = int((time.perf_counter() - conclude_started) * 1000)
     cancelled = cancel_reason(result, cancellation)
@@ -402,6 +411,7 @@ def _run_process(
     timeout: int,
     lease: HeartbeatLease,
     cancellation: TaskCancellation,
+    workdir: str | None = None,
 ):
     return run_worker_process(
         container_manager,
@@ -412,4 +422,5 @@ def _run_process(
         timeout_seconds=timeout,
         lease=lease,
         cancellation=cancellation,
+        workdir=workdir,
     )

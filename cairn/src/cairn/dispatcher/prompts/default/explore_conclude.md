@@ -39,3 +39,8 @@ Normal return example:
 ```
 {intent_description}
 ```
+
+## Current Working Directory
+```
+{working_directory}
+```

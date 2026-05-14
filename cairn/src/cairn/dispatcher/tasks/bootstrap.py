@@ -18,6 +18,7 @@ from cairn.dispatcher.tasks.common import (
     best_effort_release,
     cancel_reason,
     did_timeout,
+    format_project_workdir,
     project_allows_conclude_fallback,
     preview,
     run_healthcheck,
@@ -115,6 +116,7 @@ def run_bootstrap_task(
             timeout_seconds=config.tasks.bootstrap.timeout,
             lease=lease,
             cancellation=cancellation,
+            workdir=project.project.directory_local_path,
         )
         execute_ms = int((time.perf_counter() - execute_started) * 1000)
         session = driver.extract_session(session, first.stdout, first.stderr)
@@ -310,6 +312,7 @@ def _try_conclude_fallback(
         timeout_seconds=config.tasks.bootstrap.conclude_timeout,
         lease=lease,
         cancellation=cancellation,
+        workdir=project.project.directory_local_path,
     )
     conclude_ms = int((time.perf_counter() - conclude_started) * 1000)
     cancelled = cancel_reason(result, cancellation)
@@ -404,6 +407,7 @@ def _bootstrap_prompt_replacements(project: ProjectDetail) -> dict[str, str]:
         "origin": facts.get("origin", ""),
         "goal": facts.get("goal", ""),
         "hints": format_hints(hints),
+        "working_directory": format_project_workdir(project.project.directory_local_path),
     }
 
 

@@ -281,18 +281,70 @@
     </div>
   </header>
 
-  <div x-ref="projectListScroll" @scroll.passive="rememberProjectListScroll()" class="flex-1 overflow-y-auto p-4">
-    <template x-if="projects.length === 0">
-      <div class="flex flex-col items-center justify-center h-full text-slate-400">
-        <img src="/static/favicon.svg" alt="" class="w-20 h-20 mb-5 opacity-30">
-        <p class="text-lg font-medium text-slate-500" x-text="t('noProjects')"></p>
-        <p class="text-sm mt-1" x-text="t('noProjectsHint')"></p>
+  <div class="flex-1 min-h-0 flex overflow-hidden">
+    <aside class="w-72 shrink-0 border-r border-slate-200/70 bg-white/70 p-3 overflow-y-auto">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400" x-text="t('directories')"></h2>
+        <span class="text-[11px] font-medium text-slate-400 tabular-nums" x-text="directories.length"></span>
       </div>
-    </template>
+      <button type="button" @click="openDirectoryModal()" class="mb-3 h-8 w-full rounded-lg border border-brand-200 text-brand-600 hover:bg-brand-50 transition inline-flex items-center justify-center gap-1.5 text-xs font-medium" :title="t('createDirectory')" :aria-label="t('createDirectory')">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          <span x-text="t('createDirectory')"></span>
+      </button>
+      <button type="button"
+        @click="selectDirectory('all')"
+        @dragover.prevent
+        @drop.prevent="assignDraggedProject(null)"
+        class="mb-1 flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-sm transition"
+        :class="selectedDirectoryId === 'all' ? 'border-brand-200 bg-brand-50 text-brand-700' : 'border-transparent text-slate-600 hover:bg-slate-50'">
+        <span class="font-medium" x-text="t('allDirectories')"></span>
+        <span class="text-xs tabular-nums opacity-70" x-text="projects.length"></span>
+      </button>
+      <button type="button"
+        @click="selectDirectory('uncategorized')"
+        @dragover.prevent
+        @drop.prevent="assignDraggedProject(null)"
+        class="mb-1 flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-sm transition"
+        :class="selectedDirectoryId === 'uncategorized' ? 'border-brand-200 bg-brand-50 text-brand-700' : 'border-transparent text-slate-600 hover:bg-slate-50'">
+        <span class="font-medium" x-text="t('uncategorized')"></span>
+        <span class="text-xs tabular-nums opacity-70" x-text="uncategorizedProjects().length"></span>
+      </button>
+      <template x-for="directory in directories" :key="directory.id">
+        <div @dragover.prevent @drop.prevent="assignDraggedProject(directory.id)" class="group mb-1 flex items-center gap-1 rounded-lg border transition"
+          :class="selectedDirectoryId === directory.id ? 'border-brand-200 bg-brand-50' : 'border-transparent hover:bg-slate-50'">
+          <button type="button" @click="selectDirectory(directory.id)" class="min-w-0 flex-1 px-2.5 py-2 text-left">
+            <div class="truncate text-sm font-medium" :class="selectedDirectoryId === directory.id ? 'text-brand-700' : 'text-slate-600'" x-text="directory.name"></div>
+            <div class="text-[11px] text-slate-400"><span x-text="directory.project_count"></span> <span x-text="t('projectsCount')"></span></div>
+            <div x-show="directory.local_path" class="truncate text-[10px] text-slate-400 font-mono mt-0.5" x-text="directory.local_path"></div>
+          </button>
+          <button type="button" @click="renameDirectory(directory)" class="h-7 w-7 shrink-0 rounded-md text-slate-300 hover:bg-white hover:text-slate-600" :title="t('renameDirectory')" :aria-label="t('renameDirectory')">
+            <svg class="mx-auto h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m16.862 4.487 1.65-1.65a1.875 1.875 0 1 1 2.652 2.652l-9.193 9.193a4.5 4.5 0 0 1-1.897 1.13L6 17l1.188-4.074a4.5 4.5 0 0 1 1.13-1.897l8.544-8.542Z"/><path d="M19.5 7.125 16.875 4.5"/></svg>
+          </button>
+          <button type="button" @click="deleteDirectory(directory)" class="h-7 w-7 shrink-0 rounded-md text-slate-300 hover:bg-rose-50 hover:text-rose-500" :title="t('deleteDirectory')" :aria-label="t('deleteDirectory')">
+            <svg class="mx-auto h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6"/><path d="M19 6l-.63 11.338A2 2 0 0 1 16.37 19.5H7.63a2 2 0 0 1-1.997-2.162L5 6"/></svg>
+          </button>
+        </div>
+      </template>
+    </aside>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-      <template x-for="p in projects" :key="p.id">
-        <div @click="openProject(p.id)"
+    <div x-ref="projectListScroll" @scroll.passive="rememberProjectListScroll()" class="flex-1 overflow-y-auto p-4">
+      <template x-if="projects.length === 0">
+        <div class="flex flex-col items-center justify-center h-full text-slate-400">
+          <img src="/static/favicon.svg" alt="" class="w-20 h-20 mb-5 opacity-30">
+          <p class="text-lg font-medium text-slate-500" x-text="t('noProjects')"></p>
+          <p class="text-sm mt-1" x-text="t('noProjectsHint')"></p>
+        </div>
+      </template>
+
+      <template x-for="group in projectGroups()" :key="group.id">
+        <section class="mb-6">
+          <div class="mb-2 flex items-center gap-2">
+            <h3 class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400" x-text="group.name"></h3>
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 tabular-nums" x-text="group.projects.length"></span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <template x-for="p in group.projects" :key="p.id">
+              <div @click="openProject(p.id)" draggable="true" @dragstart="draggedProjectId = p.id" @dragend="draggedProjectId = null"
           class="group h-full flex flex-col bg-white rounded-2xl border border-slate-200/60 p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-slate-200/50 hover:border-slate-300 hover:-translate-y-0.5">
           <div class="flex items-start justify-between mb-3">
             <span class="text-[11px] font-mono text-slate-400 tracking-wide" x-text="p.id"></span>
@@ -364,6 +416,12 @@
           </template>
           <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-end gap-1.5">
             <div class="flex items-center justify-end gap-1.5 flex-wrap">
+              <select @click.stop @change.stop="assignProjectDirectory(p.id, $event.target.value || null)" :value="p.directory_id || ''" class="h-7 max-w-32 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+                <option value="" x-text="t('uncategorized')"></option>
+                <template x-for="directory in directories" :key="`assign-${p.id}-${directory.id}`">
+                  <option :value="directory.id" x-text="directory.name"></option>
+                </template>
+              </select>
               <button type="button" @click.stop="viewProjectYaml(p.id, p.title)"
                 class="px-2 py-1 rounded-lg border border-slate-200 text-[11px] text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition flex items-center gap-1">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M14.25 3H7.5A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h9a2.25 2.25 0 0 0 2.25-2.25V8.25L14.25 3Z"/><path d="M14.25 3v5.25h4.5"/><path d="M8.25 12h7.5M8.25 15h5.25"/></svg>
@@ -395,6 +453,9 @@
             </div>
           </div>
         </div>
+            </template>
+          </div>
+        </section>
       </template>
     </div>
   </div>
@@ -800,6 +861,28 @@
 
 <!-- ═══════════ MODALS ═══════════ -->
 
+<!-- Directory Form -->
+<div x-show="showDirectoryModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="closeDirectoryModal()">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200/60" @click.stop>
+    <h3 class="text-base font-semibold text-slate-700 mb-4" x-text="directoryForm.id ? t('renameDirectoryTitle') : t('newDirectoryTitle')"></h3>
+    <div class="space-y-3">
+      <label class="block">
+        <span class="text-[11px] text-slate-400 mb-1 block font-medium" x-text="t('directoryNameLabel')"></span>
+        <input x-ref="directoryNameInput" x-model="directoryForm.name" @keydown.enter.prevent="saveDirectory()" :placeholder="t('directoryNamePlaceholder')" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300">
+      </label>
+      <label class="block">
+        <span class="text-[11px] text-slate-400 mb-1 block font-medium" x-text="t('directoryLocalPathLabel')"></span>
+        <input x-model="directoryForm.local_path" @keydown.enter.prevent="saveDirectory()" :placeholder="t('directoryLocalPathPlaceholder')" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300 font-mono">
+      </label>
+    </div>
+    <div class="flex justify-end gap-2 mt-5">
+      <button @click="closeDirectoryModal()" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition" x-text="t('cancel')"></button>
+      <button @click="saveDirectory()" :disabled="!directoryForm.name.trim()"
+        class="px-5 py-2 text-sm bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition disabled:opacity-30 shadow-sm shadow-brand-200" x-text="directoryForm.id ? t('save') : t('create')"></button>
+    </div>
+  </div>
+</div>
+
 <!-- New Project -->
 <div x-show="showNewProject" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showNewProject = false">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
@@ -808,6 +891,15 @@
       <input x-model="newProject.title" :placeholder="t('projectTitlePlaceholder')" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300">
       <textarea x-model="newProject.origin" :placeholder="t('originPlaceholder')" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300"></textarea>
       <textarea x-model="newProject.goal" :placeholder="t('goalPlaceholder')" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300"></textarea>
+      <label class="block">
+        <span class="text-[11px] text-slate-400 mb-1 block font-medium" x-text="t('directory')"></span>
+        <select x-model="newProject.directory_id" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition text-slate-600 bg-white">
+          <option value="" x-text="t('uncategorized')"></option>
+          <template x-for="directory in directories" :key="`new-project-${directory.id}`">
+            <option :value="directory.id" x-text="directory.name"></option>
+          </template>
+        </select>
+      </label>
       <button type="button" @click="toggleScheduledStart(newProject)" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] transition"
         :class="newProject.scheduled_start_enabled ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
@@ -1119,6 +1211,20 @@ function cairnApp() {
         all: 'All', active: 'Active', stopped: 'Stopped', completed: 'Completed',
         stopActive: 'Stop Active', stopping: 'Stopping…',
         newProject: 'New Project',
+        directories: 'Directories', directory: 'Directory', allDirectories: 'All directories',
+        uncategorized: 'Uncategorized', projectsCount: 'projects',
+        directoryNamePlaceholder: 'New directory', createDirectory: 'Create directory',
+        newDirectoryTitle: 'New Directory',
+        renameDirectoryTitle: 'Edit Directory',
+        directoryNameLabel: 'Directory name',
+        directoryLocalPathLabel: 'Local path',
+        directoryLocalPathPlaceholder: '/Users/name/project',
+        renameDirectory: 'Rename directory', deleteDirectory: 'Delete directory',
+        directoryCreated: 'Directory created',
+        directoryRenamed: 'Directory renamed',
+        directoryDeleted: 'Directory deleted',
+        directoryAssigned: 'Project moved',
+        deleteDirectoryConfirm: 'Delete "{name}"? Projects in this directory will become uncategorized.',
         noProjects: 'No projects yet', noProjectsHint: 'Create a project to start exploring',
         snapshot: 'Snapshot', stop: 'Stop', resume: 'Resume', reopen: 'Reopen', delete: 'Delete',
         replay: 'Replay', exit: 'Exit', fast: 'Fast', normal: 'Normal', slow: 'Slow',
@@ -1181,6 +1287,20 @@ function cairnApp() {
         all: '全部', active: '运行中', stopped: '已停止', completed: '已完成',
         stopActive: '停止全部', stopping: '停止中…',
         newProject: '新建项目',
+        directories: '目录', directory: '目录', allDirectories: '全部目录',
+        uncategorized: '未归类', projectsCount: '个项目',
+        directoryNamePlaceholder: '新目录', createDirectory: '创建目录',
+        newDirectoryTitle: '新建目录',
+        renameDirectoryTitle: '编辑目录',
+        directoryNameLabel: '目录名称',
+        directoryLocalPathLabel: '本地路径',
+        directoryLocalPathPlaceholder: '/Users/name/project',
+        renameDirectory: '重命名目录', deleteDirectory: '删除目录',
+        directoryCreated: '目录已创建',
+        directoryRenamed: '目录已重命名',
+        directoryDeleted: '目录已删除',
+        directoryAssigned: '项目已移动',
+        deleteDirectoryConfirm: '删除“{name}”？该目录下的项目将变为未归类。',
         noProjects: '暂无项目', noProjectsHint: '创建一个项目开始探索',
         snapshot: '快照', stop: '停止', resume: '恢复', reopen: '重新打开', delete: '删除',
         replay: '回放', exit: '退出', fast: '快速', normal: '正常', slow: '慢速',
@@ -1251,6 +1371,7 @@ function cairnApp() {
 
     view: 'list',
     projects: [],
+    directories: [],
     project: null,
     selectedProjectId: '',
     polling: true,
@@ -1278,8 +1399,12 @@ function cairnApp() {
     exportTab: 'yaml',
     exportProjectId: '',
     showDeleteModal: false,
+    showDirectoryModal: false,
 
-    newProject: { title: '', origin: '', goal: '', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content: '' }] },
+    newProject: { title: '', origin: '', goal: '', directory_id: '', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content: '' }] },
+    directoryForm: { id: null, name: '', local_path: '' },
+    selectedDirectoryId: 'all',
+    draggedProjectId: null,
     intentForm: { description: '' },
     concludeForm: { description: '', intentId: '' },
     completeForm: { description: '' },
@@ -1318,6 +1443,7 @@ function cairnApp() {
       window.addEventListener('pointermove', this._panelResizeMove);
       window.addEventListener('pointerup', this._panelResizeStop);
       this.loadLocalPrefs();
+      await this.loadDirectories();
       await this.loadProjects();
       await this.loadSettings();
       this.startPolling();
@@ -1509,6 +1635,157 @@ function cairnApp() {
 
     async loadProjects() {
       try { this.projects = await this.api('GET', '/projects'); } catch(e) { console.error(e); }
+    },
+
+    async loadDirectories() {
+      try {
+        this.directories = await this.api('GET', '/project-directories');
+        if (
+          this.selectedDirectoryId !== 'all'
+          && this.selectedDirectoryId !== 'uncategorized'
+          && !this.directories.some(directory => directory.id === this.selectedDirectoryId)
+        ) {
+          this.selectedDirectoryId = 'all';
+        }
+      } catch(e) { console.error(e); }
+    },
+
+    directoryName(directoryId) {
+      if (!directoryId) return this.t('uncategorized');
+      return this.directories.find(directory => directory.id === directoryId)?.name || directoryId;
+    },
+
+    selectDirectory(directoryId) {
+      this.selectedDirectoryId = directoryId || 'all';
+    },
+
+    uncategorizedProjects() {
+      return this.projects.filter(project => !project.directory_id);
+    },
+
+    projectGroups() {
+      if (this.selectedDirectoryId === 'uncategorized') {
+        const projects = this.uncategorizedProjects();
+        return projects.length > 0 ? [{ id: 'uncategorized', name: this.t('uncategorized'), projects }] : [];
+      }
+      if (this.selectedDirectoryId !== 'all') {
+        const projects = this.projects.filter(project => project.directory_id === this.selectedDirectoryId);
+        return projects.length > 0 ? [{ id: this.selectedDirectoryId, name: this.directoryName(this.selectedDirectoryId), projects }] : [];
+      }
+
+      const groups = [];
+      for (const directory of this.directories) {
+        const projects = this.projects.filter(project => project.directory_id === directory.id);
+        if (projects.length > 0) groups.push({ id: directory.id, name: directory.name, projects });
+      }
+      const uncategorized = this.uncategorizedProjects();
+      if (uncategorized.length > 0) {
+        groups.push({ id: 'uncategorized', name: this.t('uncategorized'), projects: uncategorized });
+      }
+      return groups;
+    },
+
+    async reloadDirectoryState() {
+      await Promise.all([this.loadDirectories(), this.loadProjects()]);
+    },
+
+    openDirectoryModal() {
+      this.directoryForm = { id: null, name: '', local_path: '' };
+      this.showDirectoryModal = true;
+      this.$nextTick(() => this.$refs.directoryNameInput?.focus());
+    },
+
+    closeDirectoryModal() {
+      this.showDirectoryModal = false;
+      this.directoryForm = { id: null, name: '', local_path: '' };
+    },
+
+    saveDirectory() {
+      if (this.directoryForm.id) {
+        return this.updateDirectory();
+      }
+      return this.createDirectory();
+    },
+
+    async createDirectory() {
+      const name = this.directoryForm.name.trim();
+      if (!name) return;
+      const localPath = this.directoryForm.local_path.trim();
+      const payload = { name };
+      if (localPath) payload.local_path = localPath;
+      try {
+        const directory = await this.api('POST', '/project-directories', payload);
+        this.closeDirectoryModal();
+        await this.loadDirectories();
+        this.selectedDirectoryId = directory.id;
+        this.showToast(this.t('directoryCreated'));
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    renameDirectory(directory) {
+      if (!directory?.id) return;
+      this.directoryForm = {
+        id: directory.id,
+        name: directory.name || '',
+        local_path: directory.local_path || '',
+      };
+      this.showDirectoryModal = true;
+      this.$nextTick(() => this.$refs.directoryNameInput?.focus());
+    },
+
+    async updateDirectory() {
+      const id = this.directoryForm.id;
+      const name = this.directoryForm.name.trim();
+      if (!id || !name) return;
+      const localPath = this.directoryForm.local_path.trim();
+      try {
+        await this.api('PUT', `/project-directories/${id}`, {
+          name,
+          local_path: localPath || null,
+        });
+        this.closeDirectoryModal();
+        await this.loadDirectories();
+        this.showToast(this.t('directoryRenamed'));
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async deleteDirectory(directory) {
+      if (!directory?.id) return;
+      if (!window.confirm(this.t('deleteDirectoryConfirm').replace('{name}', directory.name))) return;
+      try {
+        await this.api('DELETE', `/project-directories/${directory.id}`);
+        if (this.selectedDirectoryId === directory.id) this.selectedDirectoryId = 'all';
+        await this.reloadDirectoryState();
+        this.showToast(this.t('directoryDeleted'));
+      } catch(e) { this.showToast(e.message, 'error'); }
+    },
+
+    async assignProjectDirectory(projectId, directoryId) {
+      if (!projectId) return;
+      const targetDirectoryId = directoryId || null;
+      const previous = this.projects.find(project => project.id === projectId)?.directory_id || null;
+      if (previous === targetDirectoryId) return;
+      try {
+        const updated = await this.api('PATCH', `/projects/${projectId}/directory`, { directory_id: targetDirectoryId });
+        const project = this.projects.find(item => item.id === projectId);
+        if (project) {
+          project.directory_id = updated.directory_id || null;
+          project.directory_local_path = updated.directory_local_path || null;
+        }
+        await this.reloadDirectoryState();
+        this.showToast(this.t('directoryAssigned'));
+      } catch(e) {
+        const project = this.projects.find(item => item.id === projectId);
+        if (project) project.directory_id = previous;
+        this.showToast(e.message, 'error');
+      }
+    },
+
+    async assignDraggedProject(directoryId) {
+      const projectId = this.draggedProjectId;
+      this.draggedProjectId = null;
+      if (!projectId) return;
+      await this.assignProjectDirectory(projectId, directoryId);
     },
 
     rememberProjectListScroll() {
@@ -2347,7 +2624,7 @@ function cairnApp() {
           await this.loadProject(this.selectedProjectId);
           this.updateGraph();
         } else {
-          await this.loadProjects();
+          await this.reloadDirectoryState();
         }
       }, 5000);
     },
@@ -3501,14 +3778,15 @@ function cairnApp() {
         const actor = this.actorName();
         const hintContents = this.newProject.hints.filter(h => h.content?.trim());
         const body = { title: this.newProject.title, origin: this.newProject.origin, goal: this.newProject.goal };
+        if (this.newProject.directory_id) body.directory_id = this.newProject.directory_id;
         const scheduledStart = this.newProject.scheduled_start_enabled ? this.toApiTimestamp(this.newProject.scheduled_start_at) : null;
         if (scheduledStart) body.scheduled_start_at = scheduledStart;
         const hints = hintContents.map(h => ({ content: h.content.trim(), creator: actor }));
         if (hints.length > 0) body.hints = hints;
         const data = await this.api('POST', '/projects', body);
         this.showNewProject = false;
-        this.newProject = { title:'', origin:'', goal:'', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content:'' }] };
-        await this.loadProjects();
+        this.newProject = { title:'', origin:'', goal:'', directory_id: '', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content:'' }] };
+        await this.reloadDirectoryState();
         await this.openProject(data.project.id);
         this.showToast('Project created');
       } catch(e) { this.showToast(e.message, 'error'); }

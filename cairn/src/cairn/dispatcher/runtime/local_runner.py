@@ -29,10 +29,17 @@ EXEC_KILL_JOIN_TIMEOUT_SECONDS = 5.0
 class LocalManagedProcess:
     """Mirrors the ManagedProcess interface but runs via subprocess on the host."""
 
-    def __init__(self, command: list[str], env: dict[str, str], timeout_seconds: int | None = None):
+    def __init__(
+        self,
+        command: list[str],
+        env: dict[str, str],
+        timeout_seconds: int | None = None,
+        workdir: str | None = None,
+    ):
         self.command = command
         self.env = env
         self._timeout_seconds = timeout_seconds
+        self.workdir = workdir
         self._proc: subprocess.Popen | None = None
         self._stdout: list[str] = []
         self._stderr: list[str] = []
@@ -50,6 +57,7 @@ class LocalManagedProcess:
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,  # prevent interactive CLI tools from reading stdin
             env=merged_env,
+            cwd=self.workdir,
             text=True,
             start_new_session=True,  # put in its own process group for clean kill
         )
@@ -183,11 +191,12 @@ class LocalProcessManager:
         command: list[str],
         timeout_seconds: int | None = None,
         kill_after_seconds: int = 5,
+        workdir: str | None = None,
     ) -> LocalManagedProcess:
         # On the host we don't wrap with the `timeout` binary (not available on macOS).
         # Instead, LocalManagedProcess.communicate() enforces the timeout natively.
-        LOG.debug("local exec command=%s", command)
-        return LocalManagedProcess(command, env, timeout_seconds=timeout_seconds)
+        LOG.debug("local exec command=%s workdir=%s", command, workdir)
+        return LocalManagedProcess(command, env, timeout_seconds=timeout_seconds, workdir=workdir)
 
     def write_text_file(self, container_name: str, path: str, content: str) -> None:
         """Write a text file directly to the host filesystem (local runner equivalent of ContainerManager.write_text_file)."""

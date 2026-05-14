@@ -49,6 +49,14 @@ def _load_project_data(conn, project_id: str):
 
 def _export_yaml(conn, project_id: str) -> str:
     proj, facts, hints, intents, sources_by_intent = _load_project_data(conn, project_id)
+    directory_local_path = None
+    if proj["directory_id"] is not None:
+        directory = conn.execute(
+            "SELECT local_path FROM project_directories WHERE id = ?",
+            (proj["directory_id"],),
+        ).fetchone()
+        if directory is not None:
+            directory_local_path = directory["local_path"]
 
     origin_desc = ""
     goal_desc = ""
@@ -63,6 +71,9 @@ def _export_yaml(conn, project_id: str) -> str:
             "title": proj["title"],
             "origin": origin_desc,
             "goal": goal_desc,
+            "directory_id": proj["directory_id"],
+            "directory_local_path": directory_local_path,
+            "current_working_directory": directory_local_path,
         }
     }
 

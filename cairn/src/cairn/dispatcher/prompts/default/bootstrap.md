@@ -37,3 +37,8 @@ Only return the following after you have confirmed that Goal has been satisfied:
 ```
 {hints}
 ```
+
+## Current Working Directory
+```
+{working_directory}
+```

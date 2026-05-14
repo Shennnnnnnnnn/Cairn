@@ -16,9 +16,11 @@ from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
 from cairn.dispatcher.runtime.heartbeat import HeartbeatLease
 from cairn.dispatcher.tasks.common import (
+    add_project_workdir_to_graph_yaml,
     best_effort_release_reason,
     cancel_reason,
     did_timeout,
+    format_project_workdir,
     preview,
     run_healthcheck,
     run_worker_process,
@@ -114,12 +116,13 @@ def run_reason_task(
                 "graph_yaml": write_graph_snapshot_reference(
                     container_manager,
                     container_name,
-                    export_yaml.strip(),
+                    add_project_workdir_to_graph_yaml(export_yaml, project.project.directory_local_path).strip(),
                     phase="reason_execute",
                 ),
                 "fact_ids": format_fact_ids(allowed_fact_ids),
                 "open_intents": format_open_intents(open_intents),
                 "max_intents": str(config.tasks.reason.max_intents),
+                "working_directory": format_project_workdir(project.project.directory_local_path),
             },
         )
 
@@ -135,6 +138,7 @@ def run_reason_task(
             timeout_seconds=config.tasks.reason.timeout,
             lease=lease,
             cancellation=cancellation,
+            workdir=project.project.directory_local_path,
         )
         execute_ms = int((time.perf_counter() - execute_started) * 1000)
         total_ms = int((time.perf_counter() - task_started) * 1000)

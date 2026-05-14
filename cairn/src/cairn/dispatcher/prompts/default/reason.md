@@ -53,3 +53,8 @@ If Goal has not been satisfied and no new intent should currently be proposed, r
 ```
 {open_intents}
 ```
+
+### Current Working Directory
+```
+{working_directory}
+```

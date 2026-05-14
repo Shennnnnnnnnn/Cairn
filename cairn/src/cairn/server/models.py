@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def normalize_optional_utc_timestamp(value: str | None) -> str | None:
@@ -60,9 +60,19 @@ class ProjectReason(BaseModel):
     last_heartbeat_at: str
 
 
+class ProjectDirectory(BaseModel):
+    id: str
+    name: str
+    local_path: str | None = None
+    created_at: str
+    project_count: int = 0
+
+
 class ProjectMeta(BaseModel):
     id: str
     title: str
+    directory_id: str | None = None
+    directory_local_path: str | None = None
     status: Literal["active", "stopped", "completed"]
     created_at: str
     scheduled_start_at: str | None = None
@@ -101,6 +111,7 @@ class CreateProjectRequest(BaseModel):
     title: str
     origin: str
     goal: str
+    directory_id: str | None = None
     hints: list[CreateHintInline] | None = None
     scheduled_start_at: str | None = None
 
@@ -116,6 +127,62 @@ class CreateProjectRequest(BaseModel):
     @classmethod
     def validate_scheduled_start_at(cls, value: str | None) -> str | None:
         return normalize_optional_utc_timestamp(value)
+
+    @field_validator("directory_id")
+    @classmethod
+    def validate_directory_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class CreateDirectoryRequest(BaseModel):
+    name: str
+    local_path: str | None = None
+
+    @field_validator("name", "local_path")
+    @classmethod
+    def validate_non_empty_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        if not text:
+            raise ValueError("must not be empty")
+        return text
+
+
+class UpdateDirectoryRequest(BaseModel):
+    name: str | None = None
+    local_path: str | None = None
+
+    @field_validator("name", "local_path")
+    @classmethod
+    def validate_non_empty_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        if not text:
+            raise ValueError("must not be empty")
+        return text
+
+    @model_validator(mode="after")
+    def validate_has_update(self) -> "UpdateDirectoryRequest":
+        if not (self.model_fields_set & {"name", "local_path"}):
+            raise ValueError("at least one field must be provided")
+        return self
+
+
+class UpdateProjectDirectoryRequest(BaseModel):
+    directory_id: str | None = None
+
+    @field_validator("directory_id")
+    @classmethod
+    def validate_directory_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
 
 
 class CreateHintRequest(BaseModel):

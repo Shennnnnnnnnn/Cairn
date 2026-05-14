@@ -40,3 +40,8 @@ Normal return example:
 ```
 {hints}
 ```
+
+## Current Working Directory
+```
+{working_directory}
+```
