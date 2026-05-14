@@ -26,10 +26,14 @@ class GeminiDriver(WorkerDriver):
     def supports_conclude(self) -> bool:
         return False
 
+    def _model_args(self, worker: WorkerConfig) -> list[str]:
+        return self.model_args(worker)
+
     def build_healthcheck(self, worker: WorkerConfig) -> list[str]:
         # gemini CLI is authenticated locally; no API keys needed.
         return [
             "gemini",
+            *self._model_args(worker),
             "--yolo",
             "-p",
             "Reply with exactly: pong",
@@ -38,6 +42,7 @@ class GeminiDriver(WorkerDriver):
     def build_execute(self, worker: WorkerConfig, prompt: str, session: str | None) -> DriverResult:
         argv = [
             "gemini",
+            *self._model_args(worker),
             "--yolo",
             "-p",
             prompt,
@@ -48,6 +53,7 @@ class GeminiDriver(WorkerDriver):
         # conclude is not supported; this should never be called
         return [
             "gemini",
+            *self._model_args(worker),
             "--yolo",
             "-p",
             prompt,

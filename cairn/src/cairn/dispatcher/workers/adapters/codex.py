@@ -7,11 +7,15 @@ from cairn.dispatcher.workers.base import DriverResult, RegexSessionDriver
 class CodexDriver(RegexSessionDriver):
     type_name = "codex"
 
+    def _model_args(self, worker: WorkerConfig) -> list[str]:
+        return self.model_args(worker)
+
     def build_healthcheck(self, worker: WorkerConfig) -> list[str]:
         # codex CLI is configured locally; no API keys or base_url needed.
         return [
             "codex",
             "exec",
+            *self._model_args(worker),
             "--dangerously-bypass-approvals-and-sandbox",
             "--",
             "Reply with exactly: pong",
@@ -22,6 +26,7 @@ class CodexDriver(RegexSessionDriver):
             argv=[
                 "codex",
                 "exec",
+                *self._model_args(worker),
                 "--dangerously-bypass-approvals-and-sandbox",
                 "--",
                 prompt,
@@ -34,6 +39,7 @@ class CodexDriver(RegexSessionDriver):
             "exec",
             "resume",
             session,
+            *self._model_args(worker),
             "--dangerously-bypass-approvals-and-sandbox",
             prompt,
         ]

@@ -7,10 +7,14 @@ from cairn.dispatcher.workers.base import DriverResult, SeedSessionDriver
 class ClaudeCodeDriver(SeedSessionDriver):
     type_name = "claudecode"
 
+    def _model_args(self, worker: WorkerConfig) -> list[str]:
+        return self.model_args(worker)
+
     def build_healthcheck(self, worker: WorkerConfig) -> list[str]:
         # claude CLI is authenticated locally; no API key or base_url needed.
         return [
             "claude",
+            *self._model_args(worker),
             "--dangerously-skip-permissions",
             "-p",
             "--",
@@ -22,6 +26,7 @@ class ClaudeCodeDriver(SeedSessionDriver):
         return DriverResult(
             argv=[
                 "claude",
+                *self._model_args(worker),
                 "--session-id",
                 session,
                 "--dangerously-skip-permissions",
@@ -35,6 +40,7 @@ class ClaudeCodeDriver(SeedSessionDriver):
     def build_conclude(self, worker: WorkerConfig, prompt: str, session: str) -> list[str]:
         return [
             "claude",
+            *self._model_args(worker),
             "-r",
             session,
             "--dangerously-skip-permissions",

@@ -167,6 +167,7 @@ class WorkerConfig(BaseModel):
     task_types: list[TaskType]
     max_running: int = Field(gt=0)
     priority: int = Field(ge=0)
+    model: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("task_types")
@@ -180,6 +181,8 @@ class WorkerConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_env(self) -> "WorkerConfig":
+        if self.model is not None and not self.model.strip():
+            raise ValueError(f"worker {self.name} model must not be empty")
         required = WORKER_ENV_KEYS[self.type]
         missing = [key for key in required if not self.env.get(key)]
         if missing:

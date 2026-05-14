@@ -58,11 +58,13 @@ container:
 workers:
   # Worker priority is ascending: lower numbers are preferred first.
   # max_running is per-worker concurrency. Slower backends such as Pi usually benefit from lower values.
+  # Optional model override for local CLI workers. The dispatcher passes it to the CLI as --model.
   - name: "claudecode"
     type: "claudecode"
     task_types: [reason]
     max_running: 1
     priority: 0
+    model: "claude-opus-4-7"
     env: {}
 
   - name: "codex"
@@ -70,6 +72,7 @@ workers:
     task_types: [bootstrap, explore]
     max_running: 2
     priority: 0
+    model: "gpt-5.5"
     env: {}
 
   - name: "gemini"
@@ -77,6 +80,6 @@ workers:
     task_types: [explore]
     max_running: 2
     priority: 1
+    model: "gemini-3.1-pro-preview"
     env: {}
-
 

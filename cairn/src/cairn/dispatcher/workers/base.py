@@ -18,6 +18,12 @@ class DriverResult:
 class WorkerDriver(abc.ABC):
     type_name: str
 
+    def model_args(self, worker: WorkerConfig) -> list[str]:
+        model = worker.model
+        if model:
+            return ["--model", model]
+        return []
+
     def supports_conclude(self) -> bool:
         return True
 
