@@ -18,6 +18,8 @@ tasks:
   explore:
     timeout: 9
     conclude_timeout: 5
+  summarize:
+    timeout: 5
 
 container:
   image: "ghcr.io/oritera/cairn-worker-container:latest"
@@ -57,3 +59,11 @@ workers:
       MOCK_REASON: '{"delay":[2,6],"outcomes":{"complete":0.1,"intent":0.4,"noop":0.1,"rejected":0.1,"invalid_json":0.1,"invalid_payload":0.1,"command_fail":0.1}}'
       MOCK_EXPLORE_EXECUTE: '{"delay":[5,10],"outcomes":{"fact":0.6,"rejected":0.1,"invalid_json":0.1,"invalid_payload":0.1,"command_fail":0.1}}'
       MOCK_EXPLORE_CONCLUDE: '{"delay":[2,6],"outcomes":{"fact":0.6,"rejected":0.1,"invalid_json":0.1,"invalid_payload":0.1,"command_fail":0.1}}'
+
+  - name: "mock-summary"
+    type: "mock"
+    task_types: [summarize]
+    max_running: 2
+    priority: 0
+    env:
+      MOCK_SUMMARY: '{"delay":[0,1],"outcomes":{"title":0.9,"rejected":0.0,"invalid_json":0.03,"invalid_payload":0.03,"command_fail":0.04}}'

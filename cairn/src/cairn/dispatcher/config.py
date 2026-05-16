@@ -10,7 +10,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-TaskType = Literal["reason", "explore", "bootstrap"]
+TaskType = Literal["reason", "explore", "bootstrap", "summarize"]
 WorkerType = Literal["claudecode", "codex", "gemini", "pi", "mock"]
 CompletedAction = Literal["remove", "stop"]
 
@@ -33,6 +33,7 @@ DEFAULT_PROMPT_REQUIRED_TOKENS: dict[str, tuple[str, ...]] = {
     "explore_conclude.md": ("{graph_yaml}", "{intent_id}", "{intent_description}"),
     "bootstrap.md": ("{origin}", "{goal}", "{hints}"),
     "bootstrap_conclude.md": ("{origin}", "{goal}", "{hints}"),
+    "summary.md": ("{kind}", "{id}", "{description}"),
 }
 
 PROMPT_REQUIRED_TOKENS_BY_GROUP: dict[str, dict[str, tuple[str, ...]]] = {
@@ -42,6 +43,7 @@ PROMPT_REQUIRED_TOKENS_BY_GROUP: dict[str, dict[str, tuple[str, ...]]] = {
         "explore_conclude.md": ("{intent_id}",),
         "bootstrap.md": ("{origin}", "{goal}", "{hints}"),
         "bootstrap_conclude.md": ("{origin}", "{goal}", "{hints}"),
+        "summary.md": ("{kind}", "{id}", "{description}"),
     }
 }
 
@@ -52,6 +54,7 @@ MOCK_ALLOWED_OUTCOMES: dict[str, frozenset[str]] = {
     "explore_conclude": frozenset({"fact", "rejected", "invalid_json", "invalid_payload", "command_fail"}),
     "bootstrap": frozenset({"complete", "fact", "rejected", "invalid_json", "invalid_payload", "command_fail"}),
     "bootstrap_conclude": frozenset({"fact", "rejected", "invalid_json", "invalid_payload", "command_fail"}),
+    "summary": frozenset({"title", "rejected", "invalid_json", "invalid_payload", "command_fail"}),
 }
 
 MOCK_DEFAULT_BEHAVIOR: dict[str, dict[str, Any]] = {
@@ -112,6 +115,16 @@ MOCK_DEFAULT_BEHAVIOR: dict[str, dict[str, Any]] = {
             "command_fail": "0.0",
         },
     },
+    "summary": {
+        "delay": [0.05, 0.3],
+        "outcomes": {
+            "title": "1.0",
+            "rejected": "0.0",
+            "invalid_json": "0.0",
+            "invalid_payload": "0.0",
+            "command_fail": "0.0",
+        },
+    },
 }
 
 MOCK_ALLOWED_ENV_KEYS = frozenset(
@@ -134,10 +147,15 @@ class BootstrapTaskConfig(BaseModel):
     conclude_timeout: int = Field(gt=0)
 
 
+class SummaryTaskConfig(BaseModel):
+    timeout: int = Field(gt=0, default=60)
+
+
 class TasksConfig(BaseModel):
     bootstrap: BootstrapTaskConfig
     reason: ReasonTaskConfig
     explore: ExploreTaskConfig
+    summarize: SummaryTaskConfig = Field(default_factory=SummaryTaskConfig)
 
 
 class ContainerConfig(BaseModel):
@@ -183,6 +201,8 @@ class WorkerConfig(BaseModel):
     def validate_env(self) -> "WorkerConfig":
         if self.model is not None and not self.model.strip():
             raise ValueError(f"worker {self.name} model must not be empty")
+        if self.model is None and self.type == "codex" and "summarize" in self.task_types:
+            self.model = "gpt-5.4-mini"
         required = WORKER_ENV_KEYS[self.type]
         missing = [key for key in required if not self.env.get(key)]
         if missing:

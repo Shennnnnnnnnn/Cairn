@@ -29,6 +29,7 @@ class Settings(BaseModel):
 
 class Fact(BaseModel):
     id: str
+    title: str | None = None
     description: str
 
 
@@ -36,6 +37,7 @@ class Intent(BaseModel):
     id: str
     from_: list[str] = Field(alias="from")
     to: str | None = None
+    title: str | None = None
     description: str
     creator: str
     worker: str | None = None
@@ -76,6 +78,7 @@ class ProjectMeta(BaseModel):
     favorite: bool = False
     status: Literal["active", "stopped", "completed"]
     created_at: str
+    running_time_ms: int = 0
     scheduled_start_at: str | None = None
     reason: ProjectReason | None = None
 
@@ -310,6 +313,18 @@ class UpdateProjectStatusRequest(BaseModel):
 
 
 class UpdateProjectTitleRequest(BaseModel):
+    title: str
+
+    @field_validator("title")
+    @classmethod
+    def validate_non_empty_text(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("must not be empty")
+        return text
+
+
+class UpdateTitleRequest(BaseModel):
     title: str
 
     @field_validator("title")

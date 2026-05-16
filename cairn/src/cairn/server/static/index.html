@@ -710,6 +710,9 @@
                   </div>
                 </div>
                 <div class="p-4 space-y-3">
+                  <template x-if="fact.title">
+                    <p class="text-sm font-semibold text-slate-700 leading-snug break-words" x-text="fact.title"></p>
+                  </template>
                   <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words" x-text="fact.description"></p>
                   <div class="text-xs text-slate-400 space-y-1.5">
                     <template x-if="fact.id === 'origin'">
@@ -741,6 +744,9 @@
               </div>
             </div>
             <div class="p-4 space-y-4">
+              <template x-if="selectedFactRecord().title">
+                <p class="text-sm font-semibold text-slate-700 leading-snug break-words" x-text="selectedFactRecord().title"></p>
+              </template>
               <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words" x-text="selectedFactRecord().description"></p>
               <div class="space-y-3 text-xs">
                 <template x-if="selectedFactId() === 'origin'">
@@ -756,6 +762,10 @@
                     <template x-if="selectedFactProducingIntent()">
                       <div class="pt-1 space-y-3">
                         <div class="flex items-start justify-between gap-3"><span class="text-slate-400 shrink-0" x-text="t('completedBy')"></span><span class="font-mono text-slate-600 text-right break-all" x-text="selectedFactProducingIntent().id"></span></div>
+                        <div class="space-y-1">
+                          <div class="text-slate-400" x-text="t('complete')"></div>
+                          <div class="rounded-xl bg-white border border-rose-100 px-3 py-2 text-slate-700 leading-relaxed whitespace-pre-wrap break-words" x-text="selectedFactProducingIntent().description"></div>
+                        </div>
                         <div class="flex items-start justify-between gap-3"><span class="text-slate-400 shrink-0" x-text="t('worker')"></span><span class="text-slate-600 text-right break-all" x-text="selectedFactProducingIntent().worker || '—'"></span></div>
                         <div class="flex items-start justify-between gap-3"><span class="text-slate-400 shrink-0" x-text="t('concluded')"></span><span class="text-slate-600 text-right break-words" x-text="formatTime(selectedFactProducingIntent().concluded_at || selectedFactProducingIntent().created_at)"></span></div>
                       </div>
@@ -785,6 +795,9 @@
               </div>
             </div>
             <div class="p-4 space-y-4">
+              <template x-if="selectedIntentRecord().title">
+                <p class="text-sm font-semibold text-slate-700 leading-snug break-words" x-text="selectedIntentRecord().title"></p>
+              </template>
               <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words" x-text="selectedIntentRecord().description"></p>
               <div class="pt-4 border-t border-slate-100 space-y-3 text-xs">
                 <div class="flex items-start justify-between gap-3"><span class="text-slate-400 shrink-0" x-text="t('from')"></span><span class="font-mono text-slate-600 text-right break-all" x-text="selectedIntentRecord().from.join(', ')"></span></div>
@@ -850,6 +863,10 @@
                 <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden">
                   <div class="h-full rounded-full bg-teal-400 transition-all duration-300" :style="`width:${selectedTimelineSummary().timePercent}%`"></div>
                 </div>
+              </div>
+              <div class="flex items-center justify-between gap-3 text-[11px]">
+                <span class="text-slate-400" x-text="t('runningTime')"></span>
+                <span class="font-mono text-slate-600 text-right" x-text="selectedTimelineSummary().runningTimeLabel"></span>
               </div>
             </div>
           </section>
@@ -1268,7 +1285,7 @@ function cairnApp() {
         heartbeat: 'Heartbeat', created: 'Created',
         remove: 'Remove',
         noHints: 'No hints yet', noActivity: 'No activity yet',
-        sequence: 'Sequence', timeSpan: 'Time Span',
+        sequence: 'Sequence', timeSpan: 'Time Span', runningTime: 'Running Time',
         intentBtn: 'Intent', complete: 'Complete', hint: 'Hint', release: 'Release', conclude: 'Conclude',
         reasonRunning: 'Reason Running', trigger: 'Trigger', heartbeatLabel: 'Heartbeat',
         fitGraph: 'Fit graph',
@@ -1345,7 +1362,7 @@ function cairnApp() {
         heartbeat: '心跳', created: '创建时间',
         remove: '移除',
         noHints: '暂无提示', noActivity: '暂无活动',
-        sequence: '序列', timeSpan: '时间跨度',
+        sequence: '序列', timeSpan: '时间跨度', runningTime: '运行时间',
         intentBtn: '意图', complete: '完成', hint: '提示', release: '释放', conclude: '结论',
         reasonRunning: '推理中', trigger: '触发', heartbeatLabel: '心跳',
         fitGraph: '适应视图',
@@ -1635,12 +1652,18 @@ function cairnApp() {
     },
 
     openIntentNodeLabel(intent) {
-      return this.isBootstrapIntent(intent) ? 'Bootstrap' : '?';
+      if (this.isBootstrapIntent(intent)) return 'Bootstrap';
+      return this.intentLabel(intent);
     },
 
     openIntentNodeSize(intent) {
       if (this.isBootstrapIntent(intent)) return { width: 82, height: 30 };
-      return { width: 22, height: 22 };
+      const label = this.openIntentNodeLabel(intent);
+      const measured = this.measureWrappedText(label, 180, 10);
+      return {
+        width: Math.max(48, Math.ceil(measured.width + 24)),
+        height: Math.max(28, Math.ceil(measured.height + 12)),
+      };
     },
 
     projectIsActive() {
@@ -2120,11 +2143,13 @@ function cairnApp() {
       if (projectSummary) {
         projectSummary.status = updated.status;
         projectSummary.scheduled_start_at = updated.scheduled_start_at;
+        projectSummary.running_time_ms = updated.running_time_ms;
         projectSummary.reason = updated.reason;
       }
       if (this.selectedProjectId === projectId && this.project) {
         this.project.project.status = updated.status;
         this.project.project.scheduled_start_at = updated.scheduled_start_at;
+        this.project.project.running_time_ms = updated.running_time_ms;
         this.project.project.reason = updated.reason;
         if (!this.projectIsActive()) {
           this.showIntentModal = false;
@@ -2333,7 +2358,7 @@ function cairnApp() {
           type: 'reason_started',
           timestamp: sourceIntent?.created_at || event.timestamp,
           actor: sourceIntent?.creator || event.actor || 'reasoner',
-          title: sourceIntent?.description || event.title,
+          title: sourceIntent ? this.intentLabel(sourceIntent) : event.title,
           meta: [
             sourceIntent?.id || event.intentId,
             `from ${(sourceIntent?.from || event.sourceFactIds || []).join(', ')}`,
@@ -2352,7 +2377,7 @@ function cairnApp() {
           type: 'intent_running',
           timestamp: sourceIntent.last_heartbeat_at || sourceIntent.created_at,
           actor: sourceIntent.worker,
-          title: sourceIntent.description,
+          title: this.intentLabel(sourceIntent),
           meta: [sourceIntent.id, `worker ${sourceIntent.worker}`],
           targetType: 'intent',
           targetId: sourceIntent.id,
@@ -2418,6 +2443,7 @@ function cairnApp() {
             id: sourceIntent.id,
             from: [...sourceIntent.from],
             to: null,
+            title: sourceIntent.title || null,
             description: sourceIntent.description,
             creator: sourceIntent.creator,
             worker: null,
@@ -2700,11 +2726,12 @@ function cairnApp() {
       const edges = [];
       for (const f of this.project.facts) {
         const nodeType = f.id === 'origin' ? 'origin' : f.id === 'goal' ? 'goal' : 'fact';
-        const label = this.summarizeFactLabel(f);
+        const label = this.factLabel(f);
         const size = this.factNodeSize(label, nodeType);
         nodes.push({ data: {
           id: f.id,
           label,
+          title: f.title || '',
           description: f.description,
           nodeType,
           width: size.width,
@@ -2712,7 +2739,7 @@ function cairnApp() {
         }});
       }
       for (const intent of this.project.intents) {
-        const lbl = intent.description;
+        const lbl = this.intentLabel(intent);
         if (intent.to) {
           for (const src of intent.from) {
             edges.push({ data: { id: `${intent.id}_${src}`, source: src, target: intent.to, intentId: intent.id, label: lbl, status: 'concluded' }});
@@ -2724,6 +2751,7 @@ function cairnApp() {
           nodes.push({ data: {
             id: phId,
             label: this.openIntentNodeLabel(intent),
+            title: intent.title || '',
             description: intent.description,
             nodeType,
             intentId: intent.id,
@@ -2764,11 +2792,11 @@ function cairnApp() {
     graphStyles() {
       const common = { 'text-valign':'center','text-halign':'center','font-family':'-apple-system,BlinkMacSystemFont,Inter,sans-serif' };
       return [
-        { selector: 'node[nodeType="origin"]', style: { ...common, shape:'round-rectangle','background-color':'#14b8a6',label:'data(label)',color:'#fff','font-size':'11px','font-weight':'bold','text-wrap':'wrap','text-max-width':'92px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
-        { selector: 'node[nodeType="goal"]', style: { ...common, shape:'round-rectangle','background-color':'#f43f5e',label:'data(label)',color:'#fff','font-size':'11px','font-weight':'bold','text-wrap':'wrap','text-max-width':'92px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
-        { selector: 'node[nodeType="fact"]', style: { ...common, shape:'round-rectangle','background-color':'#6366f1',label:'data(label)',color:'#fff','font-size':'10px','font-weight':'bold','text-wrap':'wrap','text-max-width':'116px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
-        { selector: 'node[nodeType="in_progress"]', style: { ...common, shape:'ellipse','background-color':'#f59e0b','background-opacity':0.8,label:'?',color:'#fff','font-size':'11px','font-weight':'bold',width:22,height:22,'border-width':2,'border-color':'#d97706' }},
-        { selector: 'node[nodeType="unclaimed"]', style: { ...common, shape:'ellipse','background-color':'#cbd5e1','background-opacity':0.5,label:'?',color:'#94a3b8','font-size':'11px','font-weight':'bold',width:20,height:20,'border-width':1.5,'border-color':'#94a3b8','border-style':'dashed' }},
+        { selector: 'node[nodeType="origin"]', style: { ...common, shape:'round-rectangle','background-color':'#14b8a6',label:'data(label)',color:'#fff','font-size':'11px','font-weight':'bold','text-wrap':'wrap','text-max-width':'160px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
+        { selector: 'node[nodeType="goal"]', style: { ...common, shape:'round-rectangle','background-color':'#f43f5e',label:'data(label)',color:'#fff','font-size':'11px','font-weight':'bold','text-wrap':'wrap','text-max-width':'160px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
+        { selector: 'node[nodeType="fact"]', style: { ...common, shape:'round-rectangle','background-color':'#6366f1',label:'data(label)',color:'#fff','font-size':'10px','font-weight':'bold','text-wrap':'wrap','text-max-width':'200px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
+        { selector: 'node[nodeType="in_progress"]', style: { ...common, shape:'round-rectangle','background-color':'#f59e0b','background-opacity':0.8,label:'data(label)',color:'#fff','font-size':'10px','font-weight':'bold','text-wrap':'wrap','text-max-width':'180px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':2,'border-color':'#d97706' }},
+        { selector: 'node[nodeType="unclaimed"]', style: { ...common, shape:'round-rectangle','background-color':'#f8fafc','background-opacity':0.86,label:'data(label)',color:'#64748b','font-size':'10px','font-weight':'bold','text-wrap':'wrap','text-max-width':'180px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':1.5,'border-color':'#94a3b8','border-style':'dashed' }},
         { selector: 'node[nodeType="bootstrap_pending"]', style: { ...common, shape:'round-rectangle','background-color':'#fff7ed','background-opacity':0.96,label:'data(label)',color:'#c2410c','font-size':'10px','font-weight':'bold',width:'data(width)',height:'data(height)','border-width':1.5,'border-color':'#fdba74','border-style':'dashed','text-wrap':'wrap','text-max-width':'70px' }},
         { selector: 'node[nodeType="bootstrap_running"]', style: { ...common, shape:'round-rectangle','background-color':'#fb923c','background-opacity':0.96,label:'data(label)',color:'#fff7ed','font-size':'10px','font-weight':'bold',width:'data(width)',height:'data(height)','border-width':2,'border-color':'#ea580c','text-wrap':'wrap','text-max-width':'70px' }},
 
@@ -2932,6 +2960,7 @@ function cairnApp() {
         } else if (
           ex.data('nodeType') !== n.data.nodeType ||
           ex.data('label') !== n.data.label ||
+          ex.data('title') !== n.data.title ||
           ex.data('description') !== n.data.description ||
           ex.data('width') !== n.data.width ||
           ex.data('height') !== n.data.height
@@ -2945,7 +2974,10 @@ function cairnApp() {
           const a = this.cy.add(e);
           this.fadeInFreshElement(a);
           changed = true;
-        } else if (ex.data('status') !== e.data.status) {
+        } else if (
+          ex.data('status') !== e.data.status ||
+          ex.data('label') !== e.data.label
+        ) {
           ex.data(e.data);
         }
       }
@@ -3026,19 +3058,23 @@ function cairnApp() {
       this.centerGraphOnElements(edges.add(edges.sources()).add(edges.targets()));
     },
 
-    summarizeFactLabel(fact) {
-      if (fact.id === 'origin') return 'Origin';
-      if (fact.id === 'goal') return 'Goal';
-      const normalized = fact.description.replace(/\s+/g, ' ').trim();
-      const chars = Array.from(normalized);
-      if (chars.length <= 24) return normalized || fact.id;
-      return `${chars.slice(0, 24).join('')}…`;
+    displayText(text, fallback = '') {
+      const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+      return normalized || fallback;
+    },
+
+    factLabel(fact) {
+      return this.displayText(fact?.title || fact?.description, fact?.id || '');
+    },
+
+    intentLabel(intent) {
+      return this.displayText(intent?.title || intent?.description, intent?.id || '');
     },
 
     factNodeSize(label, nodeType) {
       const preset = nodeType === 'fact'
-        ? { fontSize: 10, maxTextWidth: 116, minWidth: 52, minHeight: 34, paddingX: 10, paddingY: 10 }
-        : { fontSize: 11, maxTextWidth: 92, minWidth: 58, minHeight: 38, paddingX: 10, paddingY: 10 };
+        ? { fontSize: 10, maxTextWidth: 200, minWidth: 52, minHeight: 34, paddingX: 12, paddingY: 10 }
+        : { fontSize: 11, maxTextWidth: 160, minWidth: 58, minHeight: 38, paddingX: 12, paddingY: 10 };
 
       const measured = this.measureWrappedText(label, preset.maxTextWidth, preset.fontSize);
       return {
@@ -3491,7 +3527,7 @@ function cairnApp() {
           type: 'intent_declared',
           timestamp: intent.created_at,
           actor: intent.creator,
-          title: intent.description,
+          title: this.intentLabel(intent),
           meta: [intent.id, `from ${intent.from.join(', ')}`],
           targetType: 'intent',
           targetId: intent.id,
@@ -3509,7 +3545,7 @@ function cairnApp() {
             type: 'project_completed',
             timestamp: intent.concluded_at,
             actor: intent.worker || intent.creator,
-            title: intent.description,
+            title: this.intentLabel(intent),
             meta: [intent.id, `from ${intent.from.join(', ')}`],
             targetType: 'fact',
             targetId: 'goal',
@@ -3527,7 +3563,7 @@ function cairnApp() {
           type: 'intent_concluded',
           timestamp: intent.concluded_at,
           actor: intent.worker || intent.creator,
-          title: fact ? fact.description : intent.description,
+          title: fact ? this.factLabel(fact) : this.intentLabel(intent),
           meta: [intent.id, `produced ${intent.to}`, `from ${intent.from.join(', ')}`],
           targetType: 'fact',
           targetId: intent.to,
@@ -3736,7 +3772,14 @@ function cairnApp() {
         sequenceLabel: `${index + 1} / ${total} · ${sequencePercent}%`,
         timePercent,
         timeLabel: `${this.formatDurationMs(elapsedDuration)} / ${this.formatDurationMs(totalDuration)} · ${timePercent}%`,
+        runningTimeLabel: this.formatDurationMs(this.projectRunningTimeMs()),
       };
+    },
+
+    projectRunningTimeMs() {
+      const project = this.project?.project;
+      if (!project) return 0;
+      return Math.max(0, Number(project.running_time_ms || 0));
     },
 
     scrollTimelineToEntry(entryId, options = {}) {

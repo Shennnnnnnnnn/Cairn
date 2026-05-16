@@ -10,6 +10,7 @@ from pathlib import Path
 import requests
 
 from cairn.dispatcher.config import DispatchConfig, WorkerConfig
+from cairn.dispatcher.contracts import title_needs_summary_refresh
 from cairn.dispatcher.models import ReasonCheckpoint, RunningTask
 from cairn.dispatcher.protocol.client import CairnClient
 from cairn.dispatcher.runtime.cancellation import TaskCancellation
@@ -20,6 +21,7 @@ from cairn.dispatcher.scheduler.worker_select import choose_worker
 from cairn.dispatcher.tasks.bootstrap import run_bootstrap_task
 from cairn.dispatcher.tasks.explore import run_explore_task
 from cairn.dispatcher.tasks.reason import run_reason_task
+from cairn.dispatcher.tasks.summarize import SummaryTarget, run_summarize_task
 from cairn.server.models import Intent, ProjectDetail, ProjectSummary
 
 LOG = logging.getLogger(__name__)
@@ -88,6 +90,7 @@ class DispatcherLoop:
                     self._initialize_reason_checkpoints(summaries)
                     self._refresh_runtime_projects(summaries)
                     self._cancel_inactive_tasks(summaries)
+                    self._dispatch_summaries(summaries)
                     self._queue_container_cleanups(summaries)
                     self._dispatch_available(summaries)
                 except requests.RequestException as exc:
@@ -470,6 +473,71 @@ class DispatcherLoop:
         LOG.info("dispatched explore project=%s intent=%s worker=%s", project.project.id, intent.id, worker.name)
         return True
 
+    def _dispatch_summaries(self, summaries: list[ProjectSummary]) -> None:
+        if len(self.futures) >= self.config.runtime.max_workers:
+            return
+        for summary in summaries:
+            if len(self.futures) >= self.config.runtime.max_workers:
+                return
+            if self._project_running_task_count(summary.id) >= self.config.runtime.max_project_workers:
+                continue
+            if self._project_has_running_summary(summary.id):
+                continue
+            try:
+                project = self.client.get_project(summary.id)
+            except requests.RequestException:
+                raise
+            target = self._next_summary_target(project)
+            if target is None:
+                continue
+            if self._dispatch_summary(summary.id, target):
+                continue
+
+    def _dispatch_summary(self, project_id: str, target: SummaryTarget) -> bool:
+        selection = self._select_worker(project_id, "summarize")
+        worker = selection.worker
+        if worker is None:
+            self._log_changed(
+                f"project:{project_id}:worker:summarize",
+                logging.DEBUG,
+                "no worker available for summarize project=%s target=%s:%s blocked_busy=%s blocked_unhealthy=%s blocked_rejected=%s",
+                project_id,
+                target.kind,
+                target.id,
+                selection.blocked_busy,
+                selection.blocked_unhealthy,
+                selection.blocked_rejected,
+            )
+            return False
+        self._clear_log_state(f"project:{project_id}:worker:summarize")
+        try:
+            future = self.executor.submit(
+                run_summarize_task,
+                self.config,
+                self.client,
+                self.container_manager,
+                project_id,
+                worker,
+                target,
+                cancellation := TaskCancellation(),
+            )
+        except Exception:
+            LOG.exception("failed to submit summary task project=%s target=%s:%s worker=%s", project_id, target.kind, target.id, worker.name)
+            return False
+        self.futures[future] = RunningTask(project_id, "summarize", worker.name, cancellation, intent_id=f"{target.kind}:{target.id}")
+        self.runtime_project_ids.add(project_id)
+        LOG.info("dispatched summary project=%s target=%s:%s worker=%s", project_id, target.kind, target.id, worker.name)
+        return True
+
+    def _next_summary_target(self, project: ProjectDetail) -> SummaryTarget | None:
+        for fact in project.facts:
+            if title_needs_summary_refresh(fact.title, fact.description):
+                return SummaryTarget("fact", fact.id, fact.description)
+        for intent in project.intents:
+            if title_needs_summary_refresh(intent.title, intent.description):
+                return SummaryTarget("intent", intent.id, intent.description)
+        return None
+
     def _select_worker(self, project_id: str, task_type: str) -> WorkerSelection:
         now = time.time()
         candidates: list[WorkerConfig] = []
@@ -555,6 +623,9 @@ class DispatcherLoop:
 
     def _project_has_running_bootstrap(self, project_id: str) -> bool:
         return any(task.project_id == project_id and task.task_type == "bootstrap" for task in self.futures.values())
+
+    def _project_has_running_summary(self, project_id: str) -> bool:
+        return any(task.project_id == project_id and task.task_type == "summarize" for task in self.futures.values())
 
     def _project_running_explore_intents(self, project_id: str) -> set[str]:
         return {

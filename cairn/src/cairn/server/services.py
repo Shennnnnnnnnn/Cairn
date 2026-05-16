@@ -11,6 +11,51 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def parse_utc_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def run_started_at_for_schedule(scheduled_start_at: str | None, now: str) -> str:
+    if scheduled_start_at is None:
+        return now
+    scheduled = parse_utc_timestamp(scheduled_start_at)
+    current = parse_utc_timestamp(now)
+    if scheduled > current:
+        return scheduled_start_at
+    return now
+
+
+def project_running_time_ms(row: sqlite3.Row, now: str | None = None) -> int:
+    keys = set(row.keys())
+    accumulated = row["accumulated_run_ms"] if "accumulated_run_ms" in keys else 0
+    if row["status"] != "active" or "run_started_at" not in keys or row["run_started_at"] is None:
+        return accumulated
+
+    now_text = now or utcnow()
+    now_dt = parse_utc_timestamp(now_text)
+    start_dt = parse_utc_timestamp(row["run_started_at"])
+    if row["scheduled_start_at"] is not None:
+        scheduled_dt = parse_utc_timestamp(row["scheduled_start_at"])
+        if scheduled_dt > start_dt:
+            start_dt = scheduled_dt
+    if start_dt >= now_dt:
+        return accumulated
+    return accumulated + int((now_dt - start_dt).total_seconds() * 1000)
+
+
+def settle_project_running_time(conn: sqlite3.Connection, project_id: str, now: str) -> int:
+    row = get_project_or_404(conn, project_id)
+    running_time_ms = project_running_time_ms(row, now)
+    conn.execute(
+        "UPDATE projects SET accumulated_run_ms = ?, run_started_at = NULL WHERE id = ?",
+        (running_time_ms, project_id),
+    )
+    return running_time_ms
+
+
 def next_project_id(conn: sqlite3.Connection) -> str:
     conn.execute("UPDATE counters SET value = value + 1 WHERE name = 'project'")
     row = conn.execute("SELECT value FROM counters WHERE name = 'project'").fetchone()
@@ -171,6 +216,7 @@ def intent_to_model(conn: sqlite3.Connection, row: sqlite3.Row, project_id: str)
         id=row["id"],
         **{"from": [s["fact_id"] for s in sources]},
         to=row["to_fact_id"],
+        title=row["title"],
         description=row["description"],
         creator=row["creator"],
         worker=row["worker"],
@@ -219,6 +265,7 @@ def project_meta_from_row(row: sqlite3.Row) -> ProjectMeta:
         favorite=bool(row["favorite"]) if "favorite" in keys else False,
         status=row["status"],
         created_at=row["created_at"],
+        running_time_ms=project_running_time_ms(row),
         scheduled_start_at=row["scheduled_start_at"],
         reason=project_reason_from_row(row),
     )

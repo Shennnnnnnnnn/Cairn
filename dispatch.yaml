@@ -35,6 +35,9 @@ tasks:
     timeout: 300
     # Time budget for conclude fallback used to summarize confirmed findings from the same session.
     conclude_timeout: 90
+  summarize:
+    # Short title generation should be quick; failures are retried by the dispatcher.
+    timeout: 60
 
 container:
   # Set runner to "local" to run worker commands directly on the host (no Docker required).
@@ -75,6 +78,14 @@ workers:
     model: "gpt-5.5"
     env: {}
 
+  - name: "codex-summary"
+    type: "codex"
+    task_types: [summarize]
+    max_running: 2
+    priority: 0
+    model: "gpt-5.4-mini"
+    env: {}
+
   - name: "gemini"
     type: "gemini"
     task_types: [explore]
@@ -82,4 +93,3 @@ workers:
     priority: 1
     model: "gemini-3.1-pro-preview"
     env: {}
-

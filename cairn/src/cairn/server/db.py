@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS projects (
     favorite INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL,
+    run_started_at TEXT,
+    accumulated_run_ms INTEGER NOT NULL DEFAULT 0,
     scheduled_start_at TEXT,
     reason_worker TEXT,
     reason_trigger TEXT,
@@ -41,6 +43,7 @@ CREATE TABLE IF NOT EXISTS project_directories (
 CREATE TABLE IF NOT EXISTS facts (
     id TEXT NOT NULL,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title TEXT,
     description TEXT NOT NULL,
     PRIMARY KEY (id, project_id)
 );
@@ -49,6 +52,7 @@ CREATE TABLE IF NOT EXISTS intents (
     id TEXT NOT NULL,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     to_fact_id TEXT,
+    title TEXT,
     description TEXT NOT NULL,
     creator TEXT NOT NULL,
     worker TEXT,
@@ -116,6 +120,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         )
     if "favorite" not in project_columns:
         conn.execute("ALTER TABLE projects ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+    if "run_started_at" not in project_columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN run_started_at TEXT")
+    if "accumulated_run_ms" not in project_columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN accumulated_run_ms INTEGER NOT NULL DEFAULT 0")
 
     conn.execute(
         """
@@ -134,6 +142,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "local_path" not in directory_columns:
         conn.execute("ALTER TABLE project_directories ADD COLUMN local_path TEXT")
     conn.execute("INSERT OR IGNORE INTO counters (name, value) VALUES ('directory', 0)")
+
+    fact_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(facts)").fetchall()
+    }
+    if "title" not in fact_columns:
+        conn.execute("ALTER TABLE facts ADD COLUMN title TEXT")
+
+    intent_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(intents)").fetchall()
+    }
+    if "title" not in intent_columns:
+        conn.execute("ALTER TABLE intents ADD COLUMN title TEXT")
 
 
 @contextmanager

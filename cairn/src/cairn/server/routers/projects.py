@@ -23,6 +23,7 @@ from cairn.server.models import (
     UpdateProjectFavoriteRequest,
     UpdateProjectTitleRequest,
     UpdateProjectStatusRequest,
+    UpdateTitleRequest,
 )
 from cairn.server.services import (
     build_intents,
@@ -33,6 +34,7 @@ from cairn.server.services import (
     expire_workers,
     get_completion_intent_or_409,
     get_directory_or_404,
+    get_intent_or_404,
     get_project_or_404,
     intent_to_model,
     next_directory_id,
@@ -42,6 +44,9 @@ from cairn.server.services import (
     next_project_id,
     project_meta_from_row,
     project_reason_from_row,
+    project_running_time_ms,
+    run_started_at_for_schedule,
+    settle_project_running_time,
     utcnow,
     validate_facts_exist,
     validate_goal_not_in_sources,
@@ -153,6 +158,7 @@ def list_projects():
                 favorite=bool(row["favorite"]),
                 status=row["status"],
                 created_at=row["created_at"],
+                running_time_ms=project_running_time_ms(row),
                 scheduled_start_at=row["scheduled_start_at"],
                 reason=project_reason_from_row(row),
                 fact_count=row["fact_count"],
@@ -174,8 +180,15 @@ def create_project(body: CreateProjectRequest):
         now = utcnow()
 
         conn.execute(
-            "INSERT INTO projects (id, title, directory_id, status, created_at, scheduled_start_at) VALUES (?, ?, ?, 'active', ?, ?)",
-            (pid, body.title, body.directory_id, now, body.scheduled_start_at),
+            "INSERT INTO projects (id, title, directory_id, status, created_at, run_started_at, scheduled_start_at) VALUES (?, ?, ?, 'active', ?, ?, ?)",
+            (
+                pid,
+                body.title,
+                body.directory_id,
+                now,
+                run_started_at_for_schedule(body.scheduled_start_at, now),
+                body.scheduled_start_at,
+            ),
         )
         conn.execute(
             "INSERT INTO facts (id, project_id, description) VALUES (?, ?, ?)",
@@ -205,12 +218,13 @@ def create_project(body: CreateProjectRequest):
                 favorite=False,
                 status="active",
                 created_at=now,
+                running_time_ms=0,
                 scheduled_start_at=body.scheduled_start_at,
                 reason=None,
             ),
             facts=[
-                Fact(id="origin", description=body.origin),
-                Fact(id="goal", description=body.goal),
+                Fact(id="origin", title=None, description=body.origin),
+                Fact(id="goal", title=None, description=body.goal),
             ],
             intents=[],
             hints=hints,
@@ -333,11 +347,29 @@ def update_project_status(project_id: str, body: UpdateProjectStatusRequest):
         if current_status == body.status and row["scheduled_start_at"] == body.scheduled_start_at:
             return project_meta_from_row(row)
 
+        now = utcnow()
+        accumulated_run_ms = project_running_time_ms(row, now)
+        if body.status == "active":
+            run_started_at = run_started_at_for_schedule(body.scheduled_start_at, now)
+            scheduled_start_at = body.scheduled_start_at
+        else:
+            run_started_at = None
+            scheduled_start_at = None
+
         conn.execute(
-            "UPDATE projects SET status = ?, scheduled_start_at = ? WHERE id = ?",
+            """
+            UPDATE projects
+            SET status = ?,
+                scheduled_start_at = ?,
+                run_started_at = ?,
+                accumulated_run_ms = ?
+            WHERE id = ?
+            """,
             (
                 body.status,
-                body.scheduled_start_at if body.status == "active" else None,
+                scheduled_start_at,
+                run_started_at,
+                accumulated_run_ms,
                 project_id,
             ),
         )
@@ -426,6 +458,7 @@ def complete_project(project_id: str, body: CompleteRequest):
         validate_goal_not_in_sources(body.from_)
 
         now = utcnow()
+        settle_project_running_time(conn, project_id, now)
         iid = next_intent_id(conn, project_id)
 
         conn.execute(
@@ -442,6 +475,7 @@ def complete_project(project_id: str, body: CompleteRequest):
             UPDATE projects
             SET status = 'completed',
                 scheduled_start_at = NULL,
+                run_started_at = NULL,
                 reason_worker = NULL,
                 reason_trigger = NULL,
                 reason_started_at = NULL,
@@ -455,6 +489,7 @@ def complete_project(project_id: str, body: CompleteRequest):
             id=iid,
             **{"from": body.from_},
             to="goal",
+            title=None,
             description=body.description,
             creator=body.worker,
             worker=body.worker,
@@ -504,8 +539,12 @@ def reopen_project(project_id: str, body: ReopenRequest):
             )
         clear_project_reason(conn, project_id)
         conn.execute(
-            "UPDATE projects SET status = 'active', scheduled_start_at = ? WHERE id = ?",
-            (body.scheduled_start_at, project_id),
+            "UPDATE projects SET status = 'active', run_started_at = ?, scheduled_start_at = ? WHERE id = ?",
+            (
+                run_started_at_for_schedule(body.scheduled_start_at, now),
+                body.scheduled_start_at,
+                project_id,
+            ),
         )
 
         updated_project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
@@ -520,3 +559,40 @@ def reopen_project(project_id: str, body: ReopenRequest):
             fact=Fact(id=fact_id, description=description),
             intent=intent_to_model(conn, updated_intent, project_id),
         )
+
+
+@router.put("/projects/{project_id}/facts/{fact_id}/title", response_model=Fact)
+def update_fact_title(project_id: str, fact_id: str, body: UpdateTitleRequest):
+    with get_conn() as conn:
+        get_project_or_404(conn, project_id)
+        row = conn.execute(
+            "SELECT * FROM facts WHERE id = ? AND project_id = ?",
+            (fact_id, project_id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Fact not found")
+        conn.execute(
+            "UPDATE facts SET title = ? WHERE id = ? AND project_id = ?",
+            (body.title, fact_id, project_id),
+        )
+        updated = conn.execute(
+            "SELECT * FROM facts WHERE id = ? AND project_id = ?",
+            (fact_id, project_id),
+        ).fetchone()
+        return Fact(**dict(updated))
+
+
+@router.put("/projects/{project_id}/intents/{intent_id}/title", response_model=Intent)
+def update_intent_title(project_id: str, intent_id: str, body: UpdateTitleRequest):
+    with get_conn() as conn:
+        get_project_or_404(conn, project_id)
+        row = get_intent_or_404(conn, project_id, intent_id)
+        conn.execute(
+            "UPDATE intents SET title = ? WHERE id = ? AND project_id = ?",
+            (body.title, intent_id, project_id),
+        )
+        updated = conn.execute(
+            "SELECT * FROM intents WHERE id = ? AND project_id = ?",
+            (row["id"], project_id),
+        ).fetchone()
+        return intent_to_model(conn, updated, project_id)

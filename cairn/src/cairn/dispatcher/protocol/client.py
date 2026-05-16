@@ -128,6 +128,20 @@ class CairnClient:
             json={"from": from_ids, "description": description, "creator": creator, "worker": None},
         )
 
+    def update_fact_title(self, project_id: str, fact_id: str, title: str) -> ApiResult:
+        return self._request_json(
+            "PUT",
+            f"/projects/{project_id}/facts/{fact_id}/title",
+            json={"title": title},
+        )
+
+    def update_intent_title(self, project_id: str, intent_id: str, title: str) -> ApiResult:
+        return self._request_json(
+            "PUT",
+            f"/projects/{project_id}/intents/{intent_id}/title",
+            json={"title": title},
+        )
+
     def _request_json(self, method: str, path: str, json: dict[str, Any]) -> ApiResult:
         try:
             response = self._session().request(

@@ -18,6 +18,7 @@ from cairn.dispatcher.runtime.process import ProcessResult
 from cairn.dispatcher.tasks.bootstrap import run_bootstrap_task
 from cairn.dispatcher.tasks.explore import run_explore_task
 from cairn.dispatcher.tasks.reason import run_reason_task
+from cairn.dispatcher.tasks.summarize import SummaryTarget, run_summarize_task
 from cairn.dispatcher.workers.base import DriverResult
 from cairn.server.models import Fact, Hint, Intent, ProjectDetail, ProjectMeta
 
@@ -36,6 +37,8 @@ class _FakeContainerManager:
 class _FakeClient:
     def __init__(self, project: ProjectDetail):
         self._project = project
+        self.fact_titles: list[tuple[str, str, str]] = []
+        self.intent_titles: list[tuple[str, str, str]] = []
 
     def get_project(self, project_id: str) -> ProjectDetail:
         return self._project
@@ -48,6 +51,14 @@ class _FakeClient:
 
     def release_reason(self, project_id: str, worker: str):
         return _ApiResult(200)
+
+    def update_fact_title(self, project_id: str, fact_id: str, title: str):
+        self.fact_titles.append((project_id, fact_id, title))
+        return _ApiResult(200, {"id": fact_id, "title": title})
+
+    def update_intent_title(self, project_id: str, intent_id: str, title: str):
+        self.intent_titles.append((project_id, intent_id, title))
+        return _ApiResult(200, {"id": intent_id, "title": title})
 
 
 class _ApiResult:
@@ -330,6 +341,147 @@ class DispatcherWorkdirTests(unittest.TestCase):
 
         self.assertIn("/tmp/cairn-project", driver.execute_prompts[0])
         self.assertIn("/tmp/cairn-project", driver.conclude_prompts[0])
+
+    def test_summary_task_writes_fact_title_via_client_route(self) -> None:
+        driver = _FakeDriver()
+        summary_worker = WorkerConfig(
+            name="summary",
+            type="mock",
+            task_types=["summarize"],
+            max_running=1,
+            priority=0,
+        )
+
+        with (
+            patch("cairn.dispatcher.tasks.summarize.get_driver", return_value=driver),
+            patch("cairn.dispatcher.tasks.summarize.run_healthcheck") as healthcheck,
+            patch("cairn.dispatcher.tasks.summarize.run_worker_process") as run_worker,
+        ):
+            healthcheck.return_value.result = ProcessResult(returncode=0, stdout="", stderr="")
+            run_worker.return_value = ProcessResult(
+                returncode=0,
+                stdout='{"accepted": true, "data": {"title": "Compact Fact"}}',
+                stderr="",
+            )
+
+            outcome = run_summarize_task(
+                self.config,
+                self.client,
+                self.container_manager,
+                self.project.project.id,
+                summary_worker,
+                SummaryTarget("fact", "f1", "Long fact description"),
+                TaskCancellation(),
+            )
+
+        self.assertEqual(outcome, "success")
+        self.assertEqual(self.client.fact_titles, [("p1", "f1", "Compact Fact")])
+        self.assertIn("Long fact description", driver.execute_prompts[0])
+
+    def test_summary_task_writes_intent_title_via_client_route(self) -> None:
+        driver = _FakeDriver()
+        summary_worker = WorkerConfig(
+            name="summary",
+            type="mock",
+            task_types=["summarize"],
+            max_running=1,
+            priority=0,
+        )
+
+        with (
+            patch("cairn.dispatcher.tasks.summarize.get_driver", return_value=driver),
+            patch("cairn.dispatcher.tasks.summarize.run_healthcheck") as healthcheck,
+            patch("cairn.dispatcher.tasks.summarize.run_worker_process") as run_worker,
+        ):
+            healthcheck.return_value.result = ProcessResult(returncode=0, stdout="", stderr="")
+            run_worker.return_value = ProcessResult(
+                returncode=0,
+                stdout='{"accepted": true, "data": {"title": "Compact Intent"}}',
+                stderr="",
+            )
+
+            outcome = run_summarize_task(
+                self.config,
+                self.client,
+                self.container_manager,
+                self.project.project.id,
+                summary_worker,
+                SummaryTarget("intent", "i1", "Long intent description"),
+                TaskCancellation(),
+            )
+
+        self.assertEqual(outcome, "success")
+        self.assertEqual(self.client.intent_titles, [("p1", "i1", "Compact Intent")])
+
+    def test_summary_task_rejects_overlong_worker_title_without_write(self) -> None:
+        driver = _FakeDriver()
+        summary_worker = WorkerConfig(
+            name="summary",
+            type="mock",
+            task_types=["summarize"],
+            max_running=1,
+            priority=0,
+        )
+
+        with (
+            patch("cairn.dispatcher.tasks.summarize.get_driver", return_value=driver),
+            patch("cairn.dispatcher.tasks.summarize.run_healthcheck") as healthcheck,
+            patch("cairn.dispatcher.tasks.summarize.run_worker_process") as run_worker,
+        ):
+            healthcheck.return_value.result = ProcessResult(returncode=0, stdout="", stderr="")
+            run_worker.return_value = ProcessResult(
+                returncode=0,
+                stdout='{"accepted": true, "data": {"title": "一二三四五六七八九十一二三四五六七八九十一"}}',
+                stderr="",
+            )
+
+            outcome = run_summarize_task(
+                self.config,
+                self.client,
+                self.container_manager,
+                self.project.project.id,
+                summary_worker,
+                SummaryTarget("fact", "f1", "Long fact description"),
+                TaskCancellation(),
+            )
+
+        self.assertEqual(outcome, "failed")
+        self.assertEqual(self.client.fact_titles, [])
+
+    def test_summary_task_rejects_description_prefix_title_without_write(self) -> None:
+        driver = _FakeDriver()
+        summary_worker = WorkerConfig(
+            name="summary",
+            type="mock",
+            task_types=["summarize"],
+            max_running=1,
+            priority=0,
+        )
+
+        with (
+            patch("cairn.dispatcher.tasks.summarize.get_driver", return_value=driver),
+            patch("cairn.dispatcher.tasks.summarize.run_healthcheck") as healthcheck,
+            patch("cairn.dispatcher.tasks.summarize.run_worker_process") as run_worker,
+        ):
+            healthcheck.return_value.result = ProcessResult(returncode=0, stdout="", stderr="")
+            run_worker.return_value = ProcessResult(
+                returncode=0,
+                stdout='{"accepted": true, "data": {"title": "模型输出冗长原文导致标题不可读"}}',
+                stderr="",
+            )
+
+            outcome = run_summarize_task(
+                self.config,
+                self.client,
+                self.container_manager,
+                self.project.project.id,
+                summary_worker,
+                SummaryTarget("fact", "f1", "模型输出冗长原文导致标题不可读，需要重新生成语义摘要"),
+                TaskCancellation(),
+            )
+
+        self.assertEqual(outcome, "failed")
+        self.assertEqual(self.client.fact_titles, [])
 
 
 if __name__ == "__main__":
