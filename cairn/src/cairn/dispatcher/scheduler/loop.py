@@ -866,6 +866,8 @@ class DispatcherLoop:
         status_by_project = {summary.id: summary.status for summary in summaries}
         for task in self.futures.values():
             status = status_by_project.get(task.project_id, "deleted")
+            if self.summary_backfill and task.task_type == "summarize" and status != "deleted":
+                continue
             if status != "active" and task.cancellation.cancel(status):
                 LOG.info(
                     "cancelling running task for inactive project project=%s task=%s worker=%s status=%s",

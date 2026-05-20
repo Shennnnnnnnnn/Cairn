@@ -248,6 +248,26 @@ class SummaryDispatcherTests(unittest.TestCase):
         self.assertEqual(len(executor.submissions), 1)
         self.assertEqual(executor.submissions[0][1][3], "p1")
 
+    def test_summary_backfill_does_not_cancel_inactive_summary_task(self) -> None:
+        loop, _ = self._loop_for_project(self._project(status="completed"), summary_backfill=True)
+        cancellation = TaskCancellation()
+        future: Future[str] = Future()
+        loop.futures[future] = RunningTask("p1", "summarize", "summary", cancellation, intent_id="fact:f1")
+
+        loop._cancel_inactive_tasks([self._summary("p1", status="completed")])
+
+        self.assertFalse(cancellation.is_cancelled)
+
+    def test_summary_backfill_still_cancels_inactive_non_summary_task(self) -> None:
+        loop, _ = self._loop_for_project(self._project(status="completed"), summary_backfill=True)
+        cancellation = TaskCancellation()
+        future: Future[str] = Future()
+        loop.futures[future] = RunningTask("p1", "explore", "worker", cancellation, intent_id="i1")
+
+        loop._cancel_inactive_tasks([self._summary("p1", status="completed")])
+
+        self.assertEqual(cancellation.reason, "completed")
+
 
 if __name__ == "__main__":
     unittest.main()
