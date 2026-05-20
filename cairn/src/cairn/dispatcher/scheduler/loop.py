@@ -41,9 +41,10 @@ class WorkerSelection:
 
 
 class DispatcherLoop:
-    def __init__(self, config_path: Path):
+    def __init__(self, config_path: Path, *, summary_backfill: bool = False):
         self.config_path = config_path
         self.config = DispatchConfig.load(config_path)
+        self.summary_backfill = summary_backfill
         self.client = CairnClient(self.config.server)
         if self.config.container.runner == "local":
             self.container_manager = LocalProcessManager(self.config.container)
@@ -476,7 +477,11 @@ class DispatcherLoop:
     def _dispatch_summaries(self, summaries: list[ProjectSummary]) -> None:
         if len(self.futures) >= self.config.runtime.max_workers:
             return
-        for summary in summaries:
+        active_summaries = [
+            summary for summary in summaries if summary.status == "active" and self._project_start_is_due(summary)
+        ]
+        inactive_summaries = [summary for summary in summaries if summary.status != "active"] if self.summary_backfill else []
+        for summary in active_summaries + inactive_summaries:
             if len(self.futures) >= self.config.runtime.max_workers:
                 return
             if self._project_running_task_count(summary.id) >= self.config.runtime.max_project_workers:

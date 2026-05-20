@@ -53,11 +53,16 @@ def serve(host: str, port: int, db_path: str, log_level: str, access_log: bool):
     is_flag=True,
     help="Run startup worker healthchecks and exit",
 )
+@click.option(
+    "--summary-backfill",
+    is_flag=True,
+    help="Also summarize inactive projects after active projects are serviced",
+)
 @click.option("--log-level", default="INFO", show_default=True, help="Log level")
-def dispatch(config_path: Path, once: bool, startup_healthcheck_only: bool, log_level: str):
+def dispatch(config_path: Path, once: bool, startup_healthcheck_only: bool, summary_backfill: bool, log_level: str):
     """Run the Cairn dispatcher."""
     configure_logging(log_level, bare=startup_healthcheck_only)
-    loop = DispatcherLoop(config_path)
+    loop = DispatcherLoop(config_path, summary_backfill=summary_backfill)
     try:
         if startup_healthcheck_only:
             loop.run_startup_healthchecks_only()

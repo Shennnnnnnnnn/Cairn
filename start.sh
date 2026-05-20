@@ -5,6 +5,7 @@
 #   ./start.sh server     — start server only
 #   ./start.sh dispatch   — start dispatcher only
 #   ./start.sh healthcheck — run startup healthcheck and exit
+#   ./start.sh summary-backfill — run dispatcher with inactive-project summary backfill enabled
 
 set -euo pipefail
 
@@ -93,6 +94,12 @@ run_healthcheck() {
     $UV_RUN cairn dispatch --config "$CONFIG" --startup-healthcheck-only
 }
 
+run_summary_backfill() {
+    check_config
+    log "Starting Cairn dispatcher with summary backfill enabled (config: ${CONFIG}) ..."
+    $UV_RUN cairn dispatch --config "$CONFIG" --summary-backfill
+}
+
 # ── main ─────────────────────────────────────────────────────────────────────
 
 MODE="${1:-all}"
@@ -102,13 +109,15 @@ case "$MODE" in
     server)     start_server ;;
     dispatch)   start_dispatcher ;;
     healthcheck) run_healthcheck ;;
+    summary-backfill) run_summary_backfill ;;
     *)
-        echo "Usage: $0 [all|server|dispatch|healthcheck]"
+        echo "Usage: $0 [all|server|dispatch|healthcheck|summary-backfill]"
         echo ""
         echo "  all          Start server + dispatcher (default)"
         echo "  server       Start server only"
         echo "  dispatch     Start dispatcher only"
         echo "  healthcheck  Run startup healthcheck and exit"
+        echo "  summary-backfill  Start dispatcher and also fill inactive project summaries"
         echo ""
         echo "Environment variables:"
         echo "  CAIRN_CONFIG     Path to dispatch.yaml  (default: ./dispatch.yaml)"

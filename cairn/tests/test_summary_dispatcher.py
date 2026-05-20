@@ -31,15 +31,23 @@ class _FakeExecutor:
 
 
 class _FakeClient:
-    def __init__(self, project: ProjectDetail) -> None:
-        self.project = project
+    def __init__(self, project: ProjectDetail | dict[str, ProjectDetail]) -> None:
+        if isinstance(project, dict):
+            self.projects = project
+        else:
+            self.projects = {project.project.id: project}
 
     def get_project(self, project_id: str) -> ProjectDetail:
-        return self.project
+        return self.projects[project_id]
 
 
 class SummaryDispatcherTests(unittest.TestCase):
-    def _loop_for_project(self, project: ProjectDetail) -> tuple[DispatcherLoop, _FakeExecutor]:
+    def _loop_for_project(
+        self,
+        project: ProjectDetail | dict[str, ProjectDetail],
+        *,
+        summary_backfill: bool = False,
+    ) -> tuple[DispatcherLoop, _FakeExecutor]:
         loop = DispatcherLoop.__new__(DispatcherLoop)
         loop.config = DispatchConfig(
             server="http://example.test",
@@ -75,15 +83,16 @@ class SummaryDispatcherTests(unittest.TestCase):
         loop.worker_unhealthy_until = {}
         loop.worker_rejected_until = {}
         loop._log_state = {}
+        loop.summary_backfill = summary_backfill
         return loop, loop.executor
 
-    def _summary(self, project_id: str = "p1") -> ProjectSummary:
+    def _summary(self, project_id: str = "p1", *, status: str = "active") -> ProjectSummary:
         return ProjectSummary(
             id=project_id,
             title="Project",
             directory_id=None,
             directory_local_path=None,
-            status="active",
+            status=status,
             created_at="2026-05-13T00:00:00Z",
             fact_count=3,
             intent_count=1,
@@ -92,12 +101,19 @@ class SummaryDispatcherTests(unittest.TestCase):
             hint_count=0,
         )
 
-    def _project(self, *, fact_title: str | None = None, intent_title: str | None = None) -> ProjectDetail:
+    def _project(
+        self,
+        *,
+        project_id: str = "p1",
+        status: str = "active",
+        fact_title: str | None = None,
+        intent_title: str | None = None,
+    ) -> ProjectDetail:
         return ProjectDetail(
             project=ProjectMeta(
-                id="p1",
+                id=project_id,
                 title="Project",
-                status="active",
+                status=status,
                 created_at="2026-05-13T00:00:00Z",
             ),
             facts=[
@@ -193,6 +209,44 @@ class SummaryDispatcherTests(unittest.TestCase):
         self.assertEqual(len(executor.submissions), 1)
         target = executor.submissions[0][1][5]
         self.assertEqual(target, SummaryTarget("fact", "f1", "Long fact description"))
+
+    def test_default_summary_dispatch_skips_inactive_projects(self) -> None:
+        inactive_project = self._project(project_id="p1", status="completed", fact_title=None, intent_title=None)
+        loop, executor = self._loop_for_project({"p1": inactive_project})
+
+        loop._dispatch_summaries([self._summary("p1", status="completed")])
+
+        self.assertEqual(executor.submissions, [])
+
+    def test_summary_dispatch_prioritizes_active_projects_over_backfill(self) -> None:
+        inactive_project = self._project(project_id="p1", status="completed", fact_title=None, intent_title=None)
+        active_project = self._project(project_id="p2", status="active", fact_title=None, intent_title=None)
+        loop, executor = self._loop_for_project(
+            {"p1": inactive_project, "p2": active_project},
+            summary_backfill=True,
+        )
+
+        loop._dispatch_summaries([
+            self._summary("p1", status="completed"),
+            self._summary("p2", status="active"),
+        ])
+
+        self.assertEqual(len(executor.submissions), 1)
+        self.assertEqual(executor.submissions[0][1][3], "p2")
+        target = executor.submissions[0][1][5]
+        self.assertEqual(target, SummaryTarget("fact", "f1", "Long fact description"))
+
+    def test_summary_backfill_can_dispatch_inactive_when_no_active_target_exists(self) -> None:
+        inactive_project = self._project(project_id="p1", status="completed", fact_title=None, intent_title=None)
+        loop, executor = self._loop_for_project(
+            {"p1": inactive_project},
+            summary_backfill=True,
+        )
+
+        loop._dispatch_summaries([self._summary("p1", status="completed")])
+
+        self.assertEqual(len(executor.submissions), 1)
+        self.assertEqual(executor.submissions[0][1][3], "p1")
 
 
 if __name__ == "__main__":

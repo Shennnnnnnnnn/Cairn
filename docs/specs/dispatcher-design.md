@@ -851,6 +851,8 @@ codex exec resume "{session}" --dangerously-bypass-approvals-and-sandbox --model
 - 如果要走双阶段 `bootstrap`，则第一阶段必须成功拿到 session id，才能进入 `bootstrap_conclude`
 - Dispatcher 必须对 `stdout` 全文做 JSON 解析和任务级结构校验
 - `accepted: false`、JSON 非法、字段缺失、接口写回失败等情况都必须记日志，且不做立即重试
+- 实时摘要调度默认只处理 `active` 且已到计划开始时间的项目，避免历史 `completed` / `stopped` 项目的标题补齐 backlog 挤占当前项目的 `summarize` worker
+- 历史标题补齐必须显式启用：运行 `cairn dispatch --config dispatch.yaml --summary-backfill`，或使用 `./start.sh summary-backfill`；启用后仍然先服务 active 项目，再处理 inactive 项目
 
 ---
 
