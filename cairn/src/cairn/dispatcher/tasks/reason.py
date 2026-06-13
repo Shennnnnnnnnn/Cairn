@@ -24,6 +24,7 @@ from cairn.dispatcher.tasks.common import (
     preview,
     run_healthcheck,
     run_worker_process,
+    task_healthcheck_enabled,
     write_graph_snapshot_reference,
 )
 from cairn.dispatcher.workers.registry import get_driver
@@ -49,47 +50,48 @@ def run_reason_task(
     try:
         container_name = container_manager.ensure_running(project.project.id)
 
-        LOG.info(
-            "starting container exec project=%s worker=%s phase=reason_healthcheck timeout=%ss",
-            project.project.id,
-            worker.name,
-            healthcheck_timeout,
-        )
-        healthcheck = run_healthcheck(
-            container_manager,
-            container_name,
-            worker,
-            driver.build_healthcheck(worker),
-            timeout_seconds=healthcheck_timeout,
-            lease=lease,
-            cancellation=cancellation,
-        )
-        cancelled = cancel_reason(healthcheck.result, cancellation)
-        if cancelled is not None:
+        if task_healthcheck_enabled(config):
             LOG.info(
-                "reason cancelled during healthcheck project=%s worker=%s reason=%s",
+                "starting container exec project=%s worker=%s phase=reason_healthcheck timeout=%ss",
                 project.project.id,
                 worker.name,
-                cancelled,
+                healthcheck_timeout,
             )
-            return "cancelled"
-        if lease.failure is not None:
-            LOG.warning(
-                "heartbeat lost during reason healthcheck project=%s worker=%s status=%s",
-                project.project.id,
-                worker.name,
-                lease.failure.status_code,
+            healthcheck = run_healthcheck(
+                container_manager,
+                container_name,
+                worker,
+                driver.build_healthcheck(worker),
+                timeout_seconds=healthcheck_timeout,
+                lease=lease,
+                cancellation=cancellation,
             )
-            return "failed"
-        if healthcheck.result.returncode != 0:
-            LOG.warning(
-                "worker unhealthy project=%s worker=%s healthcheck_ms=%s stderr=%s",
-                project.project.id,
-                worker.name,
-                healthcheck.duration_ms,
-                preview(healthcheck.result.stderr),
-            )
-            return "unhealthy"
+            cancelled = cancel_reason(healthcheck.result, cancellation)
+            if cancelled is not None:
+                LOG.info(
+                    "reason cancelled during healthcheck project=%s worker=%s reason=%s",
+                    project.project.id,
+                    worker.name,
+                    cancelled,
+                )
+                return "cancelled"
+            if lease.failure is not None:
+                LOG.warning(
+                    "heartbeat lost during reason healthcheck project=%s worker=%s status=%s",
+                    project.project.id,
+                    worker.name,
+                    lease.failure.status_code,
+                )
+                return "failed"
+            if healthcheck.result.returncode != 0:
+                LOG.warning(
+                    "worker unhealthy project=%s worker=%s healthcheck_ms=%s stderr=%s",
+                    project.project.id,
+                    worker.name,
+                    healthcheck.duration_ms,
+                    preview(healthcheck.result.stderr),
+                )
+                return "unhealthy"
         open_intents = [
             {
                 "id": intent.id,

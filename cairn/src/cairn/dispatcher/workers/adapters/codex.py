@@ -8,7 +8,19 @@ class CodexDriver(RegexSessionDriver):
     type_name = "codex"
 
     def _model_args(self, worker: WorkerConfig) -> list[str]:
-        return self.model_args(worker)
+        args = self.model_args(worker)
+        if not args and worker.env.get("CODEX_MODEL"):
+            args = ["--model", worker.env["CODEX_MODEL"]]
+        if worker.env.get("CODEX_BASE_URL"):
+            args.extend(
+                [
+                    "-c",
+                    'model_provider="cairn"',
+                    "-c",
+                    f'model_providers.cairn.base_url="{worker.env["CODEX_BASE_URL"]}"',
+                ]
+            )
+        return args
 
     def build_healthcheck(self, worker: WorkerConfig) -> list[str]:
         # codex CLI is configured locally; no API keys or base_url needed.

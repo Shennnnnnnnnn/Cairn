@@ -20,6 +20,7 @@ from cairn.dispatcher.tasks.common import (
     preview,
     run_healthcheck,
     run_worker_process,
+    task_healthcheck_enabled,
     write_conclude_result,
     write_graph_snapshot_reference,
 )
@@ -47,54 +48,55 @@ def run_explore_task(
     try:
         container_name = container_manager.ensure_running(project.project.id)
 
-        LOG.info(
-            "starting container exec project=%s intent=%s worker=%s phase=explore_healthcheck timeout=%ss",
-            project.project.id,
-            intent.id,
-            worker.name,
-            healthcheck_timeout,
-        )
-        healthcheck = run_healthcheck(
-            container_manager,
-            container_name,
-            worker,
-            driver.build_healthcheck(worker),
-            timeout_seconds=healthcheck_timeout,
-            lease=lease,
-            cancellation=cancellation,
-        )
-        cancelled = cancel_reason(healthcheck.result, cancellation)
-        if cancelled is not None:
+        if task_healthcheck_enabled(config):
             LOG.info(
-                "explore cancelled during healthcheck project=%s intent=%s worker=%s reason=%s",
+                "starting container exec project=%s intent=%s worker=%s phase=explore_healthcheck timeout=%ss",
                 project.project.id,
                 intent.id,
                 worker.name,
-                cancelled,
+                healthcheck_timeout,
             )
-            best_effort_release(client, project.project.id, intent.id, worker.name)
-            return "cancelled"
-        if lease.failure is not None:
-            LOG.warning(
-                "heartbeat lost during explore healthcheck project=%s intent=%s worker=%s status=%s",
-                project.project.id,
-                intent.id,
-                worker.name,
-                lease.failure.status_code,
+            healthcheck = run_healthcheck(
+                container_manager,
+                container_name,
+                worker,
+                driver.build_healthcheck(worker),
+                timeout_seconds=healthcheck_timeout,
+                lease=lease,
+                cancellation=cancellation,
             )
-            best_effort_release(client, project.project.id, intent.id, worker.name)
-            return "failed"
-        if healthcheck.result.returncode != 0:
-            LOG.warning(
-                "worker unhealthy project=%s intent=%s worker=%s healthcheck_ms=%s stderr=%s",
-                project.project.id,
-                intent.id,
-                worker.name,
-                healthcheck.duration_ms,
-                preview(healthcheck.result.stderr),
-            )
-            best_effort_release(client, project.project.id, intent.id, worker.name)
-            return "unhealthy"
+            cancelled = cancel_reason(healthcheck.result, cancellation)
+            if cancelled is not None:
+                LOG.info(
+                    "explore cancelled during healthcheck project=%s intent=%s worker=%s reason=%s",
+                    project.project.id,
+                    intent.id,
+                    worker.name,
+                    cancelled,
+                )
+                best_effort_release(client, project.project.id, intent.id, worker.name)
+                return "cancelled"
+            if lease.failure is not None:
+                LOG.warning(
+                    "heartbeat lost during explore healthcheck project=%s intent=%s worker=%s status=%s",
+                    project.project.id,
+                    intent.id,
+                    worker.name,
+                    lease.failure.status_code,
+                )
+                best_effort_release(client, project.project.id, intent.id, worker.name)
+                return "failed"
+            if healthcheck.result.returncode != 0:
+                LOG.warning(
+                    "worker unhealthy project=%s intent=%s worker=%s healthcheck_ms=%s stderr=%s",
+                    project.project.id,
+                    intent.id,
+                    worker.name,
+                    healthcheck.duration_ms,
+                    preview(healthcheck.result.stderr),
+                )
+                best_effort_release(client, project.project.id, intent.id, worker.name)
+                return "unhealthy"
 
         prompt = render_prompt(
             load_prompt(config.runtime.prompt_group, "explore.md"),

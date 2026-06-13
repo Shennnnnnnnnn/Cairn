@@ -112,12 +112,16 @@ class DispatcherLoop:
 
     def run_startup_healthchecks_only(self) -> None:
         try:
-            self.run_startup_healthchecks(show_commands=True)
+            self.run_startup_healthchecks(show_commands=True, force=True)
         finally:
             self.close()
 
-    def run_startup_healthchecks(self, *, show_commands: bool = False) -> None:
+    def run_startup_healthchecks(self, *, show_commands: bool = False, force: bool = False) -> None:
         if self._startup_healthchecks_checked:
+            return
+        if not force and self.config.runtime.worker_healthcheck == "disabled":
+            LOG.info("skip startup worker healthchecks because runtime.worker_healthcheck=disabled")
+            self._startup_healthchecks_checked = True
             return
         self._run_startup_healthchecks(show_commands=show_commands)
         self._startup_healthchecks_checked = True
@@ -220,7 +224,15 @@ class DispatcherLoop:
         if self._is_initial_project(project):
             if project.project.reason is not None:
                 return False
-            return self._dispatch_initial_project(project)
+            if self._project_requires_bootstrap(project):
+                return self._dispatch_initial_project(project)
+            export_yaml = self.client.export_project(summary.id)
+            return self._dispatch_reason(project, export_yaml, "initial")
+        if project.project.reason is None:
+            reason_trigger = self._reason_trigger(project)
+            if reason_trigger is not None:
+                export_yaml = self.client.export_project(summary.id)
+                return self._dispatch_reason(project, export_yaml, reason_trigger)
         running_intent_ids = self._project_running_explore_intents(summary.id)
         unclaimed_intents = [
             intent
@@ -251,21 +263,17 @@ class DispatcherLoop:
                 project.project.reason.worker,
             )
             return False
-        reason_trigger = self._reason_trigger(project)
-        if reason_trigger is None:
-            self._log_changed(
-                f"{skip_scope}:graph_unchanged",
-                logging.DEBUG,
-                "skip reason project=%s because reason state unchanged facts=%s hints=%s open_intents=%s intents=%s",
-                summary.id,
-                len(project.facts),
-                len(project.hints),
-                self._project_open_intent_count(project),
-                len(project.intents),
-            )
-            return False
-        export_yaml = self.client.export_project(summary.id)
-        return self._dispatch_reason(project, export_yaml, reason_trigger)
+        self._log_changed(
+            f"{skip_scope}:graph_unchanged",
+            logging.DEBUG,
+            "skip reason project=%s because reason state unchanged facts=%s hints=%s open_intents=%s intents=%s",
+            summary.id,
+            len(project.facts),
+            len(project.hints),
+            self._project_open_intent_count(project),
+            len(project.intents),
+        )
+        return False
 
     def _dispatch_initial_project(self, project: ProjectDetail) -> bool:
         intent = self._get_bootstrap_intent(project)
@@ -696,6 +704,13 @@ class DispatcherLoop:
             return True
         return all(self._is_bootstrap_intent(intent) for intent in project.intents)
 
+    def _project_requires_bootstrap(self, project: ProjectDetail) -> bool:
+        if not project.project.bootstrap_enabled:
+            return False
+        if self._get_bootstrap_intent(project) is not None:
+            return True
+        return any("bootstrap" in worker.task_types for worker in self.config.workers)
+
     def _create_bootstrap_intent(self, project_id: str) -> Intent | None:
         response = self.client.create_intent(
             project_id,
@@ -866,7 +881,7 @@ class DispatcherLoop:
         status_by_project = {summary.id: summary.status for summary in summaries}
         for task in self.futures.values():
             status = status_by_project.get(task.project_id, "deleted")
-            if self.summary_backfill and task.task_type == "summarize" and status != "deleted":
+            if getattr(self, "summary_backfill", False) and task.task_type == "summarize" and status != "deleted":
                 continue
             if status != "active" and task.cancellation.cancel(status):
                 LOG.info(

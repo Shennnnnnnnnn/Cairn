@@ -74,6 +74,7 @@ def _export_yaml(conn, project_id: str) -> str:
             "directory_id": proj["directory_id"],
             "directory_local_path": directory_local_path,
             "current_working_directory": directory_local_path,
+            "bootstrap_enabled": bool(proj["bootstrap_enabled"]),
         }
     }
 

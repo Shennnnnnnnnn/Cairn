@@ -118,6 +118,7 @@ def release(project_id: str, intent_id: str, body: HeartbeatRequest):
 @router.post(
     "/projects/{project_id}/intents/{intent_id}/conclude",
     response_model=ConcludeResponse,
+    response_model_exclude_none=True,
 )
 def conclude(project_id: str, intent_id: str, body: ConcludeRequest):
     with get_conn() as conn:

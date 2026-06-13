@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS projects (
     directory_id TEXT REFERENCES project_directories(id) ON DELETE SET NULL,
     favorite INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active',
+    bootstrap_enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     run_started_at TEXT,
     accumulated_run_ms INTEGER NOT NULL DEFAULT 0,
@@ -114,6 +115,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     }
     if "scheduled_start_at" not in project_columns:
         conn.execute("ALTER TABLE projects ADD COLUMN scheduled_start_at TEXT")
+    if "bootstrap_enabled" not in project_columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN bootstrap_enabled INTEGER NOT NULL DEFAULT 1")
+        if "bootstrap_mode" in project_columns:
+            conn.execute(
+                "UPDATE projects SET bootstrap_enabled = CASE WHEN bootstrap_mode = 'disabled' THEN 0 ELSE 1 END"
+            )
     if "directory_id" not in project_columns:
         conn.execute(
             "ALTER TABLE projects ADD COLUMN directory_id TEXT REFERENCES project_directories(id) ON DELETE SET NULL"

@@ -157,6 +157,7 @@ def list_projects():
                 directory_local_path=row["directory_local_path"],
                 favorite=bool(row["favorite"]),
                 status=row["status"],
+                bootstrap_enabled=bool(row["bootstrap_enabled"]),
                 created_at=row["created_at"],
                 running_time_ms=project_running_time_ms(row),
                 scheduled_start_at=row["scheduled_start_at"],
@@ -180,11 +181,12 @@ def create_project(body: CreateProjectRequest):
         now = utcnow()
 
         conn.execute(
-            "INSERT INTO projects (id, title, directory_id, status, created_at, run_started_at, scheduled_start_at) VALUES (?, ?, ?, 'active', ?, ?, ?)",
+            "INSERT INTO projects (id, title, directory_id, status, bootstrap_enabled, created_at, run_started_at, scheduled_start_at) VALUES (?, ?, ?, 'active', ?, ?, ?, ?)",
             (
                 pid,
                 body.title,
                 body.directory_id,
+                body.bootstrap_enabled,
                 now,
                 run_started_at_for_schedule(body.scheduled_start_at, now),
                 body.scheduled_start_at,
@@ -217,6 +219,7 @@ def create_project(body: CreateProjectRequest):
                 directory_local_path=get_directory_or_404(conn, body.directory_id)["local_path"] if body.directory_id is not None else None,
                 favorite=False,
                 status="active",
+                bootstrap_enabled=body.bootstrap_enabled,
                 created_at=now,
                 running_time_ms=0,
                 scheduled_start_at=body.scheduled_start_at,
@@ -499,7 +502,7 @@ def complete_project(project_id: str, body: CompleteRequest):
         )
 
 
-@router.post("/projects/{project_id}/reopen", response_model=ReopenResponse)
+@router.post("/projects/{project_id}/reopen", response_model=ReopenResponse, response_model_exclude_none=True)
 def reopen_project(project_id: str, body: ReopenRequest):
     with get_conn() as conn:
         expire_reason_leases(conn, project_id)

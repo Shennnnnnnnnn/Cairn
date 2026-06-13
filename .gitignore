@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 .playwright-cli/
 datas/
+dispatch.yaml

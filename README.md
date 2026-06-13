@@ -6,8 +6,12 @@
 ### More Than Just AI Penetration Testing — Towards General State-Space Search
 
 <p>
-  <img src="./README/tencent.png" alt="Tencent" height="55" />
-  <img src="./README/tch.png" alt="TCH" height="55" />
+  <a href="https://zc.tencent.com/hackathon" target="_blank" rel="noopener noreferrer">
+    <img src="./README/tencent.png" alt="Tencent" height="55" />
+  </a>
+  <a href="https://zc.tencent.com/hackathon" target="_blank" rel="noopener noreferrer">
+    <img src="./README/tch.png" alt="TCH" height="55" />
+  </a>
 </p>
 
 Cairn is a general-purpose problem-solving engine. <br/>It defines no roles, no workflows. Given an origin and a goal, it searches for a path through an unknown state space. <br/>AI Penetration Testing is one such problem — and a proven one.
@@ -119,7 +123,6 @@ Supported worker backends: **Claude Code**, **Codex**, and **Pi**.
 - <a href="https://mp.weixin.qq.com/s/DlpEH7bVr0xi0VawPJs3XA" target="_blank" rel="noopener noreferrer">The Strongest AI Penetration Testing Agent: Postmortem of the Only Team to Achieve AK at the TCH Tencent Cloud Hackathon Intelligent Penetration Testing Challenge (2nd Edition)</a>
 - <a href="https://mp.weixin.qq.com/s/2rEqFLvkxvYWM3gW170C2w" target="_blank" rel="noopener noreferrer">The Pathless Path: Cairn AI from Penetration Testing to General Problem Solving</a>
 
-
 ## Getting Started
 
 **Prerequisites**
@@ -136,6 +139,12 @@ Both setup methods require the worker container image:
 ```bash
 docker pull --platform=linux/amd64 ghcr.io/oritera/cairn-worker-container:latest
 ```
+
+Create your local dispatcher configuration and fill in your LLM endpoints and API keys:
+
+```bash
+cp dispatch.example.yaml dispatch.yaml
+```
  
 ### Docker Compose (recommended)
  
@@ -145,8 +154,6 @@ Pull the base image used to build Cairn:
 docker pull ghcr.io/astral-sh/uv:python3.13-trixie
 ```
  
-Edit `dispatch.yaml` and fill in your LLM endpoints and API keys, then start both services:
- 
 ```bash
 docker compose up --build
 ```
@@ -154,8 +161,6 @@ docker compose up --build
 This starts `cairn-server` on port `8000` and `cairn-dispatcher` once the server passes its health check. The dispatcher mounts `dispatch.yaml` from the project root and connects to Docker via the host socket. Data is persisted to `./datas/cairn/`.
  
 ### Manual
- 
-Edit `dispatch.yaml` and fill in your LLM endpoints and API keys, then:
  
 ```bash
 # Start the server
@@ -168,6 +173,14 @@ uv run --project cairn cairn dispatch --config dispatch.yaml
 uv run --project cairn cairn dispatch --config dispatch.yaml --startup-healthcheck-only
 ```
 
+### Tests
+
+Run the fast regression suite without Docker or live model endpoints:
+
+```bash
+uv run --project cairn --group dev pytest
+```
+
 ## Disclaimer
 
 Cairn is a general-purpose problem-solving engine. Although it supports penetration testing, CTF solving, security assessment, and vulnerability research workflows, it is intended to be used only in environments where you have explicit authorization to operate.
@@ -176,6 +189,11 @@ You are solely responsible for how you use this project. Do not use Cairn agains
 
 The developers and contributors of this project do not endorse or accept responsibility for any misuse, abuse, damage, loss, or legal consequences arising from its use. By using this project, you agree to ensure that your activities comply with all applicable laws, regulations, contractual obligations, and professional or organizational policies in your jurisdiction.
 
+## Star History
+
+<a href="https://www.star-history.com/#oritera/Cairn&Date" target="_blank" rel="noopener noreferrer">
+  <img src="https://api.star-history.com/svg?repos=oritera/Cairn&type=Date" alt="Star History Chart" />
+</a>
 
 ## ⚖️ License
 This project is licensed under **GNU AGPLv3** for personal and educational use.

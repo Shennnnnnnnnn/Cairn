@@ -20,7 +20,7 @@ Agent 不直接认领 Intent，不直接 heartbeat，不直接调用 Cairn API�
 2. Dispatcher 是唯一的协议写入者和控制面；Agent 不 claim、不 heartbeat、不直接调用 Cairn API。
 3. 超时策略按任务类型定义；`bootstrap` 和 `explore` 都支持“第一阶段执行 + timeout / parse-fail 后用同一 session 进入 conclude 收尾”的双阶段模式。
 4. Prompt 以 markdown 文件形式随代码分发；支持按 prompt 组切换；Worker 行为由 `claudecode`、`codex`、`mock` 等 driver 实现；`dispatch.yaml` 只描述运行期参数。
-5. 调度上，项目初始态优先 `bootstrap`；非初始态项目内始终先 `explore`、后 `reason`；`reason` 的并发约束通过服务端的项目级 `project.reason` lease 表达为“单项目最多一个”，`bootstrap` 的并发约束是“单项目最多一个保留 bootstrap intent 且最多一个 bootstrap 任务”，跨项目允许并行；`runtime.interval` 被刻意复用为主循环节拍和带 claim 任务的 heartbeat 周期。
+5. 调度上，项目初始态按 `project.bootstrap_enabled` 和 Worker 能力决定优先 `bootstrap` 或直接 `reason`；非初始态出现新 Fact / Hint 等新态势时优先 `reason`，否则优先消费可认领的 `explore` intent；`reason` 的并发约束通过服务端的项目级 `project.reason` lease 表达为“单项目最多一个”，`bootstrap` 的并发约束是“单项目最多一个保留 bootstrap intent 且最多一个 bootstrap 任务”，跨项目允许并行；`runtime.interval` 被刻意复用为主循环节拍和带 claim 任务的 heartbeat 周期。
 6. Worker 按独立的 LLM 并发配额单元建模；同一个 key 不拆成多个 Worker，因此并发控制使用 `workers[].max_running` 即可。
 7. 运行日志按“状态变化优先”设计：稳定轮询、正常 heartbeat、重复 skip 原则上不刷屏；容器创建、任务派发、容器内新进程启动、健康检查、超时、收尾、释放 intent、worker 进入短暂不可选窗口等事件必须可见。
 8. 项目容器收尾不应阻塞主调度循环；多个已完成项目的容器 cleanup 可以并行进行。
@@ -139,7 +139,7 @@ Dispatcher 会同时读取两类数据：
 6. Worker 输出结构化 JSON
 7. Dispatcher 解析结果，并调用 `POST /projects/{project_id}/complete`、`POST /projects/{project_id}/intents`、`POST /projects/{project_id}/intents/{intent_id}/conclude`、`POST /projects/{project_id}/intents/{intent_id}/release` 或 `POST /projects/{project_id}/reason/release`
 
-项目若被切到 `stopped`，这条主链路会在下一轮短路：Dispatcher 不再把该项目纳入 active 调度集合，会先取消本地仍在运行的任务，再转入容器 cleanup 流程并停止项目容器。对 `bootstrap` / `explore` 来说，被 `stopped` 取消后不会再进入 conclude fallback，因此不会再额外落 Fact。项目恢复为 `active` 后，Dispatcher 会重新读取图状态，再决定是继续 `explore`、进入 `reason`，还是在初始态重新 `bootstrap`。项目若在 `completed` 后被服务端 `reopen`，对 Dispatcher 来说也等价于“重新变成 active 且图上多了一个新 fact”；下一轮会按普通 active 项目继续调度。
+项目若被切到 `stopped`，这条主链路会在下一轮短路：Dispatcher 不再把该项目纳入 active 调度集合，会先取消本地仍在运行的任务，再转入容器 cleanup 流程并停止项目容器。对 `bootstrap` / `explore` 来说，被 `stopped` 取消后不会再进入 conclude fallback，因此不会再额外落 Fact。项目恢复为 `active` 后，Dispatcher 会重新读取图状态，再决定是继续 `explore`、进入 `reason`，还是在初始态依据 `project.bootstrap_enabled` 和 Worker 能力重新选择 `bootstrap` 或 `reason`。项目若在 `completed` 后被服务端 `reopen`，对 Dispatcher 来说也等价于“重新变成 active 且图上多了一个新 fact”；下一轮会按普通 active 项目继续调度。
 
 Worker 选择规则：
 
@@ -150,7 +150,7 @@ Worker 选择规则：
 5. 如果 `priority` 相同，则优先选择当前运行中任务数更少的
 6. 如果仍然相同，则随机选择
 7. 如果是 `explore`，Dispatcher 先通过 `POST /projects/{project_id}/intents/{intent_id}/heartbeat` claim 成功，再真正启动任务
-8. 如果是 `reason`，claim 成功后由 `POST /projects/{project_id}/reason/heartbeat` 维持 lease；真正启动前，再对选中的 Worker 执行一次健康检查；如果失败，则本次任务作废；该 Worker 会进入一个短暂不可选窗口，等待后续轮次再尝试
+8. 如果是 `reason`，claim 成功后由 `POST /projects/{project_id}/reason/heartbeat` 维持 lease；当 `runtime.worker_healthcheck=startup_and_task` 时，真正启动前再对选中的 Worker 执行一次健康检查；如果失败，则本次任务作废；该 Worker 会进入一个短暂不可选窗口，等待后续轮次再尝试
 
 ---
 
@@ -198,7 +198,7 @@ dispatcher/
 
 本文档附录给出：
 
-- `dispatch.yaml` 的示例内容
+- `dispatch.example.yaml` 的示例内容
 - 上述 markdown prompt 的示例内容
 
 ---
@@ -209,7 +209,7 @@ dispatcher/
 
 | 任务 | 触发条件 | 输入 | 输出 | 超时策略 |
 | --- | --- | --- | --- | --- |
-| `bootstrap` | 项目 `active`；facts 只有 `origin` 和 `goal`；当前没有普通 intent；允许不存在 bootstrap intent，或只存在保留的 open `bootstrap` intent | `{origin}`、`{goal}`、`{hints}` | 主阶段成功时固定返回 `fact + complete`；收尾阶段只返回 `fact` | 双阶段：`timeout` 后可进入 `conclude_timeout` 收尾；两阶段都失败则 release 保留 intent，下轮仍按新项目重试 |
+| `bootstrap` | 项目 `active`；`project.bootstrap_enabled=true`，且配置中存在支持 `bootstrap` 的 Worker 或项目已经存在保留 bootstrap intent；facts 只有 `origin` 和 `goal`；当前没有普通 intent；允许不存在 bootstrap intent，或只存在保留的 open `bootstrap` intent | `{origin}`、`{goal}`、`{hints}` | 主阶段成功时固定返回 `fact + complete`；收尾阶段只返回 `fact` | 双阶段：`timeout` 后可进入 `conclude_timeout` 收尾；两阶段都失败则 release 保留 intent，下轮仍按新项目重试 |
 | `reason` | 项目 `active`；当前项目无未认领 intent；当前项目内无其他 `reason`；首次触发或满足“新态势”重触发条件 | `{graph_yaml}`、`{fact_ids}`、`{open_intents}` | `complete` 对象；或 `intent` 对象；或空 `data` | 仅 `timeout`；超时或非法结果直接作废，不写图 |
 | `explore` | 项目 `active`；存在一个当前可认领的未结论 intent | `{graph_yaml}`、`{intent_id}`、`{intent_description}` | 一个 Fact 结论描述 | 单阶段：超时直接作废；双阶段：超时或输出解析失败时可进入 `conclude` 收尾 |
 
@@ -218,6 +218,7 @@ dispatcher/
 #### 触发条件
 
 - 当前项目仍然是 `active`
+- `project.bootstrap_enabled = true`，且配置中存在支持 `bootstrap` 的 Worker 或项目已经存在保留 bootstrap intent
 - facts 恰好只有 `origin` 和 `goal`
 - intents 为空，或只存在保留的 open `bootstrap` intent
 - 保留 `bootstrap` intent 的约定固定为：
@@ -542,11 +543,11 @@ for project in running_projects_round_robin:
   if has_dispatchable_bootstrap(project):
     dispatch_bootstrap(project)
     continue
-  if has_dispatchable_explore(project):
-    dispatch_explore(project)
-    continue
   if has_dispatchable_reason(project):
     dispatch_reason(project)
+    continue
+  if has_dispatchable_explore(project):
+    dispatch_explore(project)
     continue
 
 if running_project_count < runtime.max_running_projects:
@@ -557,9 +558,9 @@ if running_project_count < runtime.max_running_projects:
 
 对于单个项目，Dispatcher 读完整项目状态后，按下面顺序调度：
 
-1. 如果项目仍处于初始态，优先确保存在且只存在一个保留 `bootstrap` intent，并只调度 `bootstrap`
-2. 对非初始态项目，如果存在未认领 intent，优先派发 `explore`
-3. 只有在没有未认领 intent 时，才考虑派发 `reason`
+1. 如果项目仍处于初始态，先按 `project.bootstrap_enabled` 和 Worker 能力决定路径：未开启或没有支持 `bootstrap` 的 Worker 时直接 `reason`，否则执行 `bootstrap`；若已经存在保留 bootstrap intent，则继续该阶段
+2. 如果满足“新态势”重触发条件，优先派发 `reason`
+3. 否则如果存在未认领 intent，派发 `explore`
 4. `reason` 的去重按“态势”做，而不是按总图变化做：首次只有在当前没有任何 open intent 时才触发；之后只有当前 Fact / Hint 数量增加，或项目从“存在 open intents”进入“没有 open intents”时，才重新触发
 5. 如果 `reason` 返回 `data.complete`，Dispatcher 调用 `POST /projects/{project_id}/complete`
 6. 如果 `reason` 没有返回 `data.complete` 且带 `intent`，Dispatcher 调用 `POST /projects/{project_id}/intents`
@@ -567,7 +568,7 @@ if running_project_count < runtime.max_running_projects:
 
 另外：
 
-- 初始态项目里，如果 `bootstrap` intent 已被 claim，则这一轮不再派发 `reason` 或普通 `explore`
+- 初始态项目里，如果选择了 `bootstrap` 路径且 bootstrap intent 已被 claim，则这一轮不再派发 `reason` 或普通 `explore`
 - 即使同一项目里已经有进行中的 `explore`，也允许继续派发一个 `reason` 任务
 - 但前提不是“刚新增了 intent”，而是“确实出现了新的 Fact / Hint 等新态势”；仅仅因为上一个 `reason` 刚创建了新的 intent，不应该立刻再次 `reason`
 - 仍然要求当前没有未认领 intent、当前项目内没有其他 `reason` 任务在运行、且没有超过 `runtime.max_project_workers`
@@ -813,6 +814,7 @@ codex exec resume "{session}" --dangerously-bypass-approvals-and-sandbox --model
 - `runtime.max_project_workers` 必须存在
 - `runtime.interval` 必须存在
 - `runtime.healthcheck_timeout` 必须存在
+- `runtime.worker_healthcheck` 如果存在，只允许 `startup_and_task`、`startup_only`、`disabled`
 - `runtime.prompt_group` 必须存在
 - `tasks.bootstrap.timeout` 必须存在
 - `tasks.bootstrap.conclude_timeout` 必须存在
@@ -841,7 +843,7 @@ codex exec resume "{session}" --dangerously-bypass-approvals-and-sandbox --model
 任务真正派发时，还需要做运行时校验：
 
 - driver 必须存在且支持该任务类型
-- 真正启动任务前，driver 的健康检查必须能成功执行；退出码 `0` 才算健康
+- 当 `runtime.worker_healthcheck=startup_and_task` 时，真正启动任务前，driver 的健康检查必须能成功执行；退出码 `0` 才算健康
 - `explore` 进入 timeout / parse-fail 后的 `explore_conclude` fallback，不再重复执行健康检查，而是直接尝试 conclude 并继续走结果校验
 - 只有支持当前任务类型的 Worker 才能被选中
 - 只有当前运行中任务数小于 `max_running` 的 Worker 才能被选中
@@ -873,6 +875,7 @@ codex exec resume "{session}" --dangerously-bypass-approvals-and-sandbox --model
 | `runtime.max_project_workers` | 是 | 单个项目内同时运行的任务上限，统一计入 `bootstrap`、`reason` 和 `explore` |
 | `runtime.interval` | 是 | 统一节拍配置；既是 Dispatcher 主循环间隔，也是带 claim 任务的 heartbeat 周期 |
 | `runtime.healthcheck_timeout` | 是 | Worker 健康检查的统一外层 watchdog 超时 |
+| `runtime.worker_healthcheck` | 否 | Worker 健康检查模式：`startup_and_task`、`startup_only` 或 `disabled`；默认 `startup_only` |
 | `runtime.prompt_group` | 是 | 当前使用的 prompt 组目录名 |
 
 ### `container.*`
@@ -916,7 +919,7 @@ codex exec resume "{session}" --dangerously-bypass-approvals-and-sandbox --model
 
 补充：
 
-- Worker 选择顺序是：先过滤任务类型、`max_running` 和处于本地 `retry_after` 窗口内的 Worker，再按 `priority`，同优先级优先选当前运行数更少的，最后随机；`bootstrap` 和 `explore` 都会先 claim，再启动任务；真正启动前会做一次健康检查，失败的 Worker 会进入短暂不可选窗口；进入 `bootstrap_conclude` / `explore_conclude` fallback 时不再重复健康检查
+- Worker 选择顺序是：先过滤任务类型、`max_running` 和处于本地 `retry_after` 窗口内的 Worker，再按 `priority`，同优先级优先选当前运行数更少的，最后随机；`bootstrap` 和 `explore` 都会先 claim，再启动任务；当 `runtime.worker_healthcheck=startup_and_task` 时，真正启动前会做一次健康检查，失败的 Worker 会进入短暂不可选窗口；进入 `bootstrap_conclude` / `explore_conclude` fallback 时不再重复健康检查
 - 健康检查、执行命令、session 提取、二阶段 `conclude` 都由对应 driver 代码负责
 - prompt 内容从代码工程里的 markdown 资源加载
 
@@ -924,7 +927,7 @@ codex exec resume "{session}" --dangerously-bypass-approvals-and-sandbox --model
 
 ## 附录：示例配置与 Prompt 内容
 
-### `dispatch.yaml`
+### `dispatch.example.yaml`
 
 ```yaml
 server: "http://127.0.0.1:8000"
@@ -935,6 +938,7 @@ runtime:
   max_project_workers: 2  # per-project running tasks, including bootstrap + reason + explore
   interval: 3  # intentional shared cadence: scheduler loop interval + claim-task heartbeat interval, in seconds
   healthcheck_timeout: 15  # shared watchdog for all worker healthchecks, in seconds
+  worker_healthcheck: "startup_only"  # startup_and_task | startup_only | disabled
   prompt_group: "default"  # selects prompts/<group>/
 
 tasks:

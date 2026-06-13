@@ -264,6 +264,7 @@ def project_meta_from_row(row: sqlite3.Row) -> ProjectMeta:
         directory_local_path=row["directory_local_path"] if "directory_local_path" in keys else None,
         favorite=bool(row["favorite"]) if "favorite" in keys else False,
         status=row["status"],
+        bootstrap_enabled=bool(row["bootstrap_enabled"]),
         created_at=row["created_at"],
         running_time_ms=project_running_time_ms(row),
         scheduled_start_at=row["scheduled_start_at"],

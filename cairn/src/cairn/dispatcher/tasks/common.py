@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import yaml
 
-from cairn.dispatcher.config import WorkerConfig
+from cairn.dispatcher.config import DispatchConfig, WorkerConfig
 from cairn.dispatcher.protocol.client import CairnClient
 from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
@@ -49,6 +49,8 @@ def format_project_workdir(local_path: str | None) -> str:
 
 
 def add_project_workdir_to_graph_yaml(graph_yaml: str, local_path: str | None) -> str:
+    if local_path is None:
+        return graph_yaml
     data = yaml.safe_load(graph_yaml) or {}
     if not isinstance(data, dict):
         data = {}
@@ -71,6 +73,10 @@ def cancel_reason(result: ProcessResult, cancellation: TaskCancellation | None =
 
 def communicate_timeout(timeout_seconds: int, grace_seconds: int = PROCESS_COMMUNICATE_GRACE_SECONDS) -> int:
     return timeout_seconds + grace_seconds
+
+
+def task_healthcheck_enabled(config: DispatchConfig) -> bool:
+    return config.runtime.worker_healthcheck == "startup_and_task"
 
 
 def write_graph_snapshot_reference(
@@ -143,12 +149,14 @@ def run_worker_process(
         timeout_seconds,
         workdir,
     )
+    process_kwargs = {"timeout_seconds": timeout_seconds}
+    if workdir is not None:
+        process_kwargs["workdir"] = workdir
     process = container_manager.build_exec_process(
         container_name,
         dict(worker.env),
         argv,
-        timeout_seconds=timeout_seconds,
-        workdir=workdir,
+        **process_kwargs,
     )
     process.start()
     if lease is not None:

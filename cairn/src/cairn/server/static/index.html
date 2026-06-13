@@ -954,6 +954,10 @@
         <span class="text-[11px] text-slate-400 mb-1 block font-medium" x-text="t('scheduledStartLabel')"></span>
         <input type="datetime-local" x-model="newProject.scheduled_start_at" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition text-slate-600">
       </label>
+      <label class="flex items-center gap-2 px-1 text-sm text-slate-600">
+        <input type="checkbox" x-model="newProject.bootstrap" class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-200">
+        <span>Run bootstrap attempt</span>
+      </label>
 
       <div>
         <div class="flex items-center justify-between mb-2">
@@ -1448,7 +1452,7 @@ function cairnApp() {
     showDeleteModal: false,
     showDirectoryModal: false,
 
-    newProject: { title: '', origin: '', goal: '', directory_id: '', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content: '' }] },
+    newProject: { title: '', origin: '', goal: '', bootstrap: true, directory_id: '', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content: '' }] },
     directoryForm: { id: null, name: '', local_path: '' },
     selectedDirectoryId: 'all',
     draggedProjectId: null,
@@ -3886,7 +3890,12 @@ function cairnApp() {
       try {
         const actor = this.actorName();
         const hintContents = this.newProject.hints.filter(h => h.content?.trim());
-        const body = { title: this.newProject.title, origin: this.newProject.origin, goal: this.newProject.goal };
+        const body = {
+          title: this.newProject.title,
+          origin: this.newProject.origin,
+          goal: this.newProject.goal,
+          bootstrap_enabled: this.newProject.bootstrap
+        };
         if (this.newProject.directory_id) body.directory_id = this.newProject.directory_id;
         const scheduledStart = this.newProject.scheduled_start_enabled ? this.toApiTimestamp(this.newProject.scheduled_start_at) : null;
         if (scheduledStart) body.scheduled_start_at = scheduledStart;
@@ -3894,7 +3903,7 @@ function cairnApp() {
         if (hints.length > 0) body.hints = hints;
         const data = await this.api('POST', '/projects', body);
         this.showNewProject = false;
-        this.newProject = { title:'', origin:'', goal:'', directory_id: '', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content:'' }] };
+        this.newProject = { title:'', origin:'', goal:'', bootstrap: true, directory_id: '', scheduled_start_enabled: false, scheduled_start_at: '', hints: [{ content:'' }] };
         await this.reloadDirectoryState();
         await this.openProject(data.project.id);
         this.showToast('Project created');

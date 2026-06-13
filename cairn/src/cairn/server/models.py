@@ -77,6 +77,7 @@ class ProjectMeta(BaseModel):
     directory_local_path: str | None = None
     favorite: bool = False
     status: Literal["active", "stopped", "completed"]
+    bootstrap_enabled: bool = True
     created_at: str
     running_time_ms: int = 0
     scheduled_start_at: str | None = None
@@ -116,6 +117,7 @@ class CreateProjectRequest(BaseModel):
     origin: str
     goal: str
     directory_id: str | None = None
+    bootstrap_enabled: bool = True
     hints: list[CreateHintInline] | None = None
     scheduled_start_at: str | None = None
 

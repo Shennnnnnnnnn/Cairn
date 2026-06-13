@@ -104,6 +104,7 @@ Hint 代表外部补充的高纬输入，不属于探索执行本身。因此项
 id
 title           # 项目名称
 status          # "active" | "stopped" | "completed"
+bootstrap_enabled  # 是否允许消费者在初始态运行 bootstrap，默认 true
 created_at
 reason          # 当前项目级 reason lease，null 表示当前无人执行 reason
 ```
@@ -221,6 +222,7 @@ Body：
     "id": "proj_001",
     "title": "xx渗透测试",
     "status": "active",
+    "bootstrap_enabled": true,
     "created_at": "2026-03-21T10:00:00Z",
     "reason": {
       "worker": "dispatcher-worker-A",
@@ -241,7 +243,7 @@ Body：
 
 #### POST /projects
 
-创建新项目。`origin` 和 `goal` 写入 `facts` 作为特殊 Fact。`hints` 可选。
+创建新项目。`origin` 和 `goal` 写入 `facts` 作为特殊 Fact。`hints` 可选。`bootstrap_enabled` 可选，默认为 `true`；为 `false` 时消费者跳过 bootstrap。即使为 `true`，消费者没有 bootstrap 能力时也可直接进入 reason。
 
 Body：
 
@@ -250,6 +252,7 @@ Body：
   "title": "xx渗透测试",
   "origin": "目标 http://192.168.1.10",
   "goal": "拿到 flag",
+  "bootstrap_enabled": true,
   "hints": [
     { "content": "优先看 web 服务", "creator": "human" },
     { "content": "注意 80 端口", "creator": "human" }
@@ -271,6 +274,7 @@ Body：
     "id": "proj_001",
     "title": "xx渗透测试",
     "status": "active",
+    "bootstrap_enabled": true,
     "created_at": "2026-03-21T10:00:00Z",
     "reason": {
       "worker": "dispatcher-worker-A",
@@ -657,6 +661,7 @@ project:
   title: "xx渗透测试"
   origin: "目标 http://192.168.1.10"
   goal: "拿到 flag"
+  bootstrap_enabled: true
 
 hints:
   - content: "优先看 web 服务"
@@ -794,6 +799,7 @@ intents:
 3. 若项目仍处于最初阶段：
    典型判定是 facts 只有 `origin` 和 `goal`，且没有普通 intent；
    某些消费者会允许“没有任何 intent”，或“只存在保留 bootstrap intent”都视为初始态
+   若 `project.bootstrap_enabled=false`，或消费者不具备 bootstrap 能力，则直接进入 reason；
    a. 若尚不存在保留 bootstrap intent：
       POST /projects/{id}/intents
         { from: ["origin"], description: "bootstrap", creator: "dispatcher.bootstrap", worker: null }

@@ -61,6 +61,9 @@ RUN cd /tmp && \
     sudo apt clean && \
     sudo rm -rf /var/lib/apt/lists/*
     
+RUN pip3 install tccli awscli --break-system-packages && \
+    sudo bash -c "$(curl -fsSL https://aliyuncli.alicdn.com/install.sh)"
+
 RUN sudo npm install -g @openai/codex@0.118.0
 RUN sudo npm install -g @anthropic-ai/claude-code@2.1.98
 RUN sudo npm install -g @mariozechner/pi-coding-agent@0.73.0
