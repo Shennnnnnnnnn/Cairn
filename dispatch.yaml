@@ -57,23 +57,30 @@ container:
   #   - "/path/to/your/app:/workspace/target:ro"    # App files to reverse-engineer (read-only)
   #   - "/path/to/output:/workspace/output:rw"       # Output directory for analysis artifacts
 
-
 workers:
   # Worker priority is ascending: lower numbers are preferred first.
   # max_running is per-worker concurrency. Slower backends such as Pi usually benefit from lower values.
   # Optional model override for local CLI workers. The dispatcher passes it to the CLI as --model.
-  - name: "claudecode"
-    type: "claudecode"
+  # - name: "claudecode"
+  #   type: "claudecode"
+  #   task_types: [reason]
+  #   max_running: 1
+  #   priority: 0
+  #   model: "claude-opus-4-8"
+  #   env: {}
+
+  - name: "codex-reason"
+    type: "codex"
     task_types: [reason]
-    max_running: 1
+    max_running: 2
     priority: 0
-    model: "claude-opus-4-7"
+    model: "gpt-5.5"
     env: {}
 
   - name: "codex"
     type: "codex"
     task_types: [bootstrap, explore]
-    max_running: 2
+    max_running: 4
     priority: 0
     model: "gpt-5.5"
     env: {}
@@ -81,15 +88,15 @@ workers:
   - name: "codex-summary"
     type: "codex"
     task_types: [summarize]
-    max_running: 2
+    max_running: 1
     priority: 0
     model: "gpt-5.4-mini"
     env: {}
 
-  - name: "gemini"
-    type: "gemini"
-    task_types: [explore]
-    max_running: 2
-    priority: 1
-    model: "gemini-3.1-pro-preview"
-    env: {}
+  # - name: "gemini"
+  #   type: "gemini"
+  #   task_types: [explore]
+  #   max_running: 2
+  #   priority: 1
+  #   model: "gemini-3.1-pro-preview"
+  #   env: {}
