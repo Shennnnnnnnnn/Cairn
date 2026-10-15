@@ -184,7 +184,7 @@ export async function main(argv=process.argv.slice(2)){
     const status=installationStatus(t,(v.scope??'project') as any,v.root);
     const sessions=store.db.prepare('SELECT seen,capabilities FROM sessions WHERE host=? AND cwd=? ORDER BY rowid').all(t,cwd).map(r=>({seen:JSON.parse(r.seen as string),capabilities:JSON.parse(r.capabilities as string)}));
     const latest=sessions.at(-1);
-    return {...status,declaredCapabilities:latest?.capabilities??{},observedCapabilities:observedCapabilities(latest?.seen??{}),observedEvents:sessions.map(s=>s.seen),hooksTrust:latest?.seen.SessionStart?'startup_observed':'not_observed',coverage:t==='codex'?'Local function and MCP tools; hosted tools may bypass hooks.':'Native events only; cairn_tool_* calls are recorded by the gateway.'};
+    return {...status,declaredCapabilities:latest?.capabilities??{},observedCapabilities:observedCapabilities(latest?.seen??{}),observedEvents:sessions.map(s=>s.seen),hooksTrust:latest?.seen.SessionStart?'startup_observed':'not_observed',branches:{orchestration:'host agent decides',reporting:'checkpoint',nativeLifecycle:t!=='pi',lifecycleObserved:!!(latest?.seen.SubagentStart||latest?.seen.SubagentStop),coverage:'Only explicitly bound agent IDs in the current goal/epoch; otherwise main-agent reports. No child transcripts or tool IO.'},coverage:t==='codex'?'Local function and MCP tools; hosted tools may bypass hooks.':'Native events only; cairn_tool_* calls are recorded by the gateway.'};
    });
    const client=new Client({name:'cairn-doctor',version:VERSION});let mcp:any;
    try{

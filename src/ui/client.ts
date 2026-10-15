@@ -70,7 +70,7 @@ function renderTasks() {
     const card=create('button','task-card');card.dataset.taskId=task.id;
     const header=create('div','task-card-header');header.append(create('span','mono',task.id.slice(0,18)),create('span',`phase ${task.phase.key}`,task.phase.label));
     const bottom=create('div','task-bottom');bottom.append(create('span','',`${task.owner.host} · 更新于 ${formatTime(task.updatedAt)}`),create('span','card-open','打开任务 →'));
-    card.append(header,create('h2','',task.goal),create('div','card-summary',`${task.progress.satisfied}/${task.progress.total} 目标条件已满足 · ${task.metrics.supported} 条已形成结论`),bottom);
+    card.append(header,create('h2','',task.goal),create('div','card-summary',`${task.progress.satisfied}/${task.progress.total} 目标条件已满足 · ${task.metrics.supported} 条已形成结论${task.branchCounts.total?` · ${task.branchCounts.total} 个排查分支`:''}`),bottom);
     card.onclick=()=>selectTask(task.id);cards.append(card);
   }
   if(!shown.length)cards.append(create('div','task-empty','没有匹配的任务。'));
@@ -186,6 +186,8 @@ function renderCurrent() {
   text('owner', `${task.owner.host} · ${task.owner.epoch > 1 ? `接管 ${task.owner.epoch - 1} 次` : '主会话'}`);
   text('created', `创建于 ${new Date(task.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}`);
   text('updated', `最近更新 ${formatTime(task.updatedAt)}`);
+  byId('branch-meta').hidden=!task.branchCounts.total;
+  text('branch-meta',`自主排查 · ${task.branchCounts.total} 个分支 · ${task.branchCounts.delegated} 个委派分支${task.branchCounts.review?` · ${task.branchCounts.review} 个待汇总`:''}`);
   tick(); renderGraph(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); renderReplay(); void renderDetails();
 }
 function tick() {
@@ -216,7 +218,7 @@ function renderGraph() {
       : `M${a.x + width},${a.y + height / 2} C${a.x + width + 35},${a.y + height / 2} ${b.x - 35},${b.y + height / 2} ${b.x},${b.y + height / 2}`;
     const marker = edge.state === 'running' ? 'arrow-running' : edge.state === 'refuted' ? 'arrow-red' : edge.state === 'pending' || edge.state === 'context' ? 'arrow-pending' : 'arrow';
     const line = svg('path', { d: path, class: `edge ${edge.state} relation-${edge.relation}`, 'marker-end': `url(#${marker})`, 'data-edge-from': edge.from, 'data-edge-to': edge.to, 'data-relation': edge.relation });
-    line.append(svg('title', {}, { context: '背景与记录', stage: '任务包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+    line.append(svg('title', {}, { context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', goal: '目标与验收条件' }[edge.relation])); world.append(line);
   }
   for (const node of nodes.values()) {
     const palette = graphPalette[node.status], group = svg('g', { class: `node status-${node.status}${selectedNode === node.id ? ' selected' : ''}`, transform: `translate(${node.x},${node.y})`, role: 'button', tabindex: '0', 'aria-label': `${graphKindLabels[node.kind]}：${node.label}，${node.state}`, 'data-node-id': node.id, 'data-node-kind': node.kind, 'data-node-status': node.status });
@@ -265,13 +267,33 @@ byId('zoom-in').onclick = () => zoom(1.2); byId('zoom-out').onclick = () => zoom
 
 function metadata(parent: HTMLElement, key: string, value: unknown) { const row = create('div', 'meta'); row.append(create('span', '', key), create('span', '', String(value ?? '—'))); parent.append(row); }
 function heading(parent: HTMLElement, value: string) { parent.append(create('h3', '', value)); }
-function reference(parent: HTMLElement, id: string, kind: 'obs' | 'claim') {
-  const node = nodes.get(`${kind}:${id}`), button = create('button', 'ref-button', node ? `${kind === 'obs' ? '↗ 原始观测' : '↗ 结论'} · ${short(node.label, 30)}` : id);
+function reference(parent: HTMLElement, id: string, kind: 'obs' | 'claim' | 'branch') {
+  const node = nodes.get(`${kind}:${id}`), button = create('button', 'ref-button', node ? `${kind === 'obs' ? '↗ 原始观测' : kind === 'branch' ? '↗ 排查分支' : '↗ 结论'} · ${short(node.label, 30)}` : id);
   button.onclick = () => { switchView('graph'); inspect(`${kind}:${id}`); }; parent.append(button);
 }
 async function renderDetails() {
   const task = current; if (!task) return;
   const generation = ++detailGeneration, panel = byId('details'); panel.replaceChildren();
+  if(selectedNode.startsWith('branch:')){
+    const branch=task.branches.find(item=>`branch:${item.key}`===selectedNode);
+    if(branch){
+      text('detail-kind','排查分支');panel.append(create('div',`detail-tag ${branch.status}`,branch.statusLabel),create('h2','',branch.title));
+      metadata(panel,'负责人',branch.executorLabel);metadata(panel,'分支标识',branch.key);
+      if(branch.agentId)metadata(panel,'宿主 Agent ID',branch.agentId);
+      metadata(panel,'状态来源',branch.activitySource==='host'?'主 Agent 状态与宿主生命周期':'主 Agent 报告');
+      if(branch.activitySource==='host')metadata(panel,'最近宿主事件',branch.activityStatus==='returned'?'执行已结束':'开始执行');
+      metadata(panel,'负责人代次',branch.epoch);metadata(panel,'最近更新',formatTime(branch.updatedAt));
+      if(branch.question){heading(panel,'排查问题');panel.append(create('div','detail-text',branch.question));}
+      if(branch.rationale){heading(panel,'选择此分支的原因');panel.append(create('div','detail-text',branch.rationale));}
+      if(branch.summary){heading(panel,'结果 / 停止原因');panel.append(create('div','detail-text',branch.summary));}
+      if(branch.parent){heading(panel,'所属分支');reference(panel,branch.parent,'branch');}
+      const children=task.branches.filter(item=>item.parent===branch.key);if(children.length){heading(panel,'展开的子分支');for(const child of children)reference(panel,child.key,'branch');}
+      heading(panel,'主 Agent 已登记的结论');for(const claim of task.claims.filter(item=>item.branch===branch.key))reference(panel,claim.id,'claim');
+      if(!task.claims.some(item=>item.branch===branch.key))panel.append(create('p','note','尚未登记此分支的结论与依据。'));
+      panel.append(create('div','notice',branch.status==='awaiting_review'?'助手执行已结束，主 Agent 尚未完成汇总验收。':branch.activitySource==='host'?'宿主事件表示最近一次生命周期状态；分支是否完成仍由主 Agent 审阅，不能据此判断进程此刻存活。':'此分支状态由主 Agent 保存；未匹配到原生生命周期，不代表已验证子 Agent 进程存活。'));
+      return;
+    }
+  }
   if (selectedNode.startsWith('work:')) { const item = task.workItems.find(i => `work:${i.key}` === selectedNode); if (item) { text('detail-kind', '执行阶段'); panel.append(create('div', `detail-tag ${item.status}`, item.statusLabel), create('h2', '', item.title)); if (item.detail) panel.append(create('div', 'detail-text', item.detail)); metadata(panel, '最近更新', formatTime(item.updatedAt)); metadata(panel, '来源', item.source === 'agent' ? 'Agent 报告' : item.source === 'host' ? '宿主事件' : '历史任务记录'); panel.append(create('div', 'notice', '这是最近保存的阶段状态，不代表宿主进程实时存活。')); return; } }
   const node = nodes.get(selectedNode) ?? nodes.get('origin')!; if (!node) return;
   text('detail-kind', graphKindLabels[node.kind]);
@@ -303,6 +325,7 @@ async function renderDetails() {
     if (node.kind === 'basis') panel.append(create('div', 'detail-text', node.data.text));
     metadata(panel, '结论修订', node.data.revision); metadata(panel, '当前状态', statuses[node.data.status] ?? node.data.status);
     metadata(panel, '依据来源', node.data.provenance === 'agent' ? 'AI 整理' : '采集记录与 Agent 解释');
+    if(node.data.branch){heading(panel,'排查分支');reference(panel,node.data.branch,'branch');}
     if (node.data.basis) { heading(panel, '整理的依据'); panel.append(create('div', 'detail-text', node.data.basis)); }
     if (node.data.references?.length) { heading(panel, '文件与链接引用'); for (const ref of node.data.references) sourceReference(panel, ref); }
     if (node.data.supports.length) { heading(panel, '支持的原始观测'); node.data.supports.forEach((id: string) => reference(panel, id, 'obs')); }
@@ -341,6 +364,7 @@ function renderBasis() {
     const card = create('section', `basis-card ${claim.status}`), top = create('div', 'basis-header');
     top.append(create('span', `pill ${claim.status}`, statuses[claim.status]), create('span', 'note', claim.provenance === 'agent' ? 'AI 整理的依据' : '采集记录与 Agent 解释'));
     card.append(top, create('h3', '', claim.text));
+    if(claim.branch)reference(card,claim.branch,'branch');
     if (claim.basis) card.append(create('p', 'basis-text', claim.basis));
     if (claim.references?.length) { const refs = create('div', 'source-references'); for (const ref of claim.references) sourceReference(refs, ref); card.append(refs); }
     if (claim.supports.length || claim.refutes.length) { const refs = create('div', 'source-references'); claim.supports.forEach(id => reference(refs, id, 'obs')); claim.refutes.forEach(id => reference(refs, id, 'obs')); card.append(refs); }

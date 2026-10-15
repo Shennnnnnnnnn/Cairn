@@ -7,8 +7,24 @@ export type EvidenceMode = 'curated' | 'captured';
 export interface Budget { deadline?: string; maxCalls?: number; maxParallel?: number }
 export interface ProgressInput {
   key: string; title: string; status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled'; detail?: string;
+  branch?: string;
 }
 export interface ProgressItem extends ProgressInput { source: 'agent' | 'host'; updatedAt: string }
+export type BranchStatus = 'pending' | 'running' | 'awaiting_review' | 'completed' | 'blocked' | 'cancelled';
+export interface BranchInput {
+  key: string; title: string; status: BranchStatus; executor?: 'main' | 'subagent';
+  parent?: string | null; question?: string; rationale?: string; assignee?: string;
+  agentId?: string | null; summary?: string;
+}
+export interface Branch extends Omit<BranchInput, 'executor' | 'parent' | 'agentId'> {
+  executor: 'main' | 'subagent'; parent?: string; agentId?: string;
+  epoch: number; attempt: number; updatedAt: string;
+}
+/** Minimal host lifecycle metadata, never a tool call or a child transcript. */
+export interface AgentRun {
+  agentId: string; host: Host; epoch: number; attempt: number; type?: string;
+  status: 'running' | 'returned'; startedAt?: string; returnedAt?: string;
+}
 export interface Criterion { id: string; text: string; claimIds: string[] }
 export interface Observation {
   id: string; callId: string; tool: string; input: unknown; output: unknown;
@@ -21,6 +37,7 @@ export interface Claim {
   supports: string[]; refutes: string[]; scope: Scope; revision: number;
   key?: string; updatedAt?: string;
   basis?: string; references?: string[]; provenance?: 'agent' | 'captured'; relatedCriteria?: string[];
+  branch?: string;
 }
 export interface Action {
   id: string; purpose: string; stopCondition: string;
@@ -37,8 +54,10 @@ export interface CheckpointInput {
   findings?: {
     key?: string; text: string; status?: Claim['status']; evidence?: string[]; against?: string[];
     covers?: string[]; scope?: Scope; basis?: string; references?: string[];
+    branch?: string;
   }[];
   progress?: ProgressInput[];
+  branches?: BranchInput[];
   questions?: string[]; next?: string;
   report?: { summary?: string };
 }
@@ -54,6 +73,7 @@ export interface Task {
   checkpoint?: Checkpoint;
   /** Older records omit evidenceMode and retain captured semantics. */
   evidenceMode?: EvidenceMode; progress?: ProgressItem[];
+  branches?: Branch[]; agentRuns?: AgentRun[];
   lastCheck?: { revision: number; fingerprint: string };
   continuation?: { revision: number; count: number }; interrupted: boolean;
 }

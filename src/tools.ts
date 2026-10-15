@@ -3,6 +3,7 @@ import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv
 import { Engine } from './core/engine.js';
 import { Gateway } from './gateway.js';
 import { CairnError, type Session, type CheckpointInput } from './core/types.js';
+import { branchStatus, branchRun } from './core/branches.js';
 
 const text = z.string().trim().min(1);
 const scope = z.record(text.max(200),text.max(2000));
@@ -12,8 +13,10 @@ const finding = z.object({
   evidence:z.array(text).max(100).optional(), against:z.array(text).max(100).optional(),
   basis:text.max(16000).optional(),references:z.array(text.max(4000)).max(100).optional(),
   covers:z.array(text).max(100).optional(), scope:scope.optional(),
+  branch:text.max(200).optional(),
 }).strict();
-const progress=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','completed','blocked','cancelled']),detail:text.max(4000).optional()}).strict();
+const progress=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','completed','blocked','cancelled']),detail:text.max(4000).optional(),branch:text.max(200).optional()}).strict();
+const branch=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','awaiting_review','completed','blocked','cancelled']),executor:z.enum(['main','subagent']).optional(),parent:text.max(200).nullable().optional(),question:text.max(4000).optional(),rationale:text.max(4000).optional(),assignee:text.max(200).optional(),agentId:text.max(500).nullable().optional(),summary:text.max(8000).optional()}).strict();
 const draft = z.object({
   summary:text.max(16000).optional(),
 }).strict();
@@ -21,26 +24,27 @@ const checkpointFields = {
   summary:text.max(16000), findings:z.array(finding).max(100).optional(),
   questions:z.array(text.max(2000)).max(50).optional(), next:text.max(4000).optional(), report:draft.optional(),
   progress:z.array(progress).max(100).optional(),
+  branches:z.array(branch).max(100).optional(),
 };
 const schemas = {
   cairn_start:z.object({
     session_id:text.optional(), goal:text.max(12000), origin:text.default('user request'),
     criteria:z.array(text.max(4000)).min(1).max(100).optional(), constraints:z.array(text.max(2000)).max(50).default([]),
     scope:scope.optional(),
-    evidence_mode:z.enum(['curated','captured']).optional(),progress:z.array(progress).max(100).optional(),
+    evidence_mode:z.enum(['curated','captured']).optional(),progress:z.array(progress).max(100).optional(),branches:z.array(branch).max(100).optional(),
     budget:z.object({deadline:z.iso.datetime().optional(),maxCalls:z.number().int().positive().optional(),maxParallel:z.number().int().min(1).max(32).optional()}).strict().optional(),
   }).strict(),
   cairn_resume:z.object({session_id:text.optional(),task_id:text,takeover:z.boolean().default(false)}).strict(),
-  cairn_read:z.object({view:z.enum(['context','details','evidence','history','tasks']).default('context'),task_id:text.optional(),ref:text.optional(),offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(32768).optional(),revision:z.number().int().nonnegative().optional()}).strict(),
+  cairn_read:z.object({view:z.enum(['context','details','evidence','history','tasks','branches']).default('context'),task_id:text.optional(),ref:text.optional(),offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(32768).optional(),revision:z.number().int().nonnegative().optional()}).strict(),
   cairn_checkpoint:z.object(checkpointFields).strict(),
   cairn_finish:z.object({...checkpointFields,summary:checkpointFields.summary.optional(),outcome:z.enum(['completed','suspended']).default('completed')}).strict(),
 };
 const descriptions:Record<keyof typeof schemas,string> = {
-  cairn_start:'Start a persistent goal. General tasks default to curated evidence: use any host tools freely; Cairn records no calls/results and imposes no call/concurrency quota. Preserve initial tool guidance in constraints. Optional progress items describe meaningful work. Completion depends on goal criteria and findings with basis/file/URL references. Deadline is advisory here. Explicit evidence_mode=captured enables optional automatic capture. Generic cairn mcp and Pi bind session identity automatically: omit session_id. Native Claude/Codex adapters supply the real startup-hook session_id once.',
+  cairn_start:'Autonomously assess independent investigation branches and choose the useful number of host-native subagents under host/user limits, including zero. Optional branches {key,title,status,executor,parent,question,rationale,assignee,agentId,summary} track the decision and work. Cairn does not spawn them. Start a persistent goal. General tasks default to curated evidence: use any host tools freely; Cairn records no calls/results and imposes no call/concurrency quota. Preserve initial tool guidance in constraints. Optional progress items describe meaningful work. Completion depends on goal criteria and findings with basis/file/URL references. Deadline is advisory here. Explicit evidence_mode=captured enables optional automatic capture. Generic cairn mcp and Pi bind session identity automatically: omit session_id. Native Claude/Codex adapters supply the real startup-hook session_id once.',
   cairn_resume:'Restore a saved goal and bind this connection. Supply task_id; generic cairn mcp and Pi omit session_id because it is already bound. Native Claude/Codex adapters supply the real startup-hook session_id once. Moving to a different owner requires explicit takeover=true. Returns bounded recovery context.',
-  cairn_read:'Read bounded context, task details, curated findings by key/id, optional captured evidence by E1/result_ref, paginated history, or saved tasks. Defaults to bound task. Large records use character offsets; indexes/history use record offsets. Supply revision when continuing details pages to detect changes.',
-  cairn_checkpoint:'Save meaningful progress and findings together. In default curated mode, findings use basis (what supports the conclusion) and references (file paths/URLs); nothing is automatically verified or captured. covers associates supported findings with c1 etc. Optional progress items update work status by readable key. Captured mode also supports actual E1/result_ref links. Preserve unresolved questions and update only at milestones; no tool-by-tool bookkeeping or private reasoning.',
-  cairn_finish:'Finish in one call with summary and evidence-backed findings, or suspend with unresolved questions. References and goal coverage are validated, with report citations generated automatically. Failed checks keep the task active and return gaps. Retrying a completed finish without new content returns its status.',
+  cairn_read:'Use view=branches for paginated branch states and reviewed findings; ref selects a branch key. Read bounded context, task details, curated findings by key/id, optional captured evidence by E1/result_ref, paginated history, or saved tasks. Defaults to bound task. Large records use character offsets; indexes/history use record offsets. Supply revision when continuing details pages to detect changes.',
+  cairn_checkpoint:'Update branches by key; link findings/progress with branch. Use pending before launch, running after actual launch, awaiting_review when returned, completed after main-agent review, blocked or cancelled when stopped. Completed/cancelled branches need a result/stopping summary. agentId is optional and must be a real host ID when supplied. Never set host lifecycle metadata. Save meaningful progress and findings together. In default curated mode, findings use basis (what supports the conclusion) and references (file paths/URLs); nothing is automatically verified or captured. covers associates supported findings with c1 etc. Optional progress items update work status by readable key. Captured mode also supports actual E1/result_ref links. Preserve unresolved questions and update only at milestones; no tool-by-tool bookkeeping or private reasoning.',
+  cairn_finish:'Before completion, review or cancel unresolved branches and settle known running child agents; suspension always remains possible. Finish in one call with summary and evidence-backed findings, or suspend with unresolved questions. References and goal coverage are validated, with report citations generated automatically. Failed checks keep the task active and return gaps. Retrying a completed finish without new content returns its status.',
 };
 export interface ToolDefinition { name:string; description:string; inputSchema:Record<string,unknown>; readOnly?:boolean }
 export function coreCatalog():ToolDefinition[] {
@@ -147,6 +151,16 @@ export class ToolRuntime {
     const task=input.task_id?this.engine.store.get(input.task_id):this.current().task;
     if(input.revision!==undefined&&input.revision!==task.revision)throw new CairnError('revision_changed','Task changed while paging; restart reading at offset 0 with its new revision.');
     if(view==='context')return {...this.engine.context(task.id),upstream:this.catalogStatus};
+    if(view==='branches'){
+      const items=(task.branches??[]).map(branch=>({...branch,status:branchStatus(task,branch),recordedStatus:branch.status,activity:branchRun(task,branch)??{source:'agent',verification:'Main-agent report; no matching native lifecycle observed'},findings:task.claims.filter(claim=>claim.branch===branch.key).map(claim=>({id:claim.id,key:claim.key,status:claim.status,text:claim.text.slice(0,1500)}))}));
+      if(input.ref){
+        const item=items.find(branch=>branch.key===input.ref);if(!item)throw new CairnError('not_found','Branch does not belong to this task');
+        const serialized=JSON.stringify(item),limit=input.limit??16384;
+        return serialized.length<=limit&&offset===0?{taskId:task.id,revision:task.revision,item}:{taskId:task.id,revision:task.revision,encoding:'json',chunk:serialized.slice(offset,offset+limit),offset,totalCharacters:serialized.length,nextOffset:offset+limit<serialized.length?offset+limit:undefined};
+      }
+      const limit=Math.min(input.limit??20,50);
+      return {taskId:task.id,revision:task.revision,total:items.length,items:items.slice(offset,offset+limit).map(({question,rationale,summary,...branch})=>({...branch,question:question?.slice(0,1000),rationale:rationale?.slice(0,1000),summary:summary?.slice(0,2000),findings:branch.findings.slice(0,12)})),nextOffset:offset+limit<items.length?offset+limit:undefined};
+    }
     if(view==='details'){
       const {observations,...details}=task;
       const serialized=JSON.stringify({...details,evidenceCount:observations.length}),limit=input.limit??16384;

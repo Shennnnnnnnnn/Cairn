@@ -1,11 +1,13 @@
 import type { Task } from './core/types.js';
+import { branchLabels, branchStatus } from './core/branches.js';
 const escape=(value:unknown)=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const statuses:Record<string,string>={pending:'待推进',running:'执行中',completed:'已完成',blocked:'受阻',cancelled:'已取消',proposed:'待验证',supported:'已支持',refuted:'已反驳',inconclusive:'依据不足'};
 export function markdown(task:Task){
  const report=task.report,curated=task.evidenceMode==='curated';
  const steps=task.progress?.length?`## 阶段进度\n\n${task.progress.map(p=>`- ${statuses[p.status]??p.status}${task.status!=='active'&&p.status==='running'?'（历史记录，当前任务已结束）':''}：${p.title}${p.detail?` — ${p.detail}`:''}`).join('\n')}\n\n`:'';
+ const branches=task.branches?.length?`## 排查分支\n\n${task.branches.map(branch=>`- ${branchLabels[branchStatus(task,branch)]}：${branch.title}（${branch.executor==='main'?'主 Agent':branch.assignee??'子 Agent'}${branch.parent?`；所属分支 ${branch.parent}`:''}）${branch.question?`\n  - 问题：${branch.question}`:''}${branch.summary?`\n  - 结果／停止原因：${branch.summary}`:''}`).join('\n')}\n\n`:'';
  const evidence=curated?(report?.curatedReferences??[]).map(c=>`- ${c.statement}\n  - AI 整理的依据：${c.basis??'见引用'}${c.references.length?`\n  - 文件／链接：${c.references.map(r=>'`'+r.replaceAll('`','\\`')+'`').join('、')}`:''}`).join('\n'):(report?.citations??[]).map(c=>`- ${c.observationId}${c.resultRef?` (${c.resultRef})`:''}: ${c.statement}`).join('\n');
- return `# ${task.goal}\n\nStatus: ${task.status}\n\n依据模式：${curated?'AI 整理；引用内容与因果判断未自动核验，不保存工具调用记录。':'自动取证；原始观测与结论分开保存。'}\n\n${steps}## Completion criteria\n\n${task.criteria.map(c=>`- ${c.id}: ${c.text}`).join('\n')}\n\n## Report\n\n${report?.summary??'No report saved.'}\n\n## ${curated?'整理后的依据与引用':'Evidence'}\n\n${evidence||'暂无依据记录。'}\n`;
+ return `# ${task.goal}\n\nStatus: ${task.status}\n\n依据模式：${curated?'AI 整理；引用内容与因果判断未自动核验，不保存工具调用记录。':'自动取证；原始观测与结论分开保存。'}\n\n${branches}${steps}## Completion criteria\n\n${task.criteria.map(c=>`- ${c.id}: ${c.text}`).join('\n')}\n\n## Report\n\n${report?.summary??'No report saved.'}\n\n## ${curated?'整理后的依据与引用':'Evidence'}\n\n${evidence||'暂无依据记录。'}\n`;
 }
 export function html(task:Task){
  const curated=task.evidenceMode==='curated',obs=curated?[]:task.observations,claims=task.claims;

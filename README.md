@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 **Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-Cairn 4.1 gives the model five operations: **start, resume, read, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then saves meaningful progress, conclusions, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
+Cairn 4.2 gives the model five operations: **start, resume, read, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then saves meaningful progress, conclusions, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn keeps the goal and its progress in SQLite, with an optional blue-and-white dashboard. No upstream gateway or tool whitelist is required for an ordinary task.
 
@@ -114,6 +114,16 @@ General curated tasks have **no default call or concurrency quota**. Omit `budge
 - Curated mode rejects `maxCalls` and `maxParallel`: Cairn cannot enforce counts for calls it does not record.
 - A stopped or budget-limited attempt remains incomplete. Save gaps and suspend when needed; tool count is never a completion criterion.
 - Explicit `captured` tasks can enforce call/concurrency/deadline limits on Cairn gateway calls and native tool paths that actually invoke the hooks. This is not a global quota over every host tool path.
+
+## Autonomous investigation branches
+
+The main agent chooses whether and how many host-native helpers are useful from the goal, independent questions, current evidence, coordination cost and host/user limits. No fixed helper count is required; a host without delegation can investigate the same branches in its main session. Cairn does not launch a worker pool.
+
+Persist `branches` through start/checkpoint/finish and link findings or progress with `branch`. The graph shows branch nesting, assignees, pending/running/awaiting-review/completed/blocked/cancelled states and their replay history. A returned helper still needs main-agent review. Close or cancel outstanding branches before goal completion; suspension remains available immediately.
+
+Codex/Claude native packages register SubagentStart/SubagentStop hooks for explicitly bound IDs in the current task and epoch. Missing or unmatched events, Pi and MCP-only/Multica workflows retain labelled main-agent reports. No child transcript or tool IO is recorded in curated mode. See the [delegation guide](skills/cairn/references/delegation.md).
+
+See the [runnable autonomous-investigation example](docs/examples/autonomous-investigation.zh-CN.md) and its local Codex validation record.
 
 ## Blue-and-white progress dashboard
 

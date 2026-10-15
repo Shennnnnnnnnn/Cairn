@@ -14,12 +14,12 @@ export function isCairnTool(host:Host,name:string){
  const prefix=host==='claude'?/^mcp__(?:plugin_cairn_cairn|cairn)__/:/^mcp__cairn__/;
  return prefix.test(name)&&local.test(name.replace(prefix,''));
 }
-export interface NativeEvent { type:string; sessionId:string; cwd:string; callId?:string; tool?:string; input?:unknown; output?:unknown; isError?:boolean; aborted?:boolean; stopHookActive?:boolean }
+export interface NativeEvent { type:string; sessionId:string; cwd:string; callId?:string; tool?:string; input?:unknown; output?:unknown; isError?:boolean; aborted?:boolean; stopHookActive?:boolean; agentId?:string; agentType?:string }
 export function normalize(host:Host,event:any):NativeEvent{
  if(host==='pi')return {type:({session_start:'SessionStart',tool_call:'PreToolUse',tool_result:'PostToolUse',session_before_compact:'PreCompact',session_compact:'PostCompact',session_shutdown:'SessionEnd',agent_before_settle:'Stop',agent_settled:'Settled'} as Record<string,string>)[event.type]??event.type,
   sessionId:event.sessionId,cwd:event.cwd,callId:event.toolCallId,tool:event.toolName,input:event.input,
   output:event.structuredContent?{structuredContent:event.structuredContent,content:event.content}: {content:event.content,details:event.details},isError:event.isError,aborted:event.aborted??event.outcome==='aborted'};
- return {type:event.hook_event_name,sessionId:event.session_id,cwd:event.cwd,callId:event.tool_use_id,tool:event.tool_name,input:event.tool_input,output:event.tool_response??{error:event.error},isError:event.hook_event_name==='PostToolUseFailure'||event.tool_response?.isError===true||event.tool_response?.is_error===true,stopHookActive:event.stop_hook_active};
+ return {type:event.hook_event_name,sessionId:event.session_id,cwd:event.cwd,callId:event.tool_use_id,tool:event.tool_name,input:event.tool_input,output:event.tool_response??{error:event.error},isError:event.hook_event_name==='PostToolUseFailure'||event.tool_response?.isError===true||event.tool_response?.is_error===true,stopHookActive:event.stop_hook_active,agentId:typeof event.agent_id==='string'?event.agent_id:undefined,agentType:typeof event.agent_type==='string'?event.agent_type:undefined};
 }
 /** Only Codex's known plan contract is interpreted. The caller must already
  * possess a captured call's task/epoch association; curated hooks never use it.
@@ -38,13 +38,30 @@ export function nativeProgress(host:Host,event:NativeEvent):ProgressInput[]|unde
 }
 export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context?:string;deny?:string;continue?:string}{
  if(!event.sessionId||!event.cwd)throw new CairnError('invalid_event','Host event needs session id and cwd');
+ // Child tool/Stop hooks can carry the parent's session id. They must never
+ // suspend its goal, request continuation, or capture results as the parent.
+ const lifecycle=['SubagentStart','SubagentStop'].includes(event.type);
  const session:Session={host,sessionId:event.sessionId,cwd:event.cwd};
+ const actor=event.agentId,seen=engine.store.session(session)?.seen??{};
+ if(actor&&!lifecycle){
+  if(seen[`child:${actor}`])return {};
+  // Named primary agents can carry agent_id as well. Their SessionStart
+  // establishes that identity; unknown actor tool/Stop events remain ignored.
+  if(event.type==='SessionStart')engine.store.register(session,undefined,`main:${actor}`,engine.at());
+  else if(!seen[`main:${actor}`])return {};
+ }
  engine.store.register(session,event.type==='SessionStart'?nativeCapabilities:undefined,event.type,engine.at());
  if(event.tool&&isCairnTool(host,event.tool))return {};
  const nativeCallId=event.callId?`${host}:${event.sessionId}:${event.callId}`:undefined;
  // The host may switch goals while an old native call is still returning. Its
  // persisted call id identifies the original task; the current binding does not.
  const currentTask=engine.active(session);
+ if(lifecycle){
+  if(!event.agentId)return {};
+  if(event.type==='SubagentStart')engine.store.register(session,undefined,`child:${event.agentId}`,engine.at());
+  try{const bound=engine.store.taskForAgent(session,event.agentId);if(bound)engine.recordAgentLifecycle(bound.id,session,event.agentId,event.type==='SubagentStart'?'started':'returned',event.agentType);}catch{return {};}
+  return event.type==='SubagentStart'&&currentTask?.status==='active'?{context:'The Cairn parent goal remains owned by the main agent. Investigate only the delegated question and return findings, basis and file/link references. Do not resume/take over or finish the parent goal. The main agent reviews and records your result.'}:{};
+ }
  const task=event.type.startsWith('PostToolUse')&&nativeCallId?engine.store.taskForCall(nativeCallId)??currentTask:currentTask;
  const marker=host==='pi'?'Cairn tools are bound to this native Pi session. Omit session_id; do not invent one.':`Cairn host=${host} session_id=${session.sessionId}. Supply this real session_id only on the first cairn_start or cairn_resume of this MCP connection; subsequent calls are already bound. Never guess a session id.`;
  if(event.type==='SessionStart'){
@@ -96,7 +113,7 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
 export function hookOutput(event:NativeEvent,result:ReturnType<typeof handleNative>){
  if(result.deny)return {hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:result.deny}};
  if(result.continue)return {decision:'block',reason:result.continue};
- if(result.context&&['SessionStart','PostToolUse','PreToolUse'].includes(event.type))return {hookSpecificOutput:{hookEventName:event.type,additionalContext:result.context}};
+ if(result.context&&['SessionStart','PostToolUse','PreToolUse','SubagentStart'].includes(event.type))return {hookSpecificOutput:{hookEventName:event.type,additionalContext:result.context}};
  // Compaction context is restored by SessionStart(compact), Pi before_agent_start,
  // and cairn_read; unsupported hook outputs stay empty.
  return {};

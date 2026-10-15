@@ -21,6 +21,7 @@ test('five-tool MCP lifecycle binds once, captures native evidence, and restores
  try{
   const tools=(await client.listTools()).tools;
   assert.deepEqual(tools.map(t=>t.name),['cairn_start','cairn_resume','cairn_read','cairn_checkpoint','cairn_finish']);
+  assert.ok(tools.every(tool=>tool.annotations?.destructiveHint===false&&tool.annotations?.openWorldHint===false));
   assert.ok(!(tools.find(t=>t.name==='cairn_finish')!.inputSchema.properties as any).session_id);
   const context=await call('cairn_start',{session_id:session.sessionId,goal:'Verify native marker',evidence_mode:'captured'}),taskId=context.taskId;
   handleNative(engine,'claude',{type:'PreToolUse',sessionId:session.sessionId,cwd:session.cwd,callId:'read1',tool:'Read',input:{path:'evidence.txt'}});

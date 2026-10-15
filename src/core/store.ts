@@ -46,6 +46,15 @@ export class Store {
     if(rows.length>1)throw new CairnError('ambiguous_call','Tool call belongs to multiple tasks');
     return rows[0]?JSON.parse(rows[0].state as string):undefined;
   }
+  taskForAgent(session: Session, agentId: string): Task | undefined {
+    const rows=this.db.prepare(`SELECT state FROM tasks WHERE json_extract(state,'$.status')!='completed'
+      AND json_extract(state,'$.owner.host')=? AND json_extract(state,'$.owner.sessionId')=? AND json_extract(state,'$.owner.cwd')=?
+      AND (EXISTS(SELECT 1 FROM json_each(state,'$.branches') b WHERE json_extract(b.value,'$.agentId')=? AND json_extract(b.value,'$.epoch')=json_extract(state,'$.owner.epoch'))
+        OR EXISTS(SELECT 1 FROM json_each(state,'$.agentRuns') r WHERE json_extract(r.value,'$.agentId')=? AND json_extract(r.value,'$.epoch')=json_extract(state,'$.owner.epoch')))`)
+      .all(session.host,session.sessionId,session.cwd,agentId,agentId);
+    if(rows.length>1)throw new CairnError('ambiguous_agent','This child ID is bound to multiple unfinished goals; lifecycle attribution is unavailable');
+    return rows[0]?JSON.parse(rows[0].state as string):undefined;
+  }
   save(task: Task, kind: string, payload: unknown, at: string) {
     // A savepoint is atomic both inside an Engine transaction and for direct
     // Store callers. State, event and its historical frame can never diverge.

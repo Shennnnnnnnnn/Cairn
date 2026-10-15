@@ -11,7 +11,10 @@ export async function startMcp(engine:Engine,session:Session) {
   const server=new Server({name:'cairn',version:VERSION},{capabilities:{tools:{}}});
   server.setRequestHandler(ListToolsRequestSchema,async()=>({tools:(await runtime.list()).map(tool=>({
     name:tool.name,description:tool.description,inputSchema:tool.inputSchema as {type:'object'},
-    annotations:{readOnlyHint:tool.readOnly??false,openWorldHint:tool.name.startsWith('cairn_tool_')},
+    // The five core tools only append/update local goal records. Omitting this
+    // hint defaults to destructive in MCP and can block ordinary noninteractive
+    // CLI runs. Forwarded tools retain the conservative upstream/default policy.
+    annotations:{readOnlyHint:tool.readOnly??false,openWorldHint:tool.name.startsWith('cairn_tool_'),...(!tool.name.startsWith('cairn_tool_')?{destructiveHint:false}:{})},
   }))}));
   server.setRequestHandler(CallToolRequestSchema,async(request,extra)=>{
     try {

@@ -1,4 +1,4 @@
-# Cairn 3.0 plugin architecture
+# Cairn 4.2 plugin architecture
 
 Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
 
@@ -65,6 +65,18 @@ No identity is guessed from recent activity or a database row. Read-only inspect
 Subagents can conduct independent checks or work in fresh context using the host's native mechanism. The primary owner reviews the results and saves the canonical checkpoint. Another durable native session can become the owner only through explicit resume/takeover. A child context is not a portable substitute for a new native session, its lifecycle hooks or task fencing.
 
 Takeover increments the epoch and settles the previous owner's in-flight bookkeeping. Old owners cannot mutate or finish the task. In captured mode late observations remain audit-only. Suspension turns running progress items into blocked work, retains their meaning and suppresses continuation prompts. Resumption does not assume a previously running process is still alive. Completed tasks are immutable; repeating a content-free finish returns their recorded result.
+
+## Autonomous investigation branches
+
+The shared skill and tool/context descriptions ask the current model to decide whether and how many host-native helpers are useful. This decision uses independent questions, evidence, coordination cost and host/user limits. There is no Cairn process that schedules model workers. Branches can also be investigated by the main session.
+
+`Branch` persists a stable key, parent, question, executor/assignee, optional real agent ID, status, result/stopping summary, epoch and execution attempt. Checkpoints update branches atomically with findings and progress; each may point to a branch key. Parent cycles, foreign references and duplicate active agent bindings are rejected. Completed/cancelled branches require a summary. Pending, running, blocked or unreviewed branches keep completion incomplete, as do known current-epoch native helpers still running. Suspension can be saved immediately.
+
+Codex/Claude bundles register SubagentStart/SubagentStop. The adapter records minimal lifecycle metadata only for explicitly bound IDs in the active goal and owner epoch, and never stores child transcripts or tool IO. Unknown/internal IDs and unmatched or stale events do not create branches. Child-specific tool/Stop events cannot suspend the parent. Native return is projected as awaiting_review rather than accepted completion. When a helper is assigned new work, its attempt separates prior returned state from the new execution. Hooks can miss a start that precedes ID registration; Pi and generic MCP use explicit reporting. No lifecycle source is claimed when no matching event exists. Doctor reports the installed path and observed events.
+
+The graph projects saved branch membership and nesting, not inferred causal dependencies. It shows assignee and state and links reviewed findings/evidence to their branch. Replay uses the persisted states, including lifecycle changes. Unbranched existing tasks keep their earlier topology.
+
+Official references: [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents), [Codex hooks](https://learn.chatgpt.com/docs/hooks), [Claude hooks](https://code.claude.com/docs/en/hooks), [Pi extensions](https://pi.dev/docs/latest/extensions). Host capability and hook coverage still depend on the installed runtime.
 
 ## Persistence and compact restoration
 

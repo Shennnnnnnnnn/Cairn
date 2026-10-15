@@ -22,7 +22,7 @@ for(const host of ['pi','claude','codex']){
  await json(join(dir,'.mcp.json'),{mcpServers:{cairn:{command:'node',args:['${CLAUDE_PLUGIN_ROOT}/runtime/cairn.mjs','mcp','--host',host]}}});
  await mkdir(join(dir,'scripts'),{recursive:true});
  await writeFile(join(dir,'scripts/hook.mjs'),`process.argv.splice(2,0,"hook","--host",${JSON.stringify(host)});\nawait import("../runtime/cairn.mjs");\n`);
- const events=['SessionStart','PreToolUse','PostToolUse','PreCompact','Stop','SessionEnd'];
+ const events=['SessionStart','PreToolUse','PostToolUse','PreCompact','Stop','SessionEnd','SubagentStart','SubagentStop'];
  if(host==='claude')events.push('PostToolUseFailure');else events.push('Interrupt','PostCompact');
  await json(join(dir,'hooks/hooks.json'),{hooks:Object.fromEntries(events.map(event=>[event,[{hooks:[{type:'command',command:'node "${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs"',timeout:['Interrupt','SessionEnd'].includes(event)?3:5}]}]]))});
 }
