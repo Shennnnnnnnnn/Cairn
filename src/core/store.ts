@@ -1,0 +1,60 @@
+import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync, chmodSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { CairnError, type Task, type Session, type Capabilities } from './types.js';
+
+/** All projections and their audit event commit in the same SQLite transaction. */
+export class Store {
+  readonly db: DatabaseSync;
+  constructor(path: string) {
+    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    this.db = new DatabaseSync(path);
+    if(path!==':memory:')chmodSync(path,0o600);
+    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+      CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, state TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL REFERENCES tasks(id), kind TEXT NOT NULL, payload TEXT NOT NULL, at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS sessions(host TEXT NOT NULL, id TEXT NOT NULL, cwd TEXT NOT NULL, task_id TEXT, epoch INTEGER, capabilities TEXT NOT NULL DEFAULT '{}', seen TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(host,id));
+      CREATE TABLE IF NOT EXISTS matches(id TEXT PRIMARY KEY, team TEXT NOT NULL, deadline TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+  }
+  close() { this.db.close(); }
+  transaction<T>(fn: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE');
+    try { const value = fn(); this.db.exec('COMMIT'); return value; }
+    catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  get(id: string): Task {
+    const row = this.db.prepare('SELECT state FROM tasks WHERE id=?').get(id);
+    if (!row) throw new CairnError('not_found', `Task ${id} does not exist`);
+    return JSON.parse(row.state as string);
+  }
+  save(task: Task, kind: string, payload: unknown, at: string) {
+    this.db.prepare('INSERT INTO tasks VALUES (?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state').run(task.id, JSON.stringify(task));
+    this.db.prepare('INSERT INTO events(task_id,kind,payload,at) VALUES (?,?,?,?)').run(task.id, kind, JSON.stringify(payload), at);
+  }
+  list(): Pick<Task, 'id' | 'goal' | 'status' | 'revision' | 'owner'>[] {
+    return this.db.prepare('SELECT state FROM tasks ORDER BY rowid DESC').all().map(row => {
+      const t: Task = JSON.parse(row.state as string); return { id: t.id, goal: t.goal, status: t.status, revision: t.revision, owner: t.owner };
+    });
+  }
+  register(session: Session, capabilities?: Capabilities, event?: string, at = new Date().toISOString()) {
+    const existing = this.session(session);
+    const seen = { ...(existing?.seen ?? {}), ...(event ? { [event]: at } : {}) };
+    this.db.prepare(`INSERT INTO sessions(host,id,cwd,capabilities,seen) VALUES (?,?,?,?,?)
+      ON CONFLICT(host,id) DO UPDATE SET cwd=excluded.cwd,capabilities=excluded.capabilities,seen=excluded.seen`)
+      .run(session.host, session.sessionId, session.cwd, JSON.stringify(capabilities ?? existing?.capabilities ?? {}), JSON.stringify(seen));
+  }
+  session(session: Session): { taskId?: string; epoch?: number; capabilities: Partial<Capabilities>; seen: Record<string,string> } | undefined {
+    const row = this.db.prepare('SELECT * FROM sessions WHERE host=? AND id=?').get(session.host, session.sessionId);
+    return row ? { taskId: row.task_id as string | undefined, epoch: row.epoch as number | undefined, capabilities: JSON.parse(row.capabilities as string), seen: JSON.parse(row.seen as string) } : undefined;
+  }
+  bind(session: Session, task: Task) {
+    this.register(session);
+    this.db.prepare('UPDATE sessions SET task_id=?,epoch=? WHERE host=? AND id=?').run(task.id, task.owner.epoch, session.host, session.sessionId);
+  }
+  config<T>(key: string): T | undefined { const r = this.db.prepare('SELECT value FROM config WHERE key=?').get(key); return r ? JSON.parse(r.value as string) : undefined; }
+  setConfig(key: string, value: unknown) { this.db.prepare('INSERT INTO config VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value)); }
+  events(taskId: string, after = 0) {
+    return this.db.prepare('SELECT * FROM events WHERE task_id=? AND seq>? ORDER BY seq').all(taskId, after).map(r => ({ seq:r.seq as number,taskId:r.task_id as string,kind:r.kind as string,at:r.at as string,payload: JSON.parse(r.payload as string) }));
+  }
+}

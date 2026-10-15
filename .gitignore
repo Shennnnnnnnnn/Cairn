@@ -5,3 +5,7 @@ __pycache__/
 .playwright-cli/
 datas/
 dispatch.yaml
+node_modules/
+dist/
+.cairn/
+*.tsbuildinfo

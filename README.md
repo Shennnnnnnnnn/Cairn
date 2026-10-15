@@ -1,203 +1,125 @@
-<div align="center">
-
-<img src="./README/banner.png" alt="Cairn Banner"/>
-
 # Cairn
-### More Than Just AI Penetration Testing — Towards General State-Space Search
 
-<p>
-  <a href="https://zc.tencent.com/hackathon" target="_blank" rel="noopener noreferrer">
-    <img src="./README/tencent.png" alt="Tencent" height="55" />
-  </a>
-  <a href="https://zc.tencent.com/hackathon" target="_blank" rel="noopener noreferrer">
-    <img src="./README/tch.png" alt="TCH" height="55" />
-  </a>
-</p>
+English | [简体中文](README.zh-CN.md)
 
-Cairn is a general-purpose problem-solving engine. <br/>It defines no roles, no workflows. Given an origin and a goal, it searches for a path through an unknown state space. <br/>AI Penetration Testing is one such problem — and a proven one.
+**Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-<p>
-  <a href="https://discord.gg/nDSy4NZVP" target="_blank" rel="noopener noreferrer">
-    <img src="https://img.shields.io/badge/Discord-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord" />
-  </a>
-  <a href="https://x.com/le1xia0" target="_blank" rel="noopener noreferrer">
-    <img src="https://img.shields.io/badge/X-000000?style=flat-square&logo=x&logoColor=white" alt="X" />
-  </a>
-</p>
+Your CLI owns the model, tools, sessions and approvals. Cairn preserves an external goal, distinguishes observations from hypotheses, records evidence and checks completion. No Cairn dispatcher, model worker or daemon is needed.
 
-</div>
+## Quick start
 
-<p align="center">
-  <a href="https://www.bilibili.com/video/BV1a8R5BhEVi/" target="_blank" rel="noopener noreferrer">
-    <img src="./README/cairn.png" alt="Cairn runtime screenshot" width="900" />
-  </a>
-</p>
+Requires **Node.js 24 or newer** and an installed, configured host CLI.
 
-## What is Cairn?
+```sh
+npm install
+npm run check
 
-Penetration testing is fundamentally a **directed search through a near-infinite state space**:
-
-- **Origin**: known (target IP, target system)
-- **Goal**: defined (get a shell, capture the flag)
-- **Path**: unknown
-
-This structure is not unique to penetration testing. Vulnerability research, mathematical proof, CTF challenges — any problem with a clear starting point, a clear success condition, and an unknown path in between shares the same shape.
-
-Cairn is built for this class of problems. Penetration testing is the first domain it has been validated on.
-
-The engine is built on a **Blackboard Architecture** with an explicit fact-intent graph. Three primitives are all it needs:
-
-| Concept | Meaning |
-|---------|---------|
-| **Fact** | A confirmed, objective finding written to the board |
-| **Intent** | A declared direction of exploration, not yet executed |
-| **Hint** | Human judgment injected at any time; absorbed by agents on the next read |
-
-The graph grows from `origin` toward `goal`. Every new Fact is a stepping stone; every Intent is a step into the unknown.
-
-Agent Workers run an OODA loop — Observe the full graph, Orient to the current state, Decide on next intents, Act to explore — and write their findings back as new Facts. Workers have no fixed roles. Tasks are generated at runtime from the graph's current state, not from predefined job descriptions.
-
-Agents coordinate exclusively through the shared board (Stigmergy). No direct communication. No information silos.
-
-## Cairn in Action
-
-https://github.com/user-attachments/assets/e557b1ac-dda4-41cb-87dd-9d56dbf05133
-
-
-## How It Works
-
-Three task types, all executed by the same Worker:
-
-| Task | What it does | Output |
-|------|-------------|--------|
-| **Bootstrap** | At project start, attempts to solve the problem directly | Fact + possible Complete |
-| **Reason** | Reads the full graph: is the goal met? What should be explored next? | Complete / new Intents / no-op |
-| **Explore** | Claims one Intent, executes the exploration, reports findings | One Fact |
-
-System architecture:
-
-```
-          ┌──────────────────────────────────┐
-          │           Cairn Server           │
-          │    Facts + Intents + Hints       │
-          └─────────────────┬────────────────┘
-                            │
-                     Read / Write API
-                            │
-          ┌─────────────────┴────────────────┐
-          │             Dispatcher           │
-          │   Schedules tasks, manages       │
-          │   containers, writes protocol    │
-          └──────────┬───────────────┬───────┘
-                     │               │
-     ┌───────────────┴──┐     ┌──────┴──────────────┐
-     │  Worker Container│     │  Worker Container   │
-     │   (Project A)    │     │   (Project B)       │
-     │  ┌────┐  ┌────┐  │     │  ┌────┐  ┌────┐     │
-     │  │ W. │  │ W. │  │     │  │ W. │  │ W. │     │
-     │  └────┘  └────┘  │     │  └────┘  └────┘     │
-     └──────────────────┘     └─────────────────────┘
+# Choose your host; default scope is the current project.
+node bin/cairn.mjs install --target pi
+node bin/cairn.mjs install --target claude
+node bin/cairn.mjs install --target codex
 ```
 
-**Cairn Server** maintains graph consistency only.
+Start a new host session. In Codex, trust the project and review the installed hooks with `/hooks`. Ask:
 
-**Cairn Dispatcher** reads the graph, schedules tasks, spins up and tears down worker containers, and is the sole writer to the protocol. Each project gets its own Worker Container; multiple Agent Workers run concurrently inside it. Agent Workers only receive a prompt and return structured output.
+> Use Cairn to investigate this issue. Define completion criteria, keep hypotheses separate from observations, and produce an evidence-backed report.
 
-Supported worker backends: **Claude Code**, **Codex**, and **Pi**.
+Only create or resume a Cairn task when it is wanted. Other CLI work keeps its normal behavior. Add `--scope user` for personal installation across projects; `--root DIR` selects an explicit root for isolated testing. Model credentials and approval settings remain owned by the host.
 
-## Results
+| Host | Integration |
+| --- | --- |
+| Pi | Self-contained package registered in project/user settings; native tools and lifecycle events |
+| Claude Code | Native plugin registered through a local marketplace, with skills, hooks and MCP |
+| Codex | Native project/user hooks, MCP and skill registration; a marketplace plugin is also built for distribution |
 
-**Tencent Cloud Hackathon · AI Penetration Testing Challenge · 2nd Edition**
+Codex project installation uses native scoped registration to avoid activating a project plugin in the user's global plugin cache. Built packages are under `dist/plugins/{pi,claude,codex}`; each contains its own runtime and can move independently of the checkout.
 
-610 teams · 1,345 participants · top universities and security firms across China
+Other MCP clients can load the common server and `skills/cairn`:
 
-| Metric | Value |
-|--------|-------|
-| Problems solved | **54 / 54 — only team to AK** |
-| Final ranking | 3rd |
-
-> The system had never been tested before the competition. The full pipeline came online for the first time at 4 AM on race day. No training, no tuning, no domain-specific tooling. Zero MCP tools, zero RAG, zero predefined agent roles.
-
-## Further Reading
-
-- <a href="https://mp.weixin.qq.com/s/DlpEH7bVr0xi0VawPJs3XA" target="_blank" rel="noopener noreferrer">The Strongest AI Penetration Testing Agent: Postmortem of the Only Team to Achieve AK at the TCH Tencent Cloud Hackathon Intelligent Penetration Testing Challenge (2nd Edition)</a>
-- <a href="https://mp.weixin.qq.com/s/2rEqFLvkxvYWM3gW170C2w" target="_blank" rel="noopener noreferrer">The Pathless Path: Cairn AI from Penetration Testing to General Problem Solving</a>
-
-## Getting Started
-
-**Prerequisites**
- 
-- macOS or Linux
-- Python ≥ 3.12
-- Docker
-
-
-### Pull required images
- 
-Both setup methods require the worker container image:
- 
-```bash
-docker pull --platform=linux/amd64 ghcr.io/oritera/cairn-worker-container:latest
+```sh
+node /absolute/path/to/Cairn/dist/cairn.mjs mcp --host mcp --session-id my-task-session
 ```
 
-Create your local dispatcher configuration and fill in your LLM endpoints and API keys:
+Claude/Codex startup hooks supply the actual `session_id` for MCP arguments. Pi binds native tools automatically. MCP-only installation does not automatically capture native host tools; manual evidence keeps its manual provenance.
 
-```bash
-cp dispatch.example.yaml dispatch.yaml
-```
- 
-### Docker Compose (recommended)
- 
-Pull the base image used to build Cairn:
- 
-```bash
-docker pull ghcr.io/astral-sh/uv:python3.13-trixie
-```
- 
-```bash
-docker compose up --build
-```
- 
-This starts `cairn-server` on port `8000` and `cairn-dispatcher` once the server passes its health check. The dispatcher mounts `dispatch.yaml` from the project root and connects to Docker via the host socket. Data is persisted to `./datas/cairn/`.
- 
-### Manual
- 
-```bash
-# Start the server
-uv run --project cairn cairn serve
- 
-# Run the dispatcher
-uv run --project cairn cairn dispatch --config dispatch.yaml
- 
-# Run startup health checks only
-uv run --project cairn cairn dispatch --config dispatch.yaml --startup-healthcheck-only
+## Goals and evidence
+
+- **Goal:** observable completion criteria, constraints and budget.
+- **Observation:** real tool inputs/results, time, scope, provenance and original references.
+- **Claim:** proposed, supported, refuted or inconclusive interpretation linked to observations.
+- **Action:** a meaningful step with its purpose and stopping condition.
+- **Hint:** human context with attributed authorship.
+
+SQLite commits state and audit events atomically. Observations stay immutable; claim revisions remain in the event log. Reports must cite eligible evidence supporting completion claims. Code checks references and structure; the agent still reviews causal relevance and counterevidence.
+
+Data defaults to `<workspace>/.cairn/state.db`. Use `CAIRN_DB` or `--db` to override. Keep this directory private and out of Git: it contains raw tool results. Host plugins and task data have separate lifecycles.
+
+## Recovery and inspection
+
+```sh
+node bin/cairn.mjs task list
+node bin/cairn.mjs task show TASK_ID
+node bin/cairn.mjs export TASK_ID --format markdown --out report.md
+node bin/cairn.mjs export TASK_ID --format html --out evidence.html
+node bin/cairn.mjs doctor --target codex
 ```
 
-### Tests
+The HTML export is a standalone evidence graph with expandable original results. No server or network access is needed.
 
-Run the fast regression suite without Docker or live model endpoints:
+Move work to another CLI by calling `cairn_resume` with the task ID and `takeover: true`. It restores goals, hypotheses, evidence indexes and missing criteria, and increments the execution epoch. Old sessions cannot complete the task; late results remain audit-only. Native conversation histories stay with their host.
 
-```bash
-uv run --project cairn --group dev pytest
+`cairn_suspend` saves incomplete progress. Completion hints are bounded and respect user interruption. `doctor` distinguishes declared capabilities from observed events; files existing does not prove hooks are trusted or active.
+
+## Controlled tools and the emergency profile
+
+```sh
+# Replace template names and mappings with the organizer's official tool definitions.
+node bin/cairn.mjs configure --file profiles/emergency.example.json
 ```
 
-## Disclaimer
+The example is an **unconfigured template**. The actual competition whitelist and schemas are still unknown. The gateway supports stdio/HTTP MCP servers and an explicit tool whitelist, with original result capture, budgets and submission checks.
 
-Cairn is a general-purpose problem-solving engine. Although it supports penetration testing, CTF solving, security assessment, and vulnerability research workflows, it is intended to be used only in environments where you have explicit authorization to operate.
+The `emergency` profile requires native integration, a whitelist and team/round/issue/match scope. All rounds share one persistent 30-minute match deadline. Reports require impact evidence, causal level/root cause, real current-round `result_ref` citations and mitigation/fix/prevention. Human hints and manual records cannot satisfy competition evidence.
 
-You are solely responsible for how you use this project. Do not use Cairn against systems, networks, applications, or data without clear prior permission from the owner or operator. Unauthorized security testing, exploitation, or data access may be illegal and may cause harm.
+Submission mappings require `reportPath` and `receiptPath`. The gateway injects the validated saved report at `reportPath`; choose `reportFormat: "markdown"` when the platform expects text. Missing or ambiguous receipts require reconciliation through an allowed receipt tool before another submission. After the real receipt, the team confirms outside the model-callable interface:
 
-The developers and contributors of this project do not endorse or accept responsibility for any misuse, abuse, damage, loss, or legal consequences arising from its use. By using this project, you agree to ensure that your activities comply with all applicable laws, regulations, contractual obligations, and professional or organizational policies in your jurisdiction.
+```sh
+node bin/cairn.mjs confirm TASK_ID
+```
 
-## Star History
+The agent can then complete. The organizer remains authoritative for result reference validation and scoring.
 
-<a href="https://www.star-history.com/#oritera/Cairn&Date" target="_blank" rel="noopener noreferrer">
-  <img src="https://api.star-history.com/svg?repos=oritera/Cairn&type=Date" alt="Star History Chart" />
-</a>
+Hook coverage varies: Codex hosted tools and some specialized paths bypass local hooks. The gateway enforces its own whitelist and deadlines. Native hooks complement the host's sandbox and approvals; they are not a complete security boundary.
 
-## ⚖️ License
-This project is licensed under **GNU AGPLv3** for personal and educational use.
+## Update and uninstall
 
-**Commercial Use**: If you wish to use this project in a commercial or proprietary environment without the AGPL-3.0 open-source obligations, **please contact me to obtain a commercial license.**
+```sh
+node bin/cairn.mjs update --target pi
+node bin/cairn.mjs uninstall --target pi
+```
 
-**Contributions**: By submitting a Pull Request, you agree that your contributions may be used under both the AGPL-3.0 and the project's commercial license.
+Use the original scope/root. The installer merges settings, records its own entries and preserves task data. Uninstall retains user-modified registrations and their runtime, reporting what remains.
+
+## Development and verification
+
+```sh
+npm test                     # Typecheck, build, deterministic tests; no live models
+npm pack --dry-run
+
+# Opt-in: current CLI/model, temporary workspace, native capture and new-session recovery.
+node scripts/host-smoke.mjs pi
+node scripts/host-smoke.mjs claude
+node scripts/host-smoke.mjs codex
+```
+
+Real-host tests use the configured account and may consume quota. Logs stay in the printed temporary directory. Codex test automation trusts the generated hooks for that invocation; normal installation uses regular trust review. Authentication failures are not counted as successful verification.
+
+See [architecture](docs/architecture.md) and [verification](docs/verification.md). The original Python server/dispatcher/container architecture has been replaced; old interfaces and database formats are not migrated.
+
+Labelled synthetic diagnosis cases and the grading rubric are in [evaluations](evaluations/README.md). They separate integration correctness from model diagnostic accuracy.
+
+## Background and license
+
+Cairn originated as a goal-directed exploration engine, validated in the Tencent Cloud AI penetration testing challenge. This version carries its goal, evidence and human-hint ideas into reusable CLI plugins.
+
+Licensed under [AGPL-3.0](LICENSE).

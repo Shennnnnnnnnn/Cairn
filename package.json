@@ -1,0 +1,28 @@
+{
+  "name": "cairn",
+  "version": "1.0.0",
+  "description": "Goal and evidence plugin for Pi, Claude Code and Codex",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "engines": { "node": ">=24.0.0" },
+  "bin": { "cairn": "bin/cairn.mjs" },
+  "files": ["bin", "dist", "skills", "profiles", "docs", "evaluations", "README.md", "README.zh-CN.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "pretest": "npm run build",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "check": "npm test",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@sinclair/typebox": "^0.34.0",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
