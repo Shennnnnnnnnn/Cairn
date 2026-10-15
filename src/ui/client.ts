@@ -1,7 +1,9 @@
 import type { TaskView, TaskSummary, TimelineEvent } from './view.js';
 import type { Observation } from '../core/types.js';
+import { projectGraph, layoutGraph, graphNodeSize, graphPalette, graphKindLabels } from './graph.js';
+import type { GraphNode } from './graph.js';
 
-type GraphNode = { id: string; kind: 'origin' | 'call' | 'action' | 'observation' | 'basis' | 'claim' | 'criterion'; label: string; state: string; x: number; y: number; color: string; fill: string; data: any };
+type PositionedNode = GraphNode & { x: number; y: number };
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const create = <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text?: string): HTMLElementTagNameMap[K] => {
   const element = document.createElement(tag); element.className = className; if (text !== undefined) element.textContent = text; return element;
@@ -13,7 +15,18 @@ const formatDuration = (ms: number) => {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 };
 const short = (value: string, length = 24) => [...value].length > length ? [...value].slice(0, length - 1).join('') + '…' : value;
-function graphLabel(value:string){let width=0,result='';for(const char of value){const next=/[\x00-\x7f]/.test(char)?0.6:1;if(width+next>14.2)return result+'…';width+=next;result+=char;}return result;}
+function graphLines(value: string, maxWidth = 15.2): string[] {
+  const lines: string[] = []; let line = '', width = 0;
+  for (const char of value.replace(/\s+/g, ' ').trim()) {
+    const next = /[\x00-\x7f]/.test(char) ? .56 : 1;
+    if (width + next > maxWidth) { lines.push(line); line = ''; width = 0; if (lines.length === 2) break; }
+    line += char; width += next;
+  }
+  if (line && lines.length < 2) lines.push(line);
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (lines.join('').length < normalized.length && lines[1]) lines[1] = lines[1].slice(0, -1) + '…';
+  return lines.length ? lines : ['未命名'];
+}
 const kinds: Record<string, string> = {
   'task.created': '创建目标', 'task.resumed': '恢复 / 接管任务', 'task.suspended': '暂停任务', 'task.completed': '完成任务',
   'task.checkpoint': '保存检查点', 'task.finished': '更新完成状态',
@@ -23,9 +36,9 @@ const kinds: Record<string, string> = {
 };
 const statuses: Record<string, string> = { proposed: '待验证', supported: '已支持', refuted: '已反驳', inconclusive: '证据不足', planned: '已规划', running: '进行中', completed: '已完成', failed: '失败', cancelled: '已取消', success: '成功', error: '失败' };
 let tasks: TaskSummary[] = [], current: TaskView | undefined, selectedTask = '', selectedNode = 'origin';
-let timeline: TimelineEvent[] = [], nodes = new Map<string, GraphNode>(), activeView = 'progress';
+let timeline: TimelineEvent[] = [], nodes = new Map<string, PositionedNode>(), activeView = 'graph';
 let showAllEvents=false;
-let overviewMode=true,activeInspector='details',layout='vertical';
+let overviewMode=true,activeInspector='details',layout: 'vertical' | 'horizontal' = 'horizontal';
 let refreshBusy = false, refreshAgain = false, detailGeneration = 0;
 let graphSize = { width: 1180, height: 260 }, transform = { x: 15, y: 15, scale: .7 }, needsFit = true;
 let viewportCustomized=false;
@@ -46,7 +59,7 @@ function renderTasks() {
     const button = create('button', `task${task.id === selectedTask ? ' selected' : ''}`); button.dataset.taskId = task.id;
     button.setAttribute('aria-current', task.id === selectedTask ? 'true' : 'false');
     const top = create('div', 'task-top'); top.append(create('i', `dot ${task.status}`), create('span', '', task.phase.label));
-    const bottom = create('div', 'task-bottom'); bottom.append(create('span', '', task.owner.host), create('span', '', `${task.progress.satisfied}/${task.progress.total} 条件 · ${task.workCounts.running} 执行中`));
+    const bottom = create('div', 'task-bottom'); bottom.append(create('span', '', task.owner.host), create('span', '', `${task.progress.satisfied}/${task.progress.total} 目标条件`));
     button.append(top, create('div', 'task-title', task.goal), bottom); button.onclick = () => selectTask(task.id); list.append(button);
   }
   if (!shown.length) list.append(create('div', 'task-empty', tasks.length ? '没有匹配的任务。' : '等待 CLI 创建第一个任务。'));
@@ -54,10 +67,8 @@ function renderTasks() {
   for(const task of shown){
     const card=create('button','task-card');card.dataset.taskId=task.id;
     const header=create('div','task-card-header');header.append(create('span','mono',task.id.slice(0,18)),create('span',`phase ${task.phase.key}`,task.phase.label));
-    const progress=create('progress');progress.max=task.progress.total||1;progress.value=task.progress.satisfied;
-    progress.setAttribute('aria-label',`${task.goal}：${task.progress.satisfied}/${task.progress.total} 条件已满足`);
     const bottom=create('div','task-bottom');bottom.append(create('span','',`${task.owner.host} · 更新于 ${formatTime(task.updatedAt)}`),create('span','card-open','打开任务 →'));
-    card.append(header,create('h2','',task.goal),create('div','card-progress',`${task.workCounts.running} 执行中 · ${task.workCounts.completed} 已完成阶段 · ${task.workCounts.questions} 问题`),progress,bottom);
+    card.append(header,create('h2','',task.goal),create('div','card-summary',`${task.progress.satisfied}/${task.progress.total} 目标条件已满足 · ${task.metrics.supported} 条已形成结论`),bottom);
     card.onclick=()=>selectTask(task.id);cards.append(card);
   }
   if(!shown.length)cards.append(create('div','task-empty','没有匹配的任务。'));
@@ -100,11 +111,8 @@ function renderCurrent() {
   text('goal', task.goal); text('phase', task.phase.label); byId('phase').className = `phase ${task.phase.key}`;
   text('owner', `${task.owner.host} · ${task.owner.epoch > 1 ? `接管 ${task.owner.epoch - 1} 次` : '主会话'}`);
   text('created', `创建于 ${new Date(task.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}`);
-  text('criteria-count', `${task.progress.satisfied} / ${task.progress.total}`);
-  const progress = byId<HTMLProgressElement>('progress'); progress.max = task.progress.total || 1; progress.value = task.progress.satisfied;
   text('updated', `最近更新 ${formatTime(task.updatedAt)}`);
-  text('running-count', task.workCounts.running); text('completed-count', task.workCounts.completed); text('question-count', task.workCounts.questions);
-  tick(); renderGraph(); renderProgress(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); void renderDetails();
+  tick(); renderGraph(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); void renderDetails();
 }
 function tick() {
   if (!current) return;
@@ -121,51 +129,40 @@ function svg(tag: string, attributes: Record<string, string | number> = {}, cont
   if (content !== undefined) element.textContent = content; return element;
 }
 function renderGraph() {
-  const previousSize=graphSize;
-  const task = current!, columns: GraphNode[][] = [[], [], [], []]; nodes.clear();
-  const add = (column: number, kind: GraphNode['kind'], id: string, label: string, state: string, data: any, color: string, fill: string) => {
-    const node: GraphNode = { id, kind, label, state, data, color, fill, x: column * 290 + 15, y: 0 }; columns[column]!.push(node); nodes.set(id, node);
-  };
-  add(0, 'origin', 'origin', task.origin, '起点 / 已知背景', task, '#0f8d83', '#0f8d83');
-  if ((task.evidenceMode ?? 'captured') === 'curated') task.claims.forEach(c => {
-    if (c.basis || c.references?.length) add(1, 'basis', `basis:${c.id}`, c.basis || c.references?.[0] || 'AI 整理的依据', 'Agent 整理 · 引用可核对', c, '#6573e9', '#eef2ff');
-  });
-  task.observations.forEach(o => add(1, 'observation', `obs:${o.id}`, `${o.ref} · ${o.tool}`, `${statuses[o.status]}${o.eligible ? '' : ' · 不参与完成判定'}`, o, o.status === 'error' ? '#d87b89' : '#6573e9', o.status === 'error' ? '#fff1f4' : '#6573e9'));
-  task.claims.forEach(c => add(2, 'claim', `claim:${c.id}`, c.text, statuses[c.status] ?? c.status, c, c.status === 'refuted' ? '#d67e8b' : '#6872d9', c.status === 'refuted' ? '#fff2f5' : c.status === 'supported' ? '#6269e4' : '#e9edff'));
-  task.criteria.forEach(c => add(3, 'criterion', `criterion:${c.id}`, c.text, task.check.unmet.includes(c.id) ? '尚未满足' : '已满足', c, '#df91a5', task.check.unmet.includes(c.id) ? '#fff3f6' : '#f6b6c5'));
-  const count = Math.max(...columns.map(c => c.length), 2),vertical=layout==='vertical';
-  graphSize = vertical?{width:count*255+30,height:565}:{ width: 1140, height: count * 106 + 25 };
-  if(!viewportCustomized&&(graphSize.width!==previousSize.width||graphSize.height!==previousSize.height))needsFit=true;
-  for (const [col,column] of columns.entries()) column.forEach((node, index) => {
-    if(vertical){node.x=20+index*255+(graphSize.width-column.length*255-30)/2;node.y=20+col*145;}
-    else node.y = 20 + index * 106 + (graphSize.height - column.length * 106 - 25) / 2;
-  });
+  const previousSize = graphSize, task = current!, projection = layoutGraph(projectGraph(task), layout);
+  graphSize = { width: projection.width, height: projection.height };
+  nodes = new Map(projection.nodes.map(node => [node.id, node]));
+  if (!viewportCustomized && (graphSize.width !== previousSize.width || graphSize.height !== previousSize.height)) needsFit = true;
   const world = document.getElementById('graph-world')!; world.replaceChildren();
-  const edge = (from: string, to: string, refutes = false) => {
-    const a = nodes.get(from), b = nodes.get(to); if (!a || !b) return;
-    const x = a.x + 225, y = a.y + 38, endY = b.y + 38;
-    const path=vertical?`M${a.x+112},${a.y+79} C${a.x+112},${a.y+114} ${b.x+112},${b.y-35} ${b.x+112},${b.y}`:`M${x},${y} C${x + 35},${y} ${b.x - 35},${endY} ${b.x},${endY}`;
-    world.append(svg('path', { d:path, class: `edge${refutes ? ' refutes' : ''}`, 'marker-end': `url(#${refutes ? 'arrow-red' : 'arrow'})` }));
-  };
-  task.claims.forEach(c => { edge('origin', `basis:${c.id}`); edge(`basis:${c.id}`, `claim:${c.id}`); });
-  if (!task.observations.length && !task.claims.length) task.criteria.forEach(c => edge('origin', `criterion:${c.id}`));
-  task.claims.forEach(c => { c.supports.forEach(o => edge(`obs:${o}`, `claim:${c.id}`)); c.refutes.forEach(o => edge(`obs:${o}`, `claim:${c.id}`, true)); });
-  task.criteria.forEach(c => c.claimIds.forEach(ref => edge(`claim:${ref}`, `criterion:${c.id}`)));
+  const vertical = layout === 'vertical', { width, height } = graphNodeSize;
+  for (const edge of projection.edges) {
+    const a = nodes.get(edge.from)!, b = nodes.get(edge.to)!;
+    const path = vertical
+      ? `M${a.x + width / 2},${a.y + height} C${a.x + width / 2},${a.y + height + 34} ${b.x + width / 2},${b.y - 34} ${b.x + width / 2},${b.y}`
+      : `M${a.x + width},${a.y + height / 2} C${a.x + width + 35},${a.y + height / 2} ${b.x - 35},${b.y + height / 2} ${b.x},${b.y + height / 2}`;
+    const marker = edge.state === 'running' ? 'arrow-running' : edge.state === 'refuted' ? 'arrow-red' : edge.state === 'pending' || edge.state === 'context' ? 'arrow-pending' : 'arrow';
+    const line = svg('path', { d: path, class: `edge ${edge.state} relation-${edge.relation}`, 'marker-end': `url(#${marker})`, 'data-edge-from': edge.from, 'data-edge-to': edge.to, 'data-relation': edge.relation });
+    line.append(svg('title', {}, { context: '背景与记录', stage: '任务包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+  }
   for (const node of nodes.values()) {
-    const group = svg('g', { class: `node${selectedNode === node.id ? ' selected' : ''}`, transform: `translate(${node.x},${node.y})`, role: 'button', tabindex: '0', 'aria-label': `${node.label}，${node.state}`, 'data-node-id': node.id });
-    group.append(svg('rect', { width: 225, height: 79, rx: 11, fill: node.fill, stroke: node.color }));
-    const title = { origin: '目标背景', action: '历史行动', call: '历史工具调用', observation: '原始观测', basis: 'AI 整理的依据', claim: '假设与结论', criterion: '完成条件' }[node.kind];
-    const solid=node.kind==='origin'||node.kind==='action'||node.kind==='observation'&&node.data.status==='success'||node.kind==='claim'&&node.data.status==='supported';
-    group.append(svg('text', { x: 13, y: 18, class: 'type', fill:solid?'#e1e7ff':node.color }, title));
-    group.append(svg('text', { x: 13, y: 40, class: 'label', fill:solid?'#fff':node.kind==='criterion'?'#8b4764':'#535fa3' }, graphLabel(node.label)));
-    group.append(svg('text', { x: 13, y: 62, class: 'state', fill:solid?'#e6ecff':node.color }, short(node.state, 27)));
-    group.append(svg('title', {}, `${node.label}\n${node.state}`));
+    const palette = graphPalette[node.status], group = svg('g', { class: `node status-${node.status}${selectedNode === node.id ? ' selected' : ''}`, transform: `translate(${node.x},${node.y})`, role: 'button', tabindex: '0', 'aria-label': `${graphKindLabels[node.kind]}：${node.label}，${node.state}`, 'data-node-id': node.id, 'data-node-kind': node.kind, 'data-node-status': node.status });
+    group.append(svg('rect', { width, height, rx: 11, fill: palette.fill, stroke: palette.stroke }));
+    group.append(svg('text', { x: 13, y: 18, class: 'type', fill: palette.muted }, graphKindLabels[node.kind]));
+    const lines = graphLines(node.label);
+    lines.forEach((line, i) => group.append(svg('text', { x: 13, y: lines.length === 1 ? 47 : 40 + i * 18, class: 'label', fill: palette.text }, line)));
+    group.append(svg('text', { x: 13, y: 80, class: 'state', fill: palette.muted }, short(node.state, 27)));
+    const met = node.kind === 'goal' ? task.status === 'completed' || task.check.ok : node.kind === 'criterion' ? !task.check.unmet.includes(node.data.id) : node.status === 'completed';
+    if (met) {
+      group.append(svg('circle', { cx: width - 17, cy: 16, r: 8, fill: node.status === 'goal' ? '#d1fae5' : '#eef2ff' }));
+      group.append(svg('text', { x: width - 17, y: 20, 'text-anchor': 'middle', class: 'node-tick', fill: node.status === 'goal' ? '#047857' : '#4f46e5' }, '✓'));
+    }
+    group.append(svg('title', {}, `${graphKindLabels[node.kind]} · ${node.label}\n${node.state}`));
     group.addEventListener('click', () => { if (!dragged) inspect(node.id); });
-    group.addEventListener('keydown', e => { if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') { e.preventDefault(); inspect(node.id); } });
+    group.addEventListener('keydown', event => { if ((event as KeyboardEvent).key === 'Enter' || (event as KeyboardEvent).key === ' ') { event.preventDefault(); inspect(node.id); } });
     world.append(group);
   }
-  if (!nodes.has(selectedNode) && !selectedNode.startsWith('work:')) selectedNode = 'origin';
-  if (needsFit&&activeView==='graph') { needsFit = false; fit(); } else applyTransform();
+  if (!nodes.has(selectedNode)) selectedNode = 'origin';
+  if (needsFit && activeView === 'graph') { needsFit = false; fit(); } else applyTransform();
 }
 function inspect(id: string) { selectedNode = id;switchInspector('details'); document.querySelectorAll<SVGElement>('.node').forEach(node => node.classList.toggle('selected', node.dataset.nodeId === id)); void renderDetails(); }
 function applyTransform() { document.getElementById('graph-world')!.setAttribute('transform', `translate(${transform.x},${transform.y}) scale(${transform.scale})`); }
@@ -201,11 +198,11 @@ function reference(parent: HTMLElement, id: string, kind: 'obs' | 'claim') {
 async function renderDetails() {
   const task = current; if (!task) return;
   const generation = ++detailGeneration, panel = byId('details'); panel.replaceChildren();
-  if (selectedNode.startsWith('work:')) { const item = task.workItems.find(i => `work:${i.key}` === selectedNode); if (item) { text('detail-kind', '阶段进度'); panel.append(create('div', `detail-tag ${item.status}`, item.statusLabel), create('h2', '', item.title)); if (item.detail) panel.append(create('div', 'detail-text', item.detail)); metadata(panel, '最近更新', formatTime(item.updatedAt)); metadata(panel, '来源', item.source === 'agent' ? 'Agent 报告' : item.source === 'host' ? '宿主事件' : '历史任务记录'); panel.append(create('div', 'notice', '这是最近保存的阶段状态，不代表宿主进程实时存活。')); return; } }
+  if (selectedNode.startsWith('work:')) { const item = task.workItems.find(i => `work:${i.key}` === selectedNode); if (item) { text('detail-kind', '执行阶段'); panel.append(create('div', `detail-tag ${item.status}`, item.statusLabel), create('h2', '', item.title)); if (item.detail) panel.append(create('div', 'detail-text', item.detail)); metadata(panel, '最近更新', formatTime(item.updatedAt)); metadata(panel, '来源', item.source === 'agent' ? 'Agent 报告' : item.source === 'host' ? '宿主事件' : '历史任务记录'); panel.append(create('div', 'notice', '这是最近保存的阶段状态，不代表宿主进程实时存活。')); return; } }
   const node = nodes.get(selectedNode) ?? nodes.get('origin')!; if (!node) return;
-  text('detail-kind', { origin: '目标', call: '历史工具调用', action: '历史行动', observation: '原始观测', basis: 'AI 整理的依据', claim: '假设与结论', criterion: '完成条件' }[node.kind]);
-  panel.append(create('div', 'detail-tag', node.state), create('h2', '', node.kind === 'origin' ? task.goal : node.label));
-  if (node.kind === 'origin') {
+  text('detail-kind', graphKindLabels[node.kind]);
+  panel.append(create('div', 'detail-tag', node.state), create('h2', '', node.kind === 'origin' || node.kind === 'goal' ? task.goal : node.label));
+  if (node.kind === 'origin' || node.kind === 'goal') {
     if(task.checkpoint){
       heading(panel,'最新进展');panel.append(create('div','detail-text',task.checkpoint.summary));
       metadata(panel,'检查点时间',formatTime(task.checkpoint.at));
@@ -243,12 +240,6 @@ async function renderDetails() {
     heading(panel, '停止条件'); panel.append(create('div', 'detail-text', node.data.stopCondition));
     heading(panel, '行动结果'); node.data.observationIds.forEach((id: string) => reference(panel, id, 'obs')); return;
   }
-  if (node.kind === 'call') {
-    metadata(panel, '开始时间', formatTime(node.data.startedAt)); metadata(panel, '状态', node.state);
-    const observation = task.observations.find(o => o.callId === node.data.id);
-    if (observation) { heading(panel, '返回结果'); reference(panel, observation.id, 'obs'); }
-    else panel.append(create('p', 'note', '尚未记录返回结果；这条状态不等同于宿主进程的实时存活证明。')); return;
-  }
   metadata(panel,'证据编号',node.data.ref);metadata(panel, '记录时间', formatTime(node.data.capturedAt)); metadata(panel, '来源', { hook: '宿主自动采集', gateway: '受控网关', manual: '手动登记' }[node.data.source as string]);
   metadata(panel, '可用于完成判定', node.data.eligible ? '是（仍需判断证据相关性）' : '否，迟到或任务已停止');
   if (node.data.actor) metadata(panel, '采集会话', `${node.data.actor.host} · ${node.data.actor.sessionId.slice(0, 12)}`);
@@ -268,32 +259,7 @@ function sourceReference(parent: HTMLElement, value: string) {
   if (url) { const link = create('a', 'source-reference', value); link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; parent.append(link); }
   else parent.append(create('div', 'source-reference file-reference', value));
 }
-function renderProgress() {
-  const task = current!, panel = byId('progress-panel'); panel.replaceChildren();
-  const lead = create('section', `progress-lead ${task.status}`);
-  const label = create('div', 'progress-lead-label'); label.append(create('span', `phase ${task.phase.key}`, task.phase.label), create('span', 'note', `Agent 最近报告 · ${formatTime(task.updatedAt)}`));
-  lead.append(label, create('h2', '', task.checkpoint?.summary || (task.status === 'completed' ? '目标已完成，查看下方已满足的条件。' : task.status === 'suspended' ? '任务已暂停，恢复后可继续推进。' : '目标已建立，等待 Agent 报告具体阶段。')));
-  if (task.checkpoint?.next && task.status !== 'completed') lead.append(create('p', '', `下一步：${task.checkpoint.next}`));
-  panel.append(lead);
-  const disclaimer = task.progressSource === 'historical' ? '此任务尚未记录独立阶段，下方展示已保存的目标条件与历史行动。' : task.progressSource === 'none' ? '尚未细分执行阶段。任务处于可继续状态，不代表 Agent 正在运行。' : '执行状态来自 Agent 最近一次阶段报告，不代表进程实时存活。';
-  panel.append(create('p', 'progress-note', disclaimer));
-  const board = create('div', 'work-board');
-  for (const [key, title, empty] of [['running', '正在执行', task.status === 'suspended' ? '任务已暂停，当前没有执行阶段。' : task.status === 'completed' ? '目标已完成，当前没有执行阶段。' : '暂无 Agent 报告的执行中阶段。'], ['completed', '已完成', '尚无单独确认完成的阶段。'], ['waiting', '待推进 / 受阻', '暂无待推进或受阻的阶段。']] as const) {
-    const column = create('section', `work-column ${key}`), items = task.workGroups[key];
-    const header = create('div', 'work-column-heading'); header.append(create('h3', '', title), create('span', 'count', String(items.length))); column.append(header);
-    for (const item of items) {
-      const card = create('button', `work-card ${item.status}`); card.dataset.progressKey = item.key;
-      const top = create('div', 'work-card-top'); top.append(create('span', `work-state ${item.status}`, item.statusLabel), create('span', 'work-source', item.source === 'agent' ? 'Agent 报告' : item.source === 'host' ? '宿主记录' : '历史记录'));
-      card.append(top, create('h4', '', item.title)); if (item.detail) card.append(create('p', '', short(item.detail, 90)));
-      card.append(create('small', '', `更新于 ${formatTime(item.updatedAt)}`)); card.onclick = () => { selectedNode = `work:${item.key}`; switchInspector('details'); void renderDetails(); }; column.append(card);
-    }
-    if (!items.length) column.append(create('div', 'work-empty', empty)); board.append(column);
-  }
-  panel.append(board);
-  const criteria = create('section', 'goal-coverage'); criteria.append(create('h3', '', '目标完成条件'), create('p', 'note', `${task.progress.satisfied} / ${task.progress.total} 已满足 · 阶段完成不等于目标完成，以这些条件为最终检查。`));
-  for (const item of task.criteria) { const met = !task.check.unmet.includes(item.id), button = create('button', `criterion coverage-row${met ? '' : ' open'}`); button.append(create('span', 'tick', met ? '✓' : '○'), create('span', '', item.text), create('small', '', met ? '已满足' : '待满足')); button.onclick = () => inspect(`criterion:${item.id}`); criteria.append(button); } panel.append(criteria);
-  if (task.checkpoint?.questions.length) { const questions = create('section', 'open-questions'); questions.append(create('h3', '', '未解决问题')); task.checkpoint.questions.forEach(q => questions.append(create('p', '', q))); panel.append(questions); }
-}
+
 function renderBasis() {
   const task = current!, panel = byId('basis-panel'); panel.replaceChildren(create('h2', 'panel-title', '结论与依据'));
   panel.append(create('p', 'note', task.evidenceMode === 'curated' ? '保留 Agent 整理的依据、结论及文件 / 链接引用。引用的真实性和因果支持程度由 Agent 与用户核对。' : '结论解释和原始观测分别保留。原始工具记录可在下方高级记录中展开。'));
@@ -355,7 +321,7 @@ function renderReport() {
 function switchView(view: string) {
   activeView = view;
   document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => { const selected = button.dataset.view === view; button.classList.toggle('active', selected); button.setAttribute('aria-selected', String(selected)); });
-  for (const name of ['progress', 'basis', 'graph', 'timeline', 'report']) byId(`${name}-panel`).hidden = name !== view;
+  for (const name of ['basis', 'graph', 'timeline', 'report']) byId(`${name}-panel`).hidden = name !== view;
   if (view === 'graph') requestAnimationFrame(() => { if (needsFit) { needsFit = false; fit(); } });
 }
 function switchInspector(name:string){
@@ -375,10 +341,10 @@ function renderSidebar(){
 }
 document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => { button.onclick = () => switchView(button.dataset.view!); });
 byId<HTMLInputElement>('search').oninput = renderTasks; byId<HTMLSelectElement>('filter').onchange = renderTasks;
-byId('show-goal').onclick = () => inspect('origin');
+byId('show-goal').onclick = () => inspect('goal');
 byId('snapshot').onclick=()=>{if(current)location.href=`/api/tasks/${encodeURIComponent(current.id)}/export?format=html`;};
 byId('back-to-list').onclick=()=>{overviewMode=true;selectedTask='';current=undefined;detailGeneration++;history.replaceState(null,'',location.pathname);applyMode();void refresh();};
-byId<HTMLSelectElement>('layout').onchange=()=>{layout=byId<HTMLSelectElement>('layout').value;needsFit=true;renderGraph();};
+byId<HTMLSelectElement>('layout').onchange=()=>{layout=byId<HTMLSelectElement>('layout').value === 'vertical' ? 'vertical' : 'horizontal';needsFit=true;renderGraph();};
 document.querySelectorAll<HTMLButtonElement>('[data-inspector]').forEach(button=>{button.onclick=()=>switchInspector(button.dataset.inspector!);});
 byId('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await byId('graph-wrap').requestFullscreen();}catch(error){showError(error);}};
 document.addEventListener('fullscreenchange',()=>{const button=byId('fullscreen');button.setAttribute('aria-label',document.fullscreenElement?'退出全屏':'全屏画布');requestAnimationFrame(fit);});

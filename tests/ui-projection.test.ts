@@ -37,8 +37,8 @@ test('paused and completed tasks never project stale running stages as executing
     task.progress = [{ key: 'impact', title: '圈定范围', status: 'running', source: 'agent', updatedAt: at }];
     for (const status of ['suspended', 'completed'] as const) {
       task.status = status; const view = projectTask(engine, task);
-      assert.equal(view.workGroups.running.length, 0); assert.equal(view.workGroups.waiting[0]?.status, 'pending');
-      assert.match(view.workGroups.waiting[0]!.statusLabel, status === 'suspended' ? /暂停前/ : /未单独确认/);
+      assert.equal(view.workGroups.running.length, 0); assert.equal(view.workGroups.waiting[0]?.status, status === 'suspended' ? 'blocked' : 'pending');
+      assert.match(view.workGroups.waiting[0]!.statusLabel, status === 'suspended' ? /已暂停/ : /未单独确认/);
     }
     assert.equal(task.progress[0]!.status, 'running', 'projection must not rewrite persisted history');
   } finally { store.close(); }

@@ -1,0 +1,85 @@
+import type { TaskView } from './view.js';
+
+export type GraphNodeKind = 'origin' | 'goal' | 'work' | 'action' | 'observation' | 'basis' | 'claim' | 'criterion';
+export type GraphState = 'origin' | 'goal' | 'running' | 'completed' | 'pending' | 'blocked' | 'refuted' | 'cancelled';
+export type GraphNode = { id: string; kind: GraphNodeKind; label: string; state: string; status: GraphState; rank: number; data: any };
+export type GraphEdge = { from: string; to: string; relation: 'context' | 'stage' | 'basis' | 'supports' | 'refutes' | 'criterion' | 'goal'; state: 'context' | 'running' | 'completed' | 'pending' | 'refuted' };
+export type GraphModel = { nodes: GraphNode[]; edges: GraphEdge[] };
+
+/** The original Cairn graph palette: teal start, rose goal, indigo facts, amber execution. */
+export const graphPalette = {
+  origin: { fill: '#14b8a6', stroke: '#0d9488', text: '#ffffff', muted: '#ecfdf5' },
+  goal: { fill: '#f43f5e', stroke: '#e11d48', text: '#ffffff', muted: '#fff1f2' },
+  running: { fill: '#f59e0b', stroke: '#d97706', text: '#422006', muted: '#713f12' },
+  completed: { fill: '#6366f1', stroke: '#4f46e5', text: '#ffffff', muted: '#eef2ff' },
+  pending: { fill: '#f8fafc', stroke: '#cbd5e1', text: '#64748b', muted: '#94a3b8' },
+  blocked: { fill: '#fff7ed', stroke: '#fdba74', text: '#9a3412', muted: '#c2410c' },
+  refuted: { fill: '#fff1f2', stroke: '#fda4af', text: '#be123c', muted: '#e11d48' },
+  cancelled: { fill: '#f8fafc', stroke: '#e2e8f0', text: '#94a3b8', muted: '#94a3b8' },
+} satisfies Record<GraphState, { fill: string; stroke: string; text: string; muted: string }>;
+export const graphKindLabels: Record<GraphNodeKind, string> = { origin: '起点', goal: '任务目标', work: '执行阶段', action: '历史行动', observation: '原始观测', basis: 'AI 整理的依据', claim: '假设与结论', criterion: '目标条件' };
+
+/** Project only saved relationships. Plan order does not imply dependency or causality. */
+export function projectGraph(task: TaskView): GraphModel {
+  const nodes: GraphNode[] = [], edges: GraphEdge[] = [];
+  const add = (rank: number, kind: GraphNodeKind, id: string, label: string, state: string, status: GraphState, data: any) => nodes.push({ rank, kind, id, label, state, status, data });
+  const connect = (from: string, to: string, relation: GraphEdge['relation'], state: GraphEdge['state'] = 'completed') => edges.push({ from, to, relation, state });
+  const claimLabels = { proposed: '待验证', supported: '已形成结论', refuted: '已反驳', inconclusive: '依据不足' };
+  add(0, 'origin', 'origin', task.origin, '起点 · 已知背景', 'origin', task);
+  add(4, 'goal', 'goal', task.goal, task.status === 'completed' ? '✓ 目标已完成' : task.check.ok ? '✓ 条件已满足 · 待完成检查' : task.status === 'suspended' ? '目标尚未完成 · 任务已暂停' : '目标尚未完成', 'goal', task);
+
+  // Historical criterion projections duplicate the real target nodes and are omitted.
+  for (const item of task.workItems.filter(i => i.source !== 'criterion')) {
+    const action = item.source === 'action' ? task.actions.find(a => `action:${a.id}` === item.key) : undefined;
+    const id = action ? `action:${action.id}` : `work:${item.key}`;
+    const status = task.status !== 'active' && item.status === 'running' ? task.status === 'suspended' ? 'blocked' : 'pending' : item.status;
+    const state = task.status !== 'active' && item.status === 'running' ? task.status === 'suspended' ? '已暂停' : '阶段未单独确认' : item.statusLabel;
+    add(1, action ? 'action' : 'work', id, item.title, state, status, action ?? item);
+    connect('origin', id, 'stage', status === 'running' ? 'running' : status === 'completed' ? 'completed' : 'pending');
+    if (action) for (const observation of action.observationIds) connect(id, `obs:${observation}`, 'basis');
+  }
+  if ((task.evidenceMode ?? 'captured') === 'curated') {
+    for (const claim of task.claims) if (claim.basis || claim.references?.length) {
+      add(1, 'basis', `basis:${claim.id}`, claim.basis || claim.references?.[0] || 'AI 整理的依据', 'AI 整理 · 引用可核对', 'completed', claim);
+      connect('origin', `basis:${claim.id}`, 'context', 'context');
+      connect(`basis:${claim.id}`, `claim:${claim.id}`, 'basis', claim.status === 'refuted' ? 'refuted' : 'completed');
+    }
+  }
+  for (const observation of task.observations) {
+    const state = observation.status === 'error' ? '查询失败' : observation.eligible ? '已取得原始观测' : '历史记录 · 不参与完成判定';
+    add(1, 'observation', `obs:${observation.id}`, `${observation.ref} · ${observation.tool}`, state, observation.status === 'error' ? 'blocked' : 'completed', observation);
+    connect('origin', `obs:${observation.id}`, 'context', 'context');
+  }
+  for (const claim of task.claims) {
+    const status = claim.status === 'supported' ? 'completed' : claim.status === 'refuted' ? 'refuted' : 'pending';
+    add(2, 'claim', `claim:${claim.id}`, claim.text, claimLabels[claim.status], status, claim);
+    for (const ref of claim.supports) connect(`obs:${ref}`, `claim:${claim.id}`, 'supports');
+    for (const ref of claim.refutes) connect(`obs:${ref}`, `claim:${claim.id}`, 'refutes', 'refuted');
+  }
+  for (const criterion of task.criteria) {
+    const met = !task.check.unmet.includes(criterion.id);
+    add(3, 'criterion', `criterion:${criterion.id}`, criterion.text, met ? '✓ 目标条件已满足' : '○ 目标条件待满足', 'goal', criterion);
+    for (const ref of criterion.claimIds) connect(`claim:${ref}`, `criterion:${criterion.id}`, 'criterion', met ? 'completed' : 'pending');
+    connect(`criterion:${criterion.id}`, 'goal', 'goal', met ? 'completed' : 'pending');
+  }
+  const nodeIds = new Set(nodes.map(n => n.id));
+  // Stale or cross-task references never create invented nodes or dangling edges.
+  const validEdges = edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to));
+  for (const node of nodes) if (node.id !== 'origin' && !validEdges.some(e => e.to === node.id)) {
+    validEdges.push({ from: 'origin', to: node.id, relation: node.kind === 'criterion' || node.kind === 'goal' ? 'goal' : 'context', state: 'context' });
+  }
+  return { nodes, edges: validEdges };
+}
+
+export const graphNodeSize = { width: 225, height: 94 };
+export function layoutGraph(model: GraphModel, direction: 'vertical' | 'horizontal') {
+  const ranks = Array.from({ length: 5 }, (_, rank) => model.nodes.filter(n => n.rank === rank));
+  const count = Math.max(...ranks.map(column => column.length), 2), vertical = direction === 'vertical';
+  const width = vertical ? count * 255 + 30 : 5 * 285 - 30;
+  const height = vertical ? 5 * 150 - 25 : count * 120 + 30;
+  const nodes = ranks.flatMap((column, rank) => column.map((node, index) => ({ ...node,
+    x: vertical ? 20 + index * 255 + (width - column.length * 255 - 30) / 2 : 20 + rank * 285,
+    y: vertical ? 20 + rank * 150 : 20 + index * 120 + (height - column.length * 120 - 30) / 2,
+  })));
+  return { ...model, nodes, width, height };
+}

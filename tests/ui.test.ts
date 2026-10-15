@@ -44,7 +44,9 @@ test('live HTTP dashboard serves the bundled page and scoped evidence while reje
   const { store, engine, task } = fixture(), dashboard = await startUi(engine, { port: 0 });
   try {
     const page = await fetch(dashboard.url), source = await page.text();
-    assert.equal(page.status, 200); assert.match(source, /Cairn · 实时进度/); assert.match(source, /new EventSource/);
+    assert.equal(page.status, 200); assert.match(source, /Cairn · 目标关系图/); assert.match(source, /new EventSource/);
+    assert.match(source, /class="tab active" data-view="graph"/); assert.ok(!source.includes('data-view="progress"')); assert.ok(!source.includes('id="progress-panel"'));
+    assert.ok(source.includes('关系图颜色说明')); assert.ok(source.includes('已完成 / 已形成'));
     assert.match(page.headers.get('content-security-policy')!, /frame-ancestors 'none'/);
     assert.equal(page.headers.get('access-control-allow-origin'), null);
     const observation = engine.observe(task.id, session, { callId: 'read', tool: 'read', input: {}, output: 'RAW_SENTINEL', source: 'hook', status: 'success' });

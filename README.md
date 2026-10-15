@@ -122,9 +122,9 @@ cairn ui
 cairn ui --port 8001 --db .cairn/state.db
 ```
 
-Open the printed loopback URL, default `http://127.0.0.1:8000`. The default progress view separates **running**, **completed** and **pending/blocked** work, with the latest checkpoint, unresolved questions and report. The evidence graph remains available as a supporting view. The timeline highlights milestones with expandable details; captured tool events can be filtered separately.
+Open the printed loopback URL, default `http://127.0.0.1:8000`. The **relationship graph is the main view**; there is no separate progress board. It connects the starting context, recorded work, evidence, conclusions, completion criteria and goal. Teal marks the start, rose marks goals, indigo marks completed work/results, amber marks running work, and pale dashed nodes mark pending work. Labels distinguish role and status; goal nodes retain their role color when satisfied. Select a node for its details. Zoom, pan, fit, fullscreen and vertical/horizontal layouts remain available. The timeline highlights milestones with expandable details; captured tool events can be filtered separately.
 
-![Blue-and-white progress dashboard with synthetic demonstration data](docs/images/dashboard-v3.png)
+![Blue-and-white relationship graph with synthetic demonstration data](docs/images/dashboard-graph.png)
 
 The dashboard displays the most recently committed progress. An `active` task or a zero tool count does not prove that a process is currently alive. Curated tasks deliberately have no tool-call telemetry and use explicit checkpoint progress. Native plan results without a reliable original task association are skipped, so a delayed event cannot change another goal.
 

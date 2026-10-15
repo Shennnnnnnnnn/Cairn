@@ -2,6 +2,16 @@
 
 Record date: 2026-10-15 (Asia/Shanghai). Results below identify the evidence mode and distinguish automated integration checks from real model executions.
 
+## Cairn 3.0.1 relationship graph as the main view
+
+Verified locally on 2026-10-15 (Asia/Shanghai).
+
+- **130 automated tests passed on Node 26.3.0**, including typecheck and bundle build. The 12 graph/state projection tests also passed on Node 24.19.0.
+- The separate task-progress tab/board and its header counters were removed. The graph now includes a distinct starting point and full goal, recorded work stages, basis/observations, conclusions and acceptance conditions. It reuses the earlier UI palette from commit `930c037`: teal start, rose goal, indigo completed/formed results, amber running work and pale dashed pending work. A satisfied goal retains its role color and receives a green check.
+- New projection tests cover real evidence paths, connected starting context, explicit work-state colors, no invented dependency between plan items, no invented execution stages in legacy tasks, stale running suppression after pause/completion, and nonoverlapping nodes within bounds in both layouts.
+- ego-browser verified an explicitly labelled synthetic fixture: graph selected by default, no progress-board tab, all nodes within the canvas in horizontal and vertical layouts, correct colors, stage detail inspection, zoom/fit and fullscreen entry/exit. Pausing from another SQLite connection updated through SSE without reloading: the running stage became blocked and all running edges disappeared.
+- `docs/images/dashboard-graph.png` is the actual browser screenshot of that synthetic fixture. It is a UI demonstration, not a new model execution or a diagnostic-quality evaluation. The earlier progress-board screenshot and verification record below are historical.
+
 ## Cairn 3.0 goal workflow and progress UI
 
 Verified locally on 2026-10-15 (Asia/Shanghai).

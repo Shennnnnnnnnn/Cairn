@@ -39,7 +39,7 @@ function projectWork(task: Task, updatedAt: string): { items: WorkItem[]; source
   // A saved running state is not evidence that an agent process is alive. Stopped tasks
   // retain unfinished work without presenting it as currently executing.
   return { source, items: items.map(item => task.status !== 'active' && item.status === 'running'
-    ? { ...item, status: 'pending', statusLabel: task.status === 'suspended' ? '暂停前执行中' : '阶段未单独确认' }
+    ? { ...item, status: task.status === 'suspended' ? 'blocked' : 'pending', statusLabel: task.status === 'suspended' ? '已暂停 · 等待恢复' : '阶段未单独确认' }
     : item) };
 }
 export function projectTask(engine: Engine, task: Task): TaskView {
