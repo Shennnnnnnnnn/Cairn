@@ -17,13 +17,70 @@ import { gatewaySchema, Gateway } from './gateway.js';
 import { markdown, html } from './export.js';
 import { startUi } from './ui/server.js';
 import { VERSION } from './version.js';
+import { prepareDemo, runDemo } from './demo.js';
+import { startDemoTools } from './demo-tools.js';
+
+const shellQuote=(value:string)=>`'${value.replaceAll("'", "'\\''")}'`;
+async function demonstration(v:{root?:string;port?:string;delay?:string;prepare?:boolean;'no-ui'?:boolean;target?:string;db?:string;json?:boolean}) {
+ if(v.db)throw new CairnError('invalid_input','The demo uses its own new database. Choose a fresh directory with --root instead of --db.');
+ if(v.target&&!v.prepare)throw new CairnError('invalid_input','Use --target with demo --prepare to prepare a real CLI workspace.');
+ if(v.target&&!['pi','claude','codex'].includes(v.target))throw new CairnError('invalid_input','--target must be pi, claude or codex');
+ const delayMs=Number(v.delay??1500),port=Number(v.port??8000);
+ if(!Number.isInteger(delayMs)||delayMs<0||delayMs>60000)throw new CairnError('invalid_input','--delay must be an integer from 0 to 60000 milliseconds');
+ if(!Number.isInteger(port)||port<0||port>65535)throw new CairnError('invalid_input','--port must be an integer from 0 to 65535; use 0 for a free port');
+ const entry=fileURLToPath(import.meta.url),prepared=await prepareDemo(v.root,entry);
+ if(v.prepare){
+  const installed=v.target?install(v.target as Target,'project',prepared.root):undefined;
+  const result={...prepared,prepared:true,demo:true,installed};
+  if(v.json)process.stdout.write(JSON.stringify(result)+'\n');
+  else process.stdout.write(`样例工作区已准备：${prepared.root}\n模拟数据与原始工具已配置，尚未调用模型。\n\n  cd ${shellQuote(prepared.root)}\n  export CAIRN_DB=${shellQuote(prepared.db)}\n  unset CAIRN_WORKSPACE\n${v.target?`  ${v.target}\n`:'  cairn install --target codex  # 或 pi、claude\n'}\n让 Agent 读取 PROMPT.md 并执行；宿主的账号、审批和 hooks 信任设置仍然生效。\n看板：cairn ui --db ${shellQuote(prepared.db)}\n完成样例后使用新终端，或 unset CAIRN_DB。\n`);
+  return;
+ }
+ const controller=new AbortController();let signalName='SIGINT',store:Store|undefined,dashboard:Awaited<ReturnType<typeof startUi>>|undefined;
+ const interrupt=(name:string)=>{signalName=name;controller.abort();};
+ const onInt=()=>interrupt('SIGINT'),onTerm=()=>interrupt('SIGTERM');
+ process.once('SIGINT',onInt);process.once('SIGTERM',onTerm);
+ try{
+  if(!v['no-ui']){
+   store=new Store(prepared.db);dashboard=await startUi(new Engine(store),{port});
+  }
+  if(!v.json)process.stdout.write(`Cairn 完整链路演示（固定步骤＋模拟数据，不调用模型）\n工作区：${prepared.root}\n${dashboard?`蓝白看板：${dashboard.url}\n`:'看板未启动。\n'}\n`);
+  let linked=false;
+  const result=await runDemo({...prepared,entry,delayMs,signal:controller.signal,onStep:step=>{
+   if(v.json)return;
+   process.stdout.write(`${String(step.seq).padStart(2,'0')}. ${step.name}${step.detail?` · ${typeof step.detail==='string'?step.detail:JSON.stringify(step.detail)}`:''}\n`);
+   if(dashboard&&step.taskId&&!linked){linked=true;process.stdout.write(`    任务图：${dashboard.url}/#${step.taskId}\n`);}
+  }});
+  if(v.json)process.stdout.write(JSON.stringify({...result,url:dashboard?.url,demo:true})+'\n');
+  else process.stdout.write(`\n演示完成：${result.taskId}\n报告：${result.reportPath}\n证据图：${result.evidencePath}\n执行日志：${result.executionPath}\n${dashboard?'看板继续显示结果，按 Ctrl+C 关闭。\n':`重看链路：cairn ui --db ${shellQuote(prepared.db)}\n`}`);
+  if(dashboard&&!controller.signal.aborted)await new Promise<void>(resolve=>controller.signal.addEventListener('abort',()=>resolve(),{once:true}));
+ }catch(error){
+  if(!controller.signal.aborted)throw error;
+  if(!v.json)process.stdout.write('\n演示已中断，已记录的进度保留在样例工作区。\n');
+  process.exitCode=signalName==='SIGTERM'?143:130;
+ }finally{
+  process.removeListener('SIGINT',onInt);process.removeListener('SIGTERM',onTerm);
+  await dashboard?.close();store?.close();
+ }
+}
 
 export async function main(argv=process.argv.slice(2)){
  const command=argv[0]??'help';
- const {values:v,positionals}=parseArgs({args:argv.slice(1),allowPositionals:true,options:{target:{type:'string'},scope:{type:'string'},root:{type:'string'},host:{type:'string'},port:{type:'string'},'session-id':{type:'string'},db:{type:'string'},file:{type:'string'},input:{type:'string'},'task-id':{type:'string'},format:{type:'string'},out:{type:'string'},'takeover':{type:'boolean'},'json':{type:'boolean'}}});
+ if(['--version','-v','version'].includes(command)){process.stdout.write(`${VERSION}\n`);return;}
+ const {values:v,positionals}=parseArgs({args:argv.slice(1),allowPositionals:true,options:{target:{type:'string'},scope:{type:'string'},root:{type:'string'},host:{type:'string'},port:{type:'string'},prepare:{type:'boolean'},'no-ui':{type:'boolean'},delay:{type:'string'},'session-id':{type:'string'},db:{type:'string'},file:{type:'string'},input:{type:'string'},'task-id':{type:'string'},format:{type:'string'},out:{type:'string'},'takeover':{type:'boolean'},'json':{type:'boolean'}}});
  const output=(value:unknown)=>process.stdout.write(JSON.stringify(value??{ok:true},null,2)+'\n');
  if(command==='help'||command==='--help'){
-  process.stdout.write(`Cairn ${VERSION} — goals and evidence for Pi, Claude Code and Codex\n\nNode >=24 required.\n\n  cairn install|update|uninstall --target pi|claude|codex [--scope project|user] [--root DIR]\n  cairn doctor [--target pi|claude|codex] [--scope project|user] [--root DIR]\n  cairn ui [--port 8000] [--db FILE]\n  cairn mcp --host pi|claude|codex|mcp [--session-id ID] [--db FILE]\n  cairn hook --host claude|codex     # native hook JSON on stdin\n  cairn configure --file whitelist.json\n  cairn task list|show|resume|suspend|hint [ID] --host HOST --session-id ID [--takeover]\n  cairn call TOOL --input args.json --host HOST --session-id ID\n  cairn confirm TASK_ID            # human team confirmation after platform receipt\n  cairn export TASK_ID [--format json|markdown|html] [--out FILE]\n\nTask database defaults to <workspace>/.cairn/state.db. CAIRN_DB overrides it.\n`);return;
+  process.stdout.write(`Cairn ${VERSION} — goals and evidence for Pi, Claude Code and Codex\n\nNode >=24 required. Install globally from the repository with npm run install:global.\n\n  cairn --version\n  cairn demo [--port 8000] [--delay 1500] [--no-ui] [--json]\n  cairn demo --prepare [--target pi|claude|codex] [--root NEW_DIR]\n  cairn install|update|uninstall --target pi|claude|codex [--scope project|user] [--root DIR]\n  cairn doctor [--target pi|claude|codex] [--scope project|user] [--root DIR]\n  cairn ui [--port 8000] [--db FILE]\n  cairn mcp --host pi|claude|codex|mcp [--session-id ID] [--db FILE]\n  cairn hook --host claude|codex     # native hook JSON on stdin\n  cairn configure --file whitelist.json\n  cairn task list|show|resume|suspend|hint [ID] --host HOST --session-id ID [--takeover]\n  cairn call TOOL --input args.json --host HOST --session-id ID\n  cairn confirm TASK_ID            # human team confirmation after platform receipt\n  cairn export TASK_ID [--format json|markdown|html] [--out FILE]\n\nTask database defaults to <workspace>/.cairn/state.db. CAIRN_DB overrides it.\nDemo always creates a separate workspace/database and uses labelled simulated data.\n`);return;
+ }
+ if(command==='demo'){await demonstration(v);return;}
+ if(command==='demo-tools'){
+  if(!v.root)throw new CairnError('invalid_input','demo-tools needs --root for its generated scenario');
+  const server=await startDemoTools(resolve(v.root));
+  let closing:Promise<void>|undefined;
+  const close=()=>closing??=server.close();
+  process.once('SIGTERM',()=>{void close().finally(()=>process.exit(0));});
+  process.once('SIGINT',()=>{void close().finally(()=>process.exit(0));});
+  if(process.stdin.readableEnded)await close();else process.stdin.once('end',()=>{void close().catch(error=>{process.stderr.write(`Cairn demo tools: ${error.message}\n`);process.exitCode=1;});});return;
  }
  if(['install','update','uninstall'].includes(command)){
   if(!['pi','claude','codex'].includes(v.target??''))throw new CairnError('invalid_input','--target pi|claude|codex is required');
@@ -48,10 +105,12 @@ export async function main(argv=process.argv.slice(2)){
   }
   if(command==='mcp'){
    const server=await startMcp(engine,session);
-   const close=async()=>{await server.close();store.close();};
+   let closing:Promise<void>|undefined;
+   const close=()=>closing??=(async()=>{try{await server.close();}finally{store.close();}})();
    process.once('SIGTERM',()=>{void close().finally(()=>process.exit(0));});
    process.once('SIGINT',()=>{void close().finally(()=>process.exit(0));});
-   // stdin end closes the transport; process exit releases SQLite automatically.
+   // EOF must also release upstream processes, not wait for the host to force termination.
+   if(process.stdin.readableEnded)await close();else process.stdin.once('end',()=>{void close().catch(error=>{process.stderr.write(`Cairn MCP close: ${error.message}\n`);process.exitCode=1;});});
    return;
   }
   if(command==='hook'){

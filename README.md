@@ -4,22 +4,43 @@ English | [简体中文](README.zh-CN.md)
 
 **Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-Cairn 2.0 gives the model five operations: **start, resume, read, checkpoint and finish**. Use normal host tools, then save a meaningful finding together with its evidence and goal coverage. A small task can finish in one call after the work; the core maintains claim links and report citations.
+Cairn 2.1 gives the model five operations: **start, resume, read, checkpoint and finish**. Use normal host tools, then save a meaningful finding together with its evidence and goal coverage. A small task can finish in one call after the work; the core maintains claim links and report citations.
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn preserves an external goal and evidence ledger in SQLite, with an optional blue-and-white progress dashboard.
 
 ## Quick start
 
-Requires **Node.js 24 or newer** and a configured host CLI. Run from the repository root:
+Requires **Node.js 24 or newer**. Install the global command from this repository:
 
 ```sh
+# Run once from the Cairn repository root.
 npm install
-npm run check
+npm run install:global
+cairn --version
+```
+
+The helper builds Cairn, packs it and installs an independent global copy from this repository. This flow does not publish a package to the npm registry. You can then run `cairn` from any project directory; keep the working directory set to the project whose tasks you want to use.
+
+If your npm global directory needs elevated permissions, choose a writable prefix:
+
+```sh
+npm run install:global -- --prefix "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+cairn --version
+```
+
+The helper also accepts `--cache DIR` and `--offline`; offline installation needs the repository dependencies already available.
+
+In the project you want to work on, install the adapter for your configured host CLI:
+
+```sh
+cd /path/to/your-project
 
 # Choose your host; default scope is the current project.
-node bin/cairn.mjs install --target pi
-node bin/cairn.mjs install --target claude
-node bin/cairn.mjs install --target codex
+cairn install --target pi
+cairn install --target claude
+cairn install --target codex
+cairn ui
 ```
 
 Start a new host session. In Codex, trust the project and review Cairn hooks with `/hooks`. Ask:
@@ -27,6 +48,36 @@ Start a new host session. In Codex, trust the project and review Cairn hooks wit
 > Use Cairn to investigate this timeout. Start with the most useful query, keep supporting evidence and counterevidence, and save progress at meaningful milestones. Finish with the impact, cause and solution, or suspend with the remaining gaps.
 
 Only enabled tasks receive Cairn processing. Add `--scope user` for personal installation across projects or `--root DIR` for an explicit installation root.
+
+## Run the complete example
+
+```sh
+cairn demo
+```
+
+This creates an isolated temporary workspace, starts the blue-and-white dashboard and runs a deterministic price-incident diagnosis over real stdio MCP calls. Watch evidence arrive, a checkpoint preserve findings and open questions, the task suspend, a new session take over, and the final impact evidence complete the goal. The dashboard stays in the foreground after completion; use Ctrl+C to close it. It uses local fixture data and a scripted driver, with no external model or account.
+
+```sh
+# Let the OS select a free dashboard port.
+cairn demo --port 0
+
+# Run quickly without the dashboard; print the result and artifact paths as JSON.
+cairn demo --no-ui --delay 0 --json
+```
+
+To let a real agent perform the diagnosis instead, prepare a new sample workspace and its host adapter:
+
+```sh
+unset CAIRN_WORKSPACE
+cairn demo --prepare --target codex --root ./cairn-example
+cd cairn-example
+export CAIRN_DB="$PWD/.cairn/state.db"
+codex
+```
+
+Ask it to read `PROMPT.md` and follow the goal. Use `--target pi` or `--target claude` for the other hosts. Preparation does not launch a model; your CLI supplies its model, account and approvals. In a second terminal, enter that workspace and run `cairn ui --db "$PWD/.cairn/state.db" --port 0` to watch it. Set `CAIRN_DB` only in the sample shell: it pins the sample database even when the directory is inside another Git repository. Use a new terminal for other projects, or run `unset CAIRN_DB` after the sample. An explicitly chosen nonempty directory is rejected rather than overwritten.
+
+The full [Chinese walkthrough](docs/examples/price-incident.zh-CN.md) explains inputs, tool results, evidence links, recovery and exported `report.md`, `evidence.html`, `task.json` and `execution.jsonl`.
 
 ## The model workflow
 
@@ -78,8 +129,8 @@ Packages live under `dist/plugins/{pi,claude,codex}` and include their own runti
 Other clients can run the shared stdio server and load `skills/cairn`:
 
 ```sh
-node bin/cairn.mjs mcp --host mcp --session-id my-task-session
-node bin/cairn.mjs doctor --target codex
+cairn mcp --host mcp --session-id my-task-session
+cairn doctor --target codex
 ```
 
 MCP alone cannot capture arbitrary native host tools. Configured `cairn_tool_*` calls still capture real results through the gateway. There is no model-callable manual observation registration in the new interface. Historical manual observations retain their provenance.
@@ -107,8 +158,8 @@ Recovery context is bounded to **16 KiB**, with totals and explicit truncation i
 ## Blue-and-white progress dashboard
 
 ```sh
-node bin/cairn.mjs ui
-node bin/cairn.mjs ui --port 8001 --db .cairn/state.db
+cairn ui
+cairn ui --port 8001 --db .cairn/state.db
 ```
 
 Open the printed loopback URL, default `http://127.0.0.1:8000`. The original web layout is retained: task cards, graph canvas and Details / Hints / Log panels. Live updates show evidence-backed criterion coverage, calls and budget; select evidence to load raw results. Horizontal/vertical layouts, pan/zoom, fullscreen, resizable details, reports and snapshots are available. Checkpoint summaries, unresolved questions and next steps are persisted with each task.
@@ -116,11 +167,11 @@ Open the printed loopback URL, default `http://127.0.0.1:8000`. The original web
 The dashboard is read-only and loopback-only. Keep working in your CLI. Closing it does not stop the agent. Use the same database/workspace as the host. Progress reflects supported criteria and can decrease after refutation.
 
 ```sh
-node bin/cairn.mjs task list
-node bin/cairn.mjs task show TASK_ID
-node bin/cairn.mjs export TASK_ID --format json --out task.json
-node bin/cairn.mjs export TASK_ID --format markdown --out report.md
-node bin/cairn.mjs export TASK_ID --format html --out evidence.html
+cairn task list
+cairn task show TASK_ID
+cairn export TASK_ID --format json --out task.json
+cairn export TASK_ID --format markdown --out report.md
+cairn export TASK_ID --format html --out evidence.html
 ```
 
 Replace `TASK_ID` with an actual ID. The HTML export is a standalone evidence graph with expandable original results.
@@ -128,7 +179,7 @@ Replace `TASK_ID` with an actual ID. The HTML export is a standalone evidence gr
 ## Typed tools and emergency profile
 
 ```sh
-node bin/cairn.mjs configure --file profiles/emergency.example.json
+cairn configure --file profiles/emergency.example.json
 ```
 
 The example is an **unconfigured template**. Replace commands, upstream names and result/scope/receipt mappings with the organizer's official definitions before use.
@@ -142,7 +193,7 @@ A validated finish returns `phase: "ready_for_delivery"` and stays active. Call 
 Finish returns `phase: "awaiting_confirmation"` until the team confirms outside model tools:
 
 ```sh
-node bin/cairn.mjs confirm TASK_ID
+cairn confirm TASK_ID
 ```
 
 Then call `cairn_finish {}` to complete. The organizer remains authoritative for reference ownership and scoring.
@@ -156,15 +207,19 @@ The original bootstrap's direct first attempt remains in the ongoing host sessio
 ## Update, data and uninstall
 
 ```sh
+# Run in the Cairn repository to update the global command.
 npm install
-npm run build
-node bin/cairn.mjs update --target pi
-node bin/cairn.mjs update --target claude
-node bin/cairn.mjs update --target codex
-node bin/cairn.mjs uninstall --target pi
+npm run install:global
+
+# Run in the original target project to update its adapter.
+cd /path/to/your-project
+cairn update --target pi
+cairn update --target claude
+cairn update --target codex
+cairn uninstall --target pi
 ```
 
-Use the original scope/root and restart the host session. The installer merges settings and tracks its entries. Modified registrations are reported and retained during uninstall, together with their runtime. Task data stays independent.
+Global command installation and host adapter installation are separate: updating the global command does not replace copies already installed in hosts. Use the original scope/root and restart the host session. The installer merges settings and tracks its entries. Modified registrations are reported and retained during uninstall, together with their runtime. Task data stays independent. After removing the host adapters you no longer need, `npm uninstall --global cairn` removes the global command; include the same `--prefix DIR` if you used a custom prefix.
 
 Data defaults to `<workspace>/.cairn/state.db`; `CAIRN_DB` or `--db` overrides it, and `CAIRN_WORKSPACE` selects a workspace root. Existing **TypeScript 1.x SQLite tasks are preserved and resumable**, including saved reports. The old public tool protocol is replaced. The earlier Python server/dispatcher APIs and database formats are not automatically migrated. Keep raw task data private and out of Git.
 
@@ -180,7 +235,7 @@ node scripts/pi-fixture-smoke.mjs
 node scripts/claude-fixture-smoke.mjs
 ```
 
-Current verification: **79 tests passed on Node 24/26**, a configured live-model Codex lifecycle passed, and actual Pi/Claude CLIs passed local protocol lifecycles. Pi live inference was limited by upstream 429/503 errors; Claude live inference was blocked by expired OAuth. See [verification](docs/verification.md).
+Current verification: **89 tests passed on Node 24/26**, including offline global installation, operation outside the checkout, the complete MCP example and process cleanup. The 2.0 baseline remains 79 tests; a configured live-model Codex lifecycle passed, and actual Pi/Claude CLIs passed local protocol lifecycles. Pi live inference was limited by upstream 429/503 errors; Claude live inference was blocked by expired OAuth. See [verification](docs/verification.md).
 
 Real-host tests use configured accounts and may consume quota. Logs remain in the printed temporary directory. Temporary hook trust in tests does not replace normal installation review. Pi and Claude protocol fixtures use local servers instead of external models.
 

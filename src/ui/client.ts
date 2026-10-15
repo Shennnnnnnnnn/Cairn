@@ -28,6 +28,7 @@ let timeline: TimelineEvent[] = [], nodes = new Map<string, GraphNode>(), active
 let overviewMode=true,activeInspector='details',layout='vertical';
 let refreshBusy = false, refreshAgain = false, detailGeneration = 0;
 let graphSize = { width: 1180, height: 260 }, transform = { x: 15, y: 15, scale: .7 }, needsFit = true;
+let viewportCustomized=false;
 const rawCache = new Map<string, Observation>();
 try { selectedTask = decodeURIComponent(location.hash.slice(1)); } catch { /* invalid fragments return to the task overview */ }
 overviewMode=!selectedTask;
@@ -119,6 +120,7 @@ function svg(tag: string, attributes: Record<string, string | number> = {}, cont
   if (content !== undefined) element.textContent = content; return element;
 }
 function renderGraph() {
+  const previousSize=graphSize;
   const task = current!, columns: GraphNode[][] = [[], [], [], []]; nodes.clear();
   const add = (column: number, kind: GraphNode['kind'], id: string, label: string, state: string, data: any, color: string, fill: string) => {
     const node: GraphNode = { id, kind, label, state, data, color, fill, x: column * 290 + 15, y: 0 }; columns[column]!.push(node); nodes.set(id, node);
@@ -132,6 +134,7 @@ function renderGraph() {
   task.criteria.forEach(c => add(3, 'criterion', `criterion:${c.id}`, c.text, task.check.unmet.includes(c.id) ? '尚未满足' : '已满足', c, '#df91a5', task.check.unmet.includes(c.id) ? '#fff3f6' : '#f6b6c5'));
   const count = Math.max(...columns.map(c => c.length), 2),vertical=layout==='vertical';
   graphSize = vertical?{width:count*255+30,height:565}:{ width: 1140, height: count * 106 + 25 };
+  if(!viewportCustomized&&(graphSize.width!==previousSize.width||graphSize.height!==previousSize.height))needsFit=true;
   for (const [col,column] of columns.entries()) column.forEach((node, index) => {
     if(vertical){node.x=20+index*255+(graphSize.width-column.length*255-30)/2;node.y=20+col*145;}
     else node.y = 20 + index * 106 + (graphSize.height - column.length * 106 - 25) / 2;
@@ -161,16 +164,18 @@ function renderGraph() {
     world.append(group);
   }
   if (!nodes.has(selectedNode)) selectedNode = 'origin';
-  if (needsFit) { fit(); needsFit = false; } else applyTransform();
+  if (needsFit&&activeView==='graph') { fit(); needsFit = false; } else applyTransform();
 }
 function inspect(id: string) { selectedNode = id;switchInspector('details'); document.querySelectorAll<SVGElement>('.node').forEach(node => node.classList.toggle('selected', node.dataset.nodeId === id)); void renderDetails(); }
 function applyTransform() { document.getElementById('graph-world')!.setAttribute('transform', `translate(${transform.x},${transform.y}) scale(${transform.scale})`); }
 function fit() {
+  viewportCustomized=false;
   const rect = byId('graph').getBoundingClientRect();
   transform.scale = Math.max(.1, Math.min(1.1, (rect.width - 45) / graphSize.width, (rect.height - 45) / graphSize.height));
   transform.x = (rect.width - graphSize.width * transform.scale) / 2; transform.y = (rect.height - graphSize.height * transform.scale) / 2; applyTransform();
 }
 function zoom(factor: number, x?: number, y?: number) {
+  viewportCustomized=true;
   const rect = byId('graph').getBoundingClientRect(), mx = x ?? rect.width / 2, my = y ?? rect.height / 2;
   const scale = Math.min(2.5, Math.max(.08, transform.scale * factor)), ratio = scale / transform.scale;
   transform.x = mx - (mx - transform.x) * ratio; transform.y = my - (my - transform.y) * ratio; transform.scale = scale; applyTransform();
@@ -178,7 +183,7 @@ function zoom(factor: number, x?: number, y?: number) {
 let dragged = false, drag: { x: number; y: number; tx: number; ty: number } | undefined;
 const graph = byId('graph');
 graph.onpointerdown = event => { if (event.button !== 0) return; drag = { x: event.clientX, y: event.clientY, tx: transform.x, ty: transform.y }; dragged = false; };
-graph.onpointermove = event => { if (!drag) return; const dx = event.clientX - drag.x, dy = event.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) { if(!graph.hasPointerCapture(event.pointerId))graph.setPointerCapture(event.pointerId);dragged = true; graph.classList.add('dragging'); transform.x = drag.tx + dx; transform.y = drag.ty + dy; applyTransform(); } };
+graph.onpointermove = event => { if (!drag) return; const dx = event.clientX - drag.x, dy = event.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) { if(!graph.hasPointerCapture(event.pointerId))graph.setPointerCapture(event.pointerId);dragged = true;viewportCustomized=true; graph.classList.add('dragging'); transform.x = drag.tx + dx; transform.y = drag.ty + dy; applyTransform(); } };
 graph.onpointerup = event => { drag = undefined; graph.classList.remove('dragging'); if (graph.hasPointerCapture(event.pointerId)) graph.releasePointerCapture(event.pointerId); setTimeout(() => { dragged = false; }, 0); };
 graph.onpointercancel = () => { drag = undefined; dragged = false; graph.classList.remove('dragging'); };
 window.addEventListener('pointerup',()=>{drag=undefined;graph.classList.remove('dragging');setTimeout(()=>{dragged=false;},0);});

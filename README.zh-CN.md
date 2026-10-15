@@ -4,22 +4,42 @@
 
 **为 Pi、Claude Code、Codex 保留目标、证据链和可恢复的进度。**
 
-Cairn 2.0 将模型的操作收敛为五个工具：**开始、恢复、读取、阶段记录、结束**。模型照常使用宿主工具，在得到有价值的结论时一次记录证据与目标覆盖情况。简单任务可以直接结束，无需逐项维护结论 ID、完成条件关联和报告引用。
+Cairn 2.1 将模型的操作收敛为五个工具：**开始、恢复、读取、阶段记录、结束**。模型照常使用宿主工具，在得到有价值的结论时一次记录证据与目标覆盖情况。简单任务可以直接结束，无需逐项维护结论 ID、完成条件关联和报告引用。
 
 模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存任务记录，并提供蓝白配色的只读进度看板。
 
 ## 快速开始
 
-需要 **Node.js 24 或更新版本**，以及已安装、配置好账号或模型的目标 CLI。以下命令均在仓库根目录执行。
+需要 **Node.js 24 或更新版本**。先在 Cairn 仓库根目录安装全局命令：
 
 ```sh
 npm install
-npm run check
+npm run install:global
+cairn --version
+```
+
+安装脚本自动构建、打包，再安装一份独立的全局副本。**本流程安装当前仓库的构建产物，无需 npm registry 上已有 Cairn 包。** 安装完成后，在任意项目目录都可以直接执行 `cairn`，无需输入 `node bin/cairn.mjs`，也不依赖当前终端位于源码目录。
+
+如果 npm 默认全局目录不可写，可选择用户目录：
+
+```sh
+npm run install:global -- --prefix "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+cairn --version
+```
+
+脚本还支持 `--cache DIR` 和 `--offline`；离线安装要求仓库依赖已准备好。
+
+接着进入要使用 Cairn 的项目，安装相应宿主的适配包；实际执行需要目标 CLI 已安装并配置好账号或模型。
+
+```sh
+cd /path/to/your-project
 
 # 按实际使用的宿主选择；默认安装到当前项目。
-node bin/cairn.mjs install --target pi
-node bin/cairn.mjs install --target claude
-node bin/cairn.mjs install --target codex
+cairn install --target pi
+cairn install --target claude
+cairn install --target codex
+cairn ui
 ```
 
 安装后开启新的 CLI 会话。Codex 需要信任项目，并通过 `/hooks` 检查和信任 Cairn hooks。需要跨项目使用时，给安装命令增加 `--scope user`；`--root DIR` 可指定安装根目录。
@@ -33,6 +53,42 @@ node bin/cairn.mjs install --target codex
 > 用 Cairn 跟踪这次修改，目标是修复解析错误并通过现有回归测试。照常使用代码工具，完成时给出证据支持的结果。
 
 只有开始或恢复 Cairn 任务后，相关 hooks 才处理任务状态。普通 CLI 工作仍可按原有方式进行。
+
+## 完整样例：先看链路，再交给真实模型
+
+无需模型账号即可运行：
+
+```sh
+cairn demo
+```
+
+命令创建隔离的临时工作区，打开蓝白看板服务，按节奏执行价格异常诊断：目标创建 → 健康检查反证 → 价格样例 → 阶段记录 → 暂停 → 新会话接管 → 单位映射与影响面取证 → 校验完成与导出。终端会打印看板地址和样例目录；完成后看板继续保持前台，按 Ctrl+C 关闭。
+
+这是固定步骤驱动的演示，使用真实 stdio MCP 和 Cairn 网关采证，数据来自本地模拟工具，**不冒充真实模型推理或主办方比赛数据**。
+
+```sh
+# 自动选一个空闲看板端口
+cairn demo --port 0
+
+# 无界面、零延迟执行，输出 JSON 结果及产物路径
+cairn demo --no-ui --delay 0 --json
+```
+
+要让真实 Agent 自行排查，先准备一个新的工作区：
+
+```sh
+unset CAIRN_WORKSPACE
+cairn demo --prepare --target codex --root ./cairn-example
+cd cairn-example
+export CAIRN_DB="$PWD/.cairn/state.db"
+codex
+```
+
+告诉 Agent：“读取 `PROMPT.md`，使用 Cairn 完成其中的诊断目标。” 也可以将 `--target codex` 改为 `pi` 或 `claude`，再启动对应 CLI。准备命令只生成样例、配置受控工具并安装适配包，不会自动启动模型。另开终端进入同一样例目录，执行 `cairn ui --db "$PWD/.cairn/state.db" --port 0` 即可观察。
+
+这里显式设置样例数据库，确保样例位于其他 Git 仓库内部时也使用自己的记录。`CAIRN_DB` 只在本次样例终端设置；做其他项目时使用新终端，或在结束后执行 `unset CAIRN_DB`。
+
+指定的样例目录非空时命令会拒绝覆盖。完整输入、返回、证据与目标关联、暂停恢复及产物说明见 [价格异常诊断完整样例](docs/examples/price-incident.zh-CN.md)。
 
 ## 模型的最短使用流程
 
@@ -128,15 +184,15 @@ node bin/cairn.mjs install --target codex
 其他 MCP 客户端可以运行共享 stdio 服务，并加载 `skills/cairn`：
 
 ```sh
-node bin/cairn.mjs mcp --host mcp --session-id my-task-session
+cairn mcp --host mcp --session-id my-task-session
 ```
 
 **仅接入 stdio MCP 不会自动捕获宿主原生工具。** 这时可以使用配置好的 `cairn_tool_*` 自动取证。新版不提供让模型手动登记观测的工具；历史手动记录仍保留原始来源标记。hooks 缺失时，相应的原生捕获与恢复能力也不可用；严格应急 Profile 缺少所需接入能力时会拒绝启动或恢复。
 
 ```sh
-node bin/cairn.mjs doctor --target pi
-node bin/cairn.mjs doctor --target claude
-node bin/cairn.mjs doctor --target codex
+cairn doctor --target pi
+cairn doctor --target claude
+cairn doctor --target codex
 ```
 
 `doctor` 区分适配包**声明支持的能力**与**实际观察到的事件**，显示版本、安装、MCP、上游目录和 hooks 启动观察状态。配置文件存在、MCP 连通或 `startup_observed` 都不能证明每类工具调用都经过 hook。Codex 托管工具和部分特殊路径可能绕过本地 hooks；严格取证任务应使用受控网关工具。
@@ -185,11 +241,11 @@ node bin/cairn.mjs doctor --target codex
 ![蓝白进度看板：检查点、未解决问题与证据链（模拟数据）](docs/images/dashboard.png)
 
 ```sh
-node bin/cairn.mjs ui
+cairn ui
 
 # 使用其他端口或同一份指定数据库
-node bin/cairn.mjs ui --port 8001
-node bin/cairn.mjs ui --db .cairn/state.db --port 8001
+cairn ui --port 8001
+cairn ui --db .cairn/state.db --port 8001
 ```
 
 浏览器打开终端打印的地址，默认 `http://127.0.0.1:8000`。界面参照原版蓝白 Web UI：任务卡片总览、左侧证据关系画布、右侧“详情／提示／日志”。支持实时更新、原始结果按需查看、横纵布局、拖动缩放、全屏、调宽详情面板，以及报告和快照导出。阶段记录中的摘要、未解决问题和下一步也与任务一起保存。
@@ -197,11 +253,11 @@ node bin/cairn.mjs ui --db .cairn/state.db --port 8001
 进度表示“已满足条件数／总条件数”，并显示在途调用、累计调用和剩余预算。反证导致结论失效时，覆盖率可以下降。看板仅本机回环地址、只读访问，Agent 继续在原 CLI 工作；关闭看板不会停止任务。空白时检查看板和 CLI 是否使用同一数据库与工作区。
 
 ```sh
-node bin/cairn.mjs task list
-node bin/cairn.mjs task show TASK_ID
-node bin/cairn.mjs export TASK_ID --format json --out task.json
-node bin/cairn.mjs export TASK_ID --format markdown --out report.md
-node bin/cairn.mjs export TASK_ID --format html --out evidence.html
+cairn task list
+cairn task show TASK_ID
+cairn export TASK_ID --format json --out task.json
+cairn export TASK_ID --format markdown --out report.md
+cairn export TASK_ID --format html --out evidence.html
 ```
 
 将 `TASK_ID` 替换为实际值。HTML 导出包含可离线查看的证据图和原始结果。
@@ -211,7 +267,7 @@ node bin/cairn.mjs export TASK_ID --format html --out evidence.html
 共享网关支持 stdio 和 Streamable HTTP MCP 上游，按显式白名单提供 `cairn_tool_<配置名>`。例如配置名 `diagnose` 暴露为 `cairn_tool_diagnose`，直接接受上游工具的原始参数 Schema；模型无需再套一层通用 `tool`／`arguments`。
 
 ```sh
-node bin/cairn.mjs configure --file profiles/emergency.example.json
+cairn configure --file profiles/emergency.example.json
 ```
 
 **示例尚未连接真实比赛环境。** 正式使用前替换主办方工具命令、名称、参数与引用／范围／回执字段映射。配置名允许 1–53 个字母、数字、下划线或连字符，加前缀后工具名最多 64 字符。
@@ -237,7 +293,7 @@ node bin/cairn.mjs configure --file profiles/emergency.example.json
 4. 未确认时 finish 返回 `phase: "awaiting_confirmation"`。队伍在模型工具之外执行：
 
 ```sh
-node bin/cairn.mjs confirm TASK_ID
+cairn confirm TASK_ID
 ```
 
 5. Agent 再调用 `cairn_finish {}` 完成任务。
@@ -259,21 +315,25 @@ node bin/cairn.mjs confirm TASK_ID
 ## 更新、数据与卸载
 
 ```sh
+# 在 Cairn 仓库更新全局命令
 npm install
-npm run build
-node bin/cairn.mjs update --target pi
-node bin/cairn.mjs update --target claude
-node bin/cairn.mjs update --target codex
+npm run install:global
+
+# 回到原先安装适配包的项目更新；选择实际使用的宿主
+cd /path/to/your-project
+cairn update --target pi
+cairn update --target claude
+cairn update --target codex
 
 # 不再需要时选择实际安装的目标
-node bin/cairn.mjs uninstall --target pi
+cairn uninstall --target pi
 ```
 
-更新使用安装时相同的 `--scope` 和 `--root`，然后重启宿主会话，重新绑定或恢复任务。安装器合并配置，保留用户设置；用户修改过的受管登记项会报告冲突，卸载保留相关配置和运行时。
+全局命令与宿主内的适配包分别安装；更新全局命令后，还需更新已安装的宿主副本。更新使用安装时相同的 `--scope` 和 `--root`，然后重启宿主会话，重新绑定或恢复任务。安装器合并配置，保留用户设置；用户修改过的受管登记项会报告冲突，卸载保留相关配置和运行时。
 
 数据默认位于 `<workspace>/.cairn/state.db`，`CAIRN_DB` 或 `--db FILE` 可覆盖，`CAIRN_WORKSPACE` 可指定工作区。**已有 TypeScript 1.x SQLite 任务继续保留并可恢复**，已有报告可用于后续校验；旧 16 工具公共接口不再兼容。更早的 Python 服务、dispatcher 与数据库格式没有自动迁移。
 
-安装与任务数据分开管理，卸载不删除任务。原始结果可能包含敏感信息，应将 `.cairn` 保持私有并排除在 Git 之外。
+不再使用时先卸载对应宿主适配包，再执行 `npm uninstall --global cairn` 移除全局命令；自定义过前缀则带上原来的 `--prefix DIR`。安装与任务数据分开管理，卸载不删除任务。原始结果可能包含敏感信息，应将 `.cairn` 保持私有并排除在 Git 之外。
 
 ## 开发与验证
 
@@ -293,7 +353,7 @@ node scripts/claude-fixture-smoke.mjs
 
 真实模型测试使用现有账号，可能消耗额度，日志保留在打印的临时目录。测试中的临时 hooks 信任不替代日常安装的宿主信任流程。
 
-当前 **79 项自动化测试通过**（Node 24／26）。Codex 的真实模型闭环、Pi 与 Claude Code 的真实 CLI 本地协议闭环均已通过；Pi 的外部上游返回 429／503，Claude 的现有认证过期，尚未完成它们本轮的真实模型闭环。本次与历史验证分开记录，见 [验证记录](docs/verification.md)。协议与持久化测试不等同于模型排障准确率或任务效率验证。架构细节见 [architecture](docs/architecture.md)，带标准答案的合成案例见 [evaluations](evaluations/README.md)。
+当前 **89 项自动化测试通过**（Node 24／26），包含全局离线安装、离开源码运行、完整 MCP 样例和进程清理。2.0 版本另有 79 项验证基线。Codex 的真实模型闭环、Pi 与 Claude Code 的真实 CLI 本地协议闭环均已通过；Pi 的外部上游返回 429／503，Claude 的现有认证过期，尚未完成它们本轮的真实模型闭环。本次与历史验证分开记录，见 [验证记录](docs/verification.md)。协议与持久化测试不等同于模型排障准确率或任务效率验证。架构细节见 [architecture](docs/architecture.md)，带标准答案的合成案例见 [evaluations](evaluations/README.md)。
 
 ## 背景与许可
 

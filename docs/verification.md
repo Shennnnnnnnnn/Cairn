@@ -2,6 +2,19 @@
 
 Record date: 2026-10-15 (Asia/Shanghai). Current 2.0 verification is separated from historical checks of the replaced 1.x tool protocol.
 
+## Cairn 2.1 global command and complete example
+
+Verified locally on 2026-10-15 (Asia/Shanghai).
+
+- **89 tests passed on Node 26.3.0 and Node 24.19.0**. Typecheck/build passed. The new checks cover global package installation, the diagnostic example and stdio EOF cleanup; the earlier 79 tests remain included.
+- `npm run install:global -- --cache /private/tmp/cairn-npm-cache --offline` installed a real global package at the configured npm prefix. From `/private/tmp`, `cairn --version` returned `2.1.0`; the command resolved to `/opt/homebrew/lib/node_modules/cairn/bin/cairn.mjs`, independently of this checkout.
+- Automated packaging checks use an empty npm cache and temporary prefix, remove the source fixture, then verify version/help, all three host plugin installations, actual MCP startup and Pi extension import. The installed package has no runtime npm dependencies or source symlink.
+- Global `cairn demo --no-ui --delay 0 --json` completed actual stdio MCP calls in two connections, saved four Gateway observations with demo references, preserved a refuted hypothesis, explicitly took over at epoch 2, and exported consistent Markdown/HTML/JSON plus execution logs.
+- Global `cairn demo --port 0 --delay 3000` was inspected with ego-browser. The page showed suspended progress at 0/2, then completed at 2/2 with one takeover and four observations, without navigation/reload. Mapping evidence exposed the original `source_price * 100` expression. All 15 graph nodes fit the canvas after live growth.
+- The example uses fixed steps and explicitly fictional data. It calls no external model and does not establish reasoning quality or performance of Pi, Claude or Codex. `demo --prepare --target HOST` creates a separate native-CLI workspace for users to run with their own model/account.
+- Preparation rejects nonempty directories. The generated prompt explicitly binds `CAIRN_DB`, including when the sample is nested inside another Git repository. The deterministic driver refuses a different database or modified upstream configuration. Abort tests preserve incomplete progress and verify that child processes exit.
+- `docs/examples/price-incident.zh-CN.md` documents the complete sequence, actual tool arguments and results, short references, report artifacts and the native-host alternative. Its screenshot comes from the globally installed command.
+
 ## Cairn 2.0 verification
 
 Verified locally on 2026-10-15 (Asia/Shanghai), with the current five-tool protocol. Model/provider failures below are recorded separately from protocol integration results.
