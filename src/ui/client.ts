@@ -2,6 +2,7 @@ import type { TaskView, TaskSummary, TimelineEvent, ReplayPage, ReplayState } fr
 import type { Observation } from '../core/types.js';
 import { projectGraph, layoutGraph, graphNodeSize, graphPalette, graphKindLabels } from './graph.js';
 import type { GraphNode } from './graph.js';
+import { compareCheckpoint, checkpointActors, type CheckpointDelta } from './replay.js';
 
 type PositionedNode = GraphNode & { x: number; y: number };
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -45,6 +46,8 @@ let viewportCustomized=false;
 const rawCache = new Map<string, Observation>();
 let replayActive = false, replayPlaying = false, replayFrames: TimelineEvent[] = [], replayIndex = -1;
 let replayTimer: ReturnType<typeof setTimeout> | undefined, replayGeneration = 0, replayMissing = 0, replayChanged = false;
+let replayDelta: CheckpointDelta | undefined;
+let replayFollow = true;
 try { selectedTask = decodeURIComponent(location.hash.slice(1)); } catch { /* invalid fragments return to the task overview */ }
 overviewMode=!selectedTask;
 
@@ -117,31 +120,59 @@ function stopReplayPlayback() {
 function resetReplay() {
   stopReplayPlayback(); replayGeneration++; replayActive = false; replayFrames = []; replayIndex = -1;
   replayMissing = 0; replayChanged = false; renderReplay();
+  replayDelta = undefined;
 }
 function renderReplay() {
   document.body.classList.toggle('replay-mode', replayActive);
   byId('replay-bar').hidden = !replayActive;
   byId<HTMLButtonElement>('replay-start').disabled = replayActive;
+  byId('focus-change').hidden = !replayActive;
   for (const id of ['snapshot', 'download']) {
     byId<HTMLButtonElement>(id).disabled = replayActive;
     byId(id).title = replayActive ? '返回实时后导出最新任务状态' : '';
   }
   if (!replayActive) return;
   const event = replayFrames[replayIndex], ready = !!event;
-  text('replay-position', ready ? `${replayIndex + 1} / ${replayFrames.length} 条记录` : '正在读取历史…');
-  text('replay-time', event ? new Date(event.at).toLocaleString('zh-CN', { hour12: false }) : '');
-  text('replay-event', event ? `${event.title}${event.summary ? ` · ${event.summary}` : ''}` : '');
+  text('replay-position', ready ? `${replayIndex + 1} / ${replayFrames.length} 个阶段检查点` : '正在读取检查点…');
+  text('replay-time', event ? `保存于 ${new Date(event.at).toLocaleString('zh-CN', { hour12: false })}` : '');
+  const elapsed=replayDelta?.elapsedMs;
+  text('replay-elapsed',elapsed===undefined?'':`距上次保存 ${formatDuration(elapsed)}`);
+  text('replay-event', event ? `${event.title}${event.summary ? ` · ${short(event.summary,100)}` : ''}` : '');
+  text('replay-summary',event?.summary??'');
   text('replay-play', replayPlaying ? '暂停' : replayIndex === replayFrames.length - 1 && ready ? '重播' : '播放');
   byId<HTMLButtonElement>('replay-prev').disabled = !ready || replayIndex === 0;
   byId<HTMLButtonElement>('replay-next').disabled = !ready || replayIndex === replayFrames.length - 1;
   byId<HTMLButtonElement>('replay-play').disabled = !ready || replayFrames.length < 2;
   byId<HTMLButtonElement>('replay-restart').disabled = !ready;
   const seek = byId<HTMLInputElement>('replay-seek'); seek.disabled = !ready; seek.max = String(Math.max(0, replayFrames.length - 1)); seek.value = String(Math.max(0, replayIndex));
-  seek.setAttribute('aria-valuetext', event ? `第 ${replayIndex + 1} 条，${event.title}` : '正在读取');
-  const notices = ['仅查看已保存的目标、阶段和依据；不会重新执行工具。'];
+  seek.setAttribute('aria-valuetext', event ? `第 ${replayIndex + 1} 个阶段检查点，${event.title}` : '正在读取');
+  const notices = ['每帧是阶段检查点，可合并保存多个变化；保存时间不表示操作同时发生。'];
   if (replayMissing) notices.push(`旧任务有 ${replayMissing} 条记录未保存对应状态，仅回放可还原的起点、最新状态及升级后记录。`);
   if (replayChanged) notices.push('实时任务有新记录，当前回放保持不变；返回实时可查看最新状态。');
   text('replay-notice', notices.join(' ')); byId('replay-notice').hidden = false;
+  const actors=byId('replay-actors');actors.replaceChildren();
+  if(ready&&current){
+    const state=checkpointActors(current),main=[],sub=[];
+    if(state.main.running)main.push(`执行中 ${state.main.running}`);
+    if(state.main.review)main.push(`待复核 ${state.main.review}`);
+    if(state.main.reviewed)main.push(`复核完成 ${state.main.reviewed}`);
+    if(state.subagent.running)sub.push(`执行中 ${state.subagent.running}`);
+    if(state.subagent.returned)sub.push(`已返回待汇总 ${state.subagent.returned}`);
+    if(state.subagent.reviewed)sub.push(`已返回并复核 ${state.subagent.reviewed}`);
+    if(state.subagent.pending)sub.push(`待启动 ${state.subagent.pending}`);
+    actors.append(create('span','actor-caption','当前检查点记录'),create('span','actor-summary main',`主 Agent · ${main.join(' / ')||'阶段推进'}`),create('span','actor-summary subagent',`子 Agent · ${sub.join(' / ')||'无执行中分支'}`));
+  }
+  const changes=byId('replay-changes');changes.replaceChildren();
+  const delta=replayDelta;
+  const caption=!ready?'读取保存状态后显示变化':delta?.baseline==='initial'?'初始检查点 · 已建立的目标与分支':delta?.baseline==='gap'?`累计变化 · 跨过 ${delta.missing} 条缺失状态`:delta?.baseline==='unknown'?'缺少前一状态，暂不推断节点变化':delta?.highlighted.length?`本次变化 · 高亮 ${delta.highlighted.length} 个节点`:'本次只更新阶段摘要、报告或检查结果，图中节点无变化';
+  text('replay-change-heading',caption);
+  for(const change of delta?.changes??[]){
+    const role=change.actor==='main'?'主 Agent':change.actor==='subagent'?'子 Agent':'目标与依据';
+    const button=create('button',`checkpoint-change ${change.change}`,`${role} · ${short(change.title,24)} · ${change.label}`);
+    button.dataset.changeNodeId=change.nodeId;button.disabled=change.change==='removed';
+    button.title=`${change.before?`${change.before} → `:''}${change.after??'已移除'}${change.relatedIds.length?'；同时高亮主 Agent 的复核节点':''}`;
+    button.onclick=()=>{replayFollow=false;switchView('graph');inspect(change.relatedIds[0]??change.nodeId);focusNodes([change.relatedIds[0]??change.nodeId]);};changes.append(button);
+  }
 }
 function scheduleReplay() {
   if (!replayPlaying) return;
@@ -159,12 +190,14 @@ async function seekReplay(index: number, playing = false) {
     const saved = await request<ReplayState>(`/api/tasks/${encodeURIComponent(taskId)}/replay/${frame.seq}`);
     if (!replayActive || generation !== replayGeneration || selectedTask !== taskId) return;
     current = saved.task; timeline = saved.events; replayIndex = index; replayPlaying = playing;
-    detailGeneration++; selectedNode = 'origin'; renderCurrent(); showError(); scheduleReplay();
+    replayDelta=saved.checkpoint??compareCheckpoint(saved.task,undefined,{baseline:'unknown'});
+    const primary=replayDelta.changes.find(change=>change.kind==='branch'&&change.change!=='removed');
+    detailGeneration++; selectedNode = primary?.relatedIds[0]??primary?.nodeId??(current.status==='completed'?'goal':'origin'); renderCurrent(); showError(); scheduleReplay();
   } catch (error) { if (generation === replayGeneration) { stopReplayPlayback(); renderReplay(); showError(error); } }
 }
 async function startReplay() {
   if (!current || replayActive) return;
-  replayActive = true; replayFrames = []; replayIndex = -1; replayChanged = false;
+  replayActive = true; replayFrames = []; replayIndex = -1; replayChanged = false; replayFollow=true;
   const generation = ++replayGeneration, taskId = selectedTask; renderReplay();
   try {
     let after = 0, head: number | undefined;
@@ -211,19 +244,29 @@ function renderGraph() {
   if (!viewportCustomized && (graphSize.width !== previousSize.width || graphSize.height !== previousSize.height)) needsFit = true;
   const world = document.getElementById('graph-world')!; world.replaceChildren();
   const vertical = layout === 'vertical', { width, height } = graphNodeSize;
+  const changed=new Set(replayActive?replayDelta?.highlighted:[]);
+  for(const lane of projection.lanes){
+    const group=svg('g',{class:`actor-lane ${lane.actor}`,'data-actor-lane':lane.actor,'aria-label':lane.label});
+    group.append(svg('rect',{x:lane.x,y:lane.y,width:lane.width,height:lane.height,rx:14,class:'lane-body'}),svg('text',{x:lane.x+12,y:lane.y+19,class:'lane-title'},lane.label));world.append(group);
+  }
   for (const edge of projection.edges) {
     const a = nodes.get(edge.from)!, b = nodes.get(edge.to)!;
     const path = vertical
       ? `M${a.x + width / 2},${a.y + height} C${a.x + width / 2},${a.y + height + 34} ${b.x + width / 2},${b.y - 34} ${b.x + width / 2},${b.y}`
       : `M${a.x + width},${a.y + height / 2} C${a.x + width + 35},${a.y + height / 2} ${b.x - 35},${b.y + height / 2} ${b.x},${b.y + height / 2}`;
-    const marker = edge.state === 'running' ? 'arrow-running' : edge.state === 'refuted' ? 'arrow-red' : edge.state === 'pending' || edge.state === 'context' ? 'arrow-pending' : 'arrow';
+    const marker = edge.relation==='handoff'||edge.state==='review'?'arrow-review':edge.state === 'running' ? 'arrow-running' : edge.state === 'refuted' ? 'arrow-red' : edge.state === 'pending' || edge.state === 'context' ? 'arrow-pending' : 'arrow';
     const line = svg('path', { d: path, class: `edge ${edge.state} relation-${edge.relation}`, 'marker-end': `url(#${marker})`, 'data-edge-from': edge.from, 'data-edge-to': edge.to, 'data-relation': edge.relation });
-    line.append(svg('title', {}, { context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+    line.append(svg('title', {}, { context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', handoff:'子 Agent 返回结果，进入主 Agent 的复核流程',review:'由分支状态生成的主 Agent 复核关系',stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+    if(edge.relation==='handoff')world.append(svg('text',{x:(a.x+b.x+width)/2,y:(a.y+b.y+height)/2-5,'text-anchor':'middle',class:'handoff-label'},edge.state==='review'?'返回 · 待复核':'返回 · 已复核'));
   }
   for (const node of nodes.values()) {
-    const palette = graphPalette[node.status], group = svg('g', { class: `node status-${node.status}${selectedNode === node.id ? ' selected' : ''}`, transform: `translate(${node.x},${node.y})`, role: 'button', tabindex: '0', 'aria-label': `${graphKindLabels[node.kind]}：${node.label}，${node.state}`, 'data-node-id': node.id, 'data-node-kind': node.kind, 'data-node-status': node.status });
-    group.append(svg('rect', { width, height, rx: 11, fill: palette.fill, stroke: palette.stroke }));
-    group.append(svg('text', { x: 13, y: 18, class: 'type', fill: palette.muted }, graphKindLabels[node.kind]));
+    const actor=node.actor==='main'?'主 Agent':node.actor==='subagent'?'子 Agent':'';
+    const palette = graphPalette[node.status], group = svg('g', { class: `node status-${node.status}${selectedNode === node.id ? ' selected' : ''}${changed.has(node.id)?' checkpoint-changed':changed.size?' checkpoint-unchanged':''}`, transform: `translate(${node.x},${node.y})`, role: 'button', tabindex: '0', 'aria-label': `${actor?actor+'，':''}${graphKindLabels[node.kind]}：${node.label}，${node.state}${changed.has(node.id)?'，本检查点变化':''}`, 'data-node-id': node.id, 'data-node-kind': node.kind, 'data-node-status': node.status,'data-node-actor':node.actor??'shared','data-checkpoint-changed':String(changed.has(node.id)) });
+    if(changed.has(node.id))group.append(svg('rect',{x:-4,y:-4,width:width+8,height:height+8,rx:14,class:'change-outline',fill:'none',stroke:'#2563eb'}));
+    group.append(svg('rect', { width, height, rx: 11, fill: palette.fill, stroke: palette.stroke,class:'node-body' }));
+    const role=actor?(node.actor==='subagent'&&['basis','claim'].includes(node.kind)?'子 Agent 分支':actor)+' · ':'';
+    group.append(svg('text', { x: 13, y: 18, class: 'type', fill: palette.muted }, role+graphKindLabels[node.kind]));
+    if(changed.has(node.id))group.append(svg('circle',{cx:width,cy:0,r:5,fill:'#2563eb',class:'change-dot'}));
     const lines = graphLines(node.label);
     lines.forEach((line, i) => group.append(svg('text', { x: 13, y: lines.length === 1 ? 47 : 40 + i * 18, class: 'label', fill: palette.text }, line)));
     group.append(svg('text', { x: 13, y: 80, class: 'state', fill: palette.muted }, short(node.state, 27)));
@@ -239,9 +282,26 @@ function renderGraph() {
   }
   if (!nodes.has(selectedNode)) selectedNode = 'origin';
   if (needsFit && activeView === 'graph') { needsFit = false; fit(); } else applyTransform();
+  if(replayActive&&replayFollow&&!viewportCustomized&&activeView==='graph')followCheckpoint();
 }
 function inspect(id: string) { selectedNode = id;switchInspector('details'); document.querySelectorAll<SVGElement>('.node').forEach(node => node.classList.toggle('selected', node.dataset.nodeId === id)); void renderDetails(); }
-function applyTransform() { document.getElementById('graph-world')!.setAttribute('transform', `translate(${transform.x},${transform.y}) scale(${transform.scale})`); }
+function focusNodes(ids:string[]){
+  const targets=ids.map(id=>nodes.get(id)).filter((node):node is PositionedNode=>!!node);if(!targets.length)return;
+  const rect=byId('graph').getBoundingClientRect(),left=Math.min(...targets.map(n=>n.x)),top=Math.min(...targets.map(n=>n.y)),right=Math.max(...targets.map(n=>n.x+graphNodeSize.width)),bottom=Math.max(...targets.map(n=>n.y+graphNodeSize.height));
+  transform.scale=Math.max(.08,Math.min(1.1,(rect.width-70)/(right-left),(rect.height-70)/(bottom-top)));
+  transform.x=rect.width/2-(left+right)/2*transform.scale;transform.y=rect.height/2-(top+bottom)/2*transform.scale;viewportCustomized=true;applyTransform();
+}
+function followCheckpoint(){
+  const flow=[...nodes.values()].filter(node=>node.kind==='branch'||node.kind==='review');
+  focusNodes(flow.length?flow.map(node=>node.id):replayDelta?.highlighted??[]);viewportCustomized=false;
+}
+function applyTransform() {
+  document.getElementById('graph-world')!.setAttribute('transform', `translate(${transform.x},${transform.y}) scale(${transform.scale})`);
+  const labels=document.querySelector('.graph-labels')!.children;
+  labels[0]!.textContent=replayActive&&replayFollow?'聚焦分支执行与复核':'连线表示保存关系与分支复核状态';
+  labels[1]!.textContent=replayActive&&replayFollow?'适应画布查看完整关系图':'阶段分支不表示依赖顺序';
+  byId('focus-change').setAttribute('aria-pressed',String(replayActive&&replayFollow));
+}
 function fit() {
   viewportCustomized=false;
   const rect = byId('graph').getBoundingClientRect();
@@ -250,7 +310,7 @@ function fit() {
   transform.x = (rect.width - graphSize.width * transform.scale) / 2; transform.y = (rect.height - graphSize.height * transform.scale) / 2; applyTransform();
 }
 function zoom(factor: number, x?: number, y?: number) {
-  viewportCustomized=true;
+  viewportCustomized=true;replayFollow=false;
   const rect = byId('graph').getBoundingClientRect(), mx = x ?? rect.width / 2, my = y ?? rect.height / 2;
   const scale = Math.min(2.5, Math.max(.08, transform.scale * factor)), ratio = scale / transform.scale;
   transform.x = mx - (mx - transform.x) * ratio; transform.y = my - (my - transform.y) * ratio; transform.scale = scale; applyTransform();
@@ -258,29 +318,33 @@ function zoom(factor: number, x?: number, y?: number) {
 let dragged = false, drag: { x: number; y: number; tx: number; ty: number } | undefined;
 const graph = byId('graph');
 graph.onpointerdown = event => { if (event.button !== 0) return; drag = { x: event.clientX, y: event.clientY, tx: transform.x, ty: transform.y }; dragged = false; };
-graph.onpointermove = event => { if (!drag) return; const dx = event.clientX - drag.x, dy = event.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) { if(!graph.hasPointerCapture(event.pointerId))graph.setPointerCapture(event.pointerId);dragged = true;viewportCustomized=true; graph.classList.add('dragging'); transform.x = drag.tx + dx; transform.y = drag.ty + dy; applyTransform(); } };
+graph.onpointermove = event => { if (!drag) return; const dx = event.clientX - drag.x, dy = event.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) { if(!graph.hasPointerCapture(event.pointerId))graph.setPointerCapture(event.pointerId);dragged = true;viewportCustomized=true;replayFollow=false; graph.classList.add('dragging'); transform.x = drag.tx + dx; transform.y = drag.ty + dy; applyTransform(); } };
 graph.onpointerup = event => { drag = undefined; graph.classList.remove('dragging'); if (graph.hasPointerCapture(event.pointerId)) graph.releasePointerCapture(event.pointerId); setTimeout(() => { dragged = false; }, 0); };
 graph.onpointercancel = () => { drag = undefined; dragged = false; graph.classList.remove('dragging'); };
 window.addEventListener('pointerup',()=>{drag=undefined;graph.classList.remove('dragging');setTimeout(()=>{dragged=false;},0);});
 graph.addEventListener('wheel', event => { event.preventDefault(); const rect = graph.getBoundingClientRect(); zoom(Math.exp(-event.deltaY * .0015), event.clientX - rect.left, event.clientY - rect.top); }, { passive: false });
-byId('zoom-in').onclick = () => zoom(1.2); byId('zoom-out').onclick = () => zoom(1 / 1.2); byId('fit').onclick = fit;
+byId('zoom-in').onclick = () => zoom(1.2); byId('zoom-out').onclick = () => zoom(1 / 1.2); byId('fit').onclick = () => {replayFollow=false;fit();};
 
 function metadata(parent: HTMLElement, key: string, value: unknown) { const row = create('div', 'meta'); row.append(create('span', '', key), create('span', '', String(value ?? '—'))); parent.append(row); }
 function heading(parent: HTMLElement, value: string) { parent.append(create('h3', '', value)); }
 function reference(parent: HTMLElement, id: string, kind: 'obs' | 'claim' | 'branch') {
   const node = nodes.get(`${kind}:${id}`), button = create('button', 'ref-button', node ? `${kind === 'obs' ? '↗ 原始观测' : kind === 'branch' ? '↗ 排查分支' : '↗ 结论'} · ${short(node.label, 30)}` : id);
-  button.onclick = () => { switchView('graph'); inspect(`${kind}:${id}`); }; parent.append(button);
+  button.onclick = () => { replayFollow=false;switchView('graph'); inspect(`${kind}:${id}`);focusNodes([`${kind}:${id}`]); }; parent.append(button);
 }
 async function renderDetails() {
   const task = current; if (!task) return;
   const generation = ++detailGeneration, panel = byId('details'); panel.replaceChildren();
-  if(selectedNode.startsWith('branch:')){
-    const branch=task.branches.find(item=>`branch:${item.key}`===selectedNode);
+  const delta=replayActive?replayDelta?.changes.find(change=>change.nodeId===selectedNode||change.relatedIds.includes(selectedNode)):undefined;
+  if(delta)panel.append(create('div','checkpoint-detail',`本阶段检查点 · ${delta.label}${delta.before?`\n${delta.before} → ${delta.after??'已移除'}`:''}`));
+  const reviewing=selectedNode.startsWith('review:');
+  if(selectedNode.startsWith('branch:')||reviewing){
+    const branch=task.branches.find(item=>item.key===selectedNode.slice(7));
     if(branch){
-      text('detail-kind','排查分支');panel.append(create('div',`detail-tag ${branch.status}`,branch.statusLabel),create('h2','',branch.title));
-      metadata(panel,'负责人',branch.executorLabel);metadata(panel,'分支标识',branch.key);
+      text('detail-kind',reviewing?'主 Agent 复核汇总':'排查分支');panel.append(create('div',`detail-tag ${branch.status}`,reviewing?(branch.status==='completed'?'复核完成':'返回待汇总 · 等待复核'):branch.statusLabel),create('h2','',branch.title));
+      metadata(panel,'负责人',reviewing?'主 Agent':branch.executor==='subagent'?`子 Agent · ${branch.executorLabel}`:branch.executorLabel);metadata(panel,'分支标识',branch.key);
+      if(reviewing)metadata(panel,'结果返回自',`子 Agent · ${branch.executorLabel}`);
       if(branch.agentId)metadata(panel,'宿主 Agent ID',branch.agentId);
-      metadata(panel,'状态来源',branch.activitySource==='host'?'主 Agent 状态与宿主生命周期':'主 Agent 报告');
+      metadata(panel,'状态来源',reviewing?'阶段检查点中的分支复核状态':branch.activitySource==='host'?'主 Agent 状态与宿主生命周期':'主 Agent 报告');
       if(branch.activitySource==='host')metadata(panel,'最近宿主事件',branch.activityStatus==='returned'?'执行已结束':'开始执行');
       metadata(panel,'负责人代次',branch.epoch);metadata(panel,'最近更新',formatTime(branch.updatedAt));
       if(branch.question){heading(panel,'排查问题');panel.append(create('div','detail-text',branch.question));}
@@ -436,7 +500,8 @@ function renderSidebar(){
 }
 document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => { button.onclick = () => switchView(button.dataset.view!); });
 byId<HTMLInputElement>('search').oninput = renderTasks; byId<HTMLSelectElement>('filter').onchange = renderTasks;
-byId('show-goal').onclick = () => inspect('goal');
+byId('show-goal').onclick = () => {replayFollow=false;inspect('goal');focusNodes(['goal']);};
+byId('focus-change').onclick=()=>{replayFollow=true;followCheckpoint();};
 byId('replay-start').onclick = () => { void startReplay(); };
 byId('replay-live').onclick = () => { resetReplay(); void refresh(); };
 byId('replay-prev').onclick = () => { void seekReplay(replayIndex - 1); };
@@ -454,7 +519,7 @@ byId('back-to-list').onclick=()=>{resetReplay();overviewMode=true;selectedTask='
 byId<HTMLSelectElement>('layout').onchange=()=>{layout=byId<HTMLSelectElement>('layout').value === 'vertical' ? 'vertical' : 'horizontal';needsFit=true;renderGraph();};
 document.querySelectorAll<HTMLButtonElement>('[data-inspector]').forEach(button=>{button.onclick=()=>switchInspector(button.dataset.inspector!);});
 byId('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await byId('graph-wrap').requestFullscreen();}catch(error){showError(error);}};
-document.addEventListener('fullscreenchange',()=>{const button=byId('fullscreen');button.setAttribute('aria-label',document.fullscreenElement?'退出全屏':'全屏画布');requestAnimationFrame(fit);});
+document.addEventListener('fullscreenchange',()=>{const button=byId('fullscreen');button.setAttribute('aria-label',document.fullscreenElement?'退出全屏':'全屏画布');requestAnimationFrame(()=>replayActive&&replayFollow?followCheckpoint():fit());});
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.fullscreenElement)void document.exitFullscreen().catch(showError);});
 const resizer=byId('panel-resizer'),board=document.querySelector<HTMLElement>('.board')!;
 const resizePanel=(width:number)=>{const value=Math.max(270,Math.min(width,Math.min(700,board.clientWidth*.6)));board.style.setProperty('--inspector-width',`${value}px`);resizer.setAttribute('aria-valuenow',String(Math.round(value)));};
@@ -463,7 +528,7 @@ resizer.onpointermove=event=>{if(resizer.hasPointerCapture(event.pointerId))resi
 resizer.onpointerup=event=>{if(resizer.hasPointerCapture(event.pointerId))resizer.releasePointerCapture(event.pointerId);};
 resizer.onkeydown=event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();resizePanel(document.querySelector<HTMLElement>('.inspector')!.getBoundingClientRect().width+(event.key==='ArrowLeft'?20:-20));}};
 byId('download').onclick = () => { if (current) location.href = `/api/tasks/${encodeURIComponent(current.id)}/export?format=markdown`; };
-new ResizeObserver(() => { if (current && activeView === 'graph') fit(); }).observe(graph);
+new ResizeObserver(() => { if (current && activeView === 'graph') { if(replayActive&&replayFollow)followCheckpoint();else fit(); } }).observe(graph);
 const stream = new EventSource('/api/stream');
 stream.addEventListener('ready', () => { byId('connection').classList.remove('offline'); byId('connection').lastElementChild!.textContent = '实时同步'; void refresh(); });
 stream.addEventListener('change', () => { if (replayActive) replayChanged = true; void refresh(); });

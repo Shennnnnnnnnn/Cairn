@@ -179,7 +179,10 @@ test('graph shows actual branch membership and nesting, with lifecycle-aware rep
       assert.equal(layout.nodes.length, model.nodes.length);
       for (const node of layout.nodes) assert.ok(node.x >= 0 && node.y >= 0 && node.x + 225 <= layout.width && node.y + 94 <= layout.height);
       const bases=layout.nodes.filter(node=>node.kind==='basis');
-      assert.equal(bases[0]!.data.branch,'logs','basis ordering follows the branch lane rather than result arrival order');
+      for(const basis of bases){
+        const lane=layout.lanes.find(l=>l.actor===basis.actor)!;
+        assert.ok(basis.x>=lane.x&&basis.y>=lane.y&&basis.x+225<=lane.x+lane.width&&basis.y+94<=lane.y+lane.height,'basis stays with the responsible actor');
+      }
     }
   } finally { store.close(); }
 });

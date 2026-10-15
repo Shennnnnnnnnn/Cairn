@@ -1,6 +1,7 @@
 import type { Engine } from '../core/engine.js';
 import type { Task, Observation, Check, Branch } from '../core/types.js';
 import { branchStatus, branchRun, branchLabels } from '../core/branches.js';
+import type { CheckpointDelta } from './replay.js';
 
 export type ObservationIndex = Omit<Observation, 'input' | 'output'> & { ref: string };
 export type WorkItem = {
@@ -93,7 +94,7 @@ export function summaries(engine: Engine): TaskSummary[] {
 
 export type TimelineEvent = { seq: number; kind: string; at: string; subject: string; observationId?: string; title: string; category: 'milestone' | 'evidence' | 'advanced'; status?: string; summary: string; detail?: string };
 export interface ReplayPage { frames: TimelineEvent[]; total: number; missing: number; head: number; next: number | null }
-export interface ReplayState { task: TaskView; events: TimelineEvent[]; seq: number }
+export interface ReplayState { task: TaskView; events: TimelineEvent[]; seq: number; checkpoint?: CheckpointDelta }
 const titles: Record<string, string> = {
   'task.created': '开始目标', 'task.resumed': '接管并恢复', 'task.suspended': '暂停任务', 'task.completed': '已完成', 'task.checkpoint': '保存阶段进展',
   'tool.started': '开始历史工具调用', 'observation.captured': '保存原始观测', 'claim.revised': '更新结论', 'criterion.updated': '更新目标条件', 'action.updated': '更新行动进展',

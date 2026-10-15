@@ -7,7 +7,12 @@ export function branchRun(task: Task, branch: Branch) {
 export function branchStatus(task: Task, branch: Branch): Branch['status'] {
   if (['completed', 'cancelled'].includes(branch.status)) return branch.status;
   if (task.status !== 'active' || branch.epoch !== task.owner.epoch) return 'blocked';
-  return branch.status === 'running' && branchRun(task, branch)?.status === 'returned' ? 'awaiting_review' : branch.status;
+  if(['pending','running'].includes(branch.status)){
+    const run=branchRun(task,branch);
+    if(run?.status==='returned')return 'awaiting_review';
+    if(run?.status==='running')return 'running';
+  }
+  return branch.status;
 }
 export function updateBranches(task: Task, inputs: BranchInput[], at: string): boolean {
   if (!Array.isArray(inputs)) throw new CairnError('invalid_branch', 'Branches must be an array');
@@ -22,7 +27,7 @@ export function updateBranches(task: Task, inputs: BranchInput[], at: string): b
     const executor = input.executor ?? old?.executor ?? 'main';
     if (!['main', 'subagent'].includes(executor)) throw new CairnError('invalid_branch', 'Invalid branch executor');
     const agentId = input.agentId === null ? undefined : input.agentId ?? old?.agentId;
-    const restart = !old || old.epoch!==task.owner.epoch || old.executor!==executor || old.agentId!==agentId || input.status==='running'&&(old.status!=='running'||branchStatus(task,old)==='awaiting_review');
+    const restart = !old || old.epoch!==task.owner.epoch || old.executor!==executor || old.agentId!==agentId || input.status==='running'&&branchStatus(task,old)!=='running';
     const value: Branch = { ...old, ...input, executor, parent: input.parent === null ? undefined : input.parent ?? old?.parent, agentId, epoch: task.owner.epoch, attempt:(old?.attempt??0)+(restart?1:0), updatedAt: old?.updatedAt ?? at };
     if (executor === 'main') {
       if (input.agentId) throw new CairnError('invalid_branch', 'A main-agent branch cannot bind a child agent');
@@ -53,7 +58,7 @@ export function updateBranches(task: Task, inputs: BranchInput[], at: string): b
 }
 
 export function pauseBranches(task: Task, at: string, summary: string) {
-  for (const branch of task.branches ?? []) if (branch.status === 'running') {
+  for (const branch of task.branches ?? []) if (branch.status === 'running'||branch.status==='pending'&&branchRun(task,branch)?.status==='running') {
     branch.status = 'blocked'; branch.summary = summary; branch.updatedAt = at;
   }
 }

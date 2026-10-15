@@ -1,6 +1,6 @@
 # Verification record
 
-Cairn 4.2 — verified on 2026-10-15 (Asia/Shanghai).
+Cairn 4.3 — verified on 2026-10-15 (Asia/Shanghai).
 
 ## Current scope
 
@@ -10,7 +10,7 @@ The domain-specific competition profile and its resources were removed from the 
 
 ## Automated verification
 
-- **182 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
+- **189 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
 - A practical public-interface test created a real local faulty implementation, reproduced its incorrect output through a separate Node process, saved findings, paused, restored from another host, fixed the file and ran actual regression inputs. The final report completed from its goal coverage and references, with no tool-call records.
 - Interface tests verify that removed profile/budget/report fields are rejected, fresh databases contain no match-state table, and captured findings can complete without an external platform reference.
 - Core checks cover contradictory/unsupported findings, scope coverage, reference membership, paging and bounded context, cancellation, interruption, cross-host takeover and stale-owner rejection.
@@ -31,6 +31,12 @@ The domain-specific competition profile and its resources were removed from the 
 
 ## Replay verification
 
+- Version 4.3 labels every replay frame as a stage checkpoint, with save time, elapsed save interval, changed-node links and recorded actor states. The original five snapshots in the real Codex fixture remain five snapshots; no tool log or synthetic intermediate operation is added.
+- Semantic-delta tests verify batch updates, a helper returning while another remains running, main-agent review and continued execution, dictionary/relation reordering, revision/timestamp-only saves, independent basis changes, removed nodes, actor reassignment, first/unknown baselines, and aggregate deltas across missing history. HTTP tests confirm that direct/backward seeks always compare to the preceding saved task frame and never mutate task state or events.
+- Role-lane tests verify ownership, bounds and non-overlap in both layouts. Review nodes derive from saved branch status and group with the source branch's transition. Optional matched native starts/returns can advance a pending branch without changing tool-record policy; acknowledging the start retains its execution identity, and pause/resume does not infer continued liveness.
+- ego-browser interaction checks on the original Codex task confirmed main/subagent parallel states, a returned helper with a separate main-agent review node, accurate changed-node sets, review completion while repair begins, backward seeks with reordered responses, pause during an in-flight frame, change-link navigation, full-graph/flow camera modes and cleared highlights on live return. No page JavaScript exception was reported in those checks.
+- The screenshot API repeatedly timed out, including for an empty diagnostic page and direct CDP capture; no new 4.3 screenshot was generated or claimed. Existing screenshots retain their earlier-version provenance. Browser state, interactions and rendered DOM geometry were checked; pixel capture was unavailable.
+
 - Every saved mutation and completion check retains a domain-state frame keyed by event sequence. Tests cover finding revisions, running/completed graph states, suspension, cross-host takeover, same-revision checks, and rollback when snapshot persistence fails.
 - Historical API tests verify task isolation, invalid cursors, read-only access, omission of raw tool IO, curated privacy after a mode change, more than 200 records across pages, and a fixed replay head while new events arrive. Historical deadline labels use event time.
 - Legacy migration retains known creation/head baselines, is idempotent, and rejects unavailable intermediate frames. It does not fabricate history from the final state.
@@ -39,6 +45,8 @@ The domain-specific competition profile and its resources were removed from the 
 - Desktop and 390px browser checks retained the blue-and-white graph and usable replay controls without horizontal overflow. These fixtures exercise UI behavior; they do not claim a new external-model investigation.
 
 ## Installed workflow checks
+
+- The 4.3 global command and managed Multica runtime were updated in place. A source-independent installed MCP/CLI protocol check used explicitly labelled synthetic native lifecycle events to verify pending-to-running projection, pause/resume remaining blocked, returned-result review and completed acceptance. It confirmed zero tool records and no child response sentinel in the persisted task. The real Codex sample dashboard was restarted on its original URL with the installed runtime.
 
 - The global 4.2 command and managed Multica MCP/skill were updated in place. Doctor confirmed enabled bindings and the source-independent runtime; the owned skill files include both practical-workflow and delegation references. The installed MCP passed an isolated branch start/read/pause/resume/finish protocol run with the five non-destructive core tools.
 

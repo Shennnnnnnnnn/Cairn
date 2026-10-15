@@ -6,6 +6,7 @@ import { CairnError } from '../core/types.js';
 import { html, markdown } from '../export.js';
 import { renderPage } from './page.js';
 import { projectTask, summaries, projectEvent } from './view.js';
+import { compareCheckpoint } from './replay.js';
 
 export interface UiOptions { port?: number; host?: string; pollMs?: number }
 export async function startUi(engine: Engine, options: UiOptions = {}) {
@@ -70,8 +71,15 @@ export async function startUi(engine: Engine, options: UiOptions = {}) {
           const seq = cursor(match[3]), saved = engine.store.historical(taskId, seq);
           // A switch to curated mode must not reopen old captured records.
           if (curated) saved.task.evidenceMode = 'curated';
+          const previous=engine.store.db.prepare(`SELECT e.seq,e.at,h.state FROM events e JOIN task_history h ON h.event_seq=e.seq WHERE e.task_id=? AND e.seq<? ${visible} ORDER BY e.seq DESC LIMIT 1`).get(taskId,seq);
+          const taskView=projectTask(engine,saved.task,saved.at);
+          const previousTask=previous?JSON.parse(previous.state as string):undefined;
+          if(curated&&previousTask)previousTask.evidenceMode='curated';
+          const missing=previous?Number(engine.store.db.prepare(`SELECT COUNT(*) AS count FROM events e WHERE e.task_id=? AND e.seq>? AND e.seq<? ${visible}`).get(taskId,Number(previous.seq),seq)!.count):0;
+          const kind=engine.store.db.prepare('SELECT kind FROM events WHERE task_id=? AND seq=?').get(taskId,seq)!.kind;
+          const checkpoint=compareCheckpoint(taskView,previousTask?projectTask(engine,previousTask,previous!.at as string):undefined,{baseline:previous?(missing?'gap':'previous'):kind==='task.created'?'initial':'unknown',previousSeq:previous?Number(previous.seq):undefined,missing});
           const rows = engine.store.db.prepare(`SELECT e.seq,e.kind,e.at,e.payload FROM events e WHERE e.task_id=? AND e.seq<=? ${visible} ORDER BY e.seq DESC LIMIT 100`).all(taskId, seq).reverse();
-          json(response, { task: projectTask(engine, saved.task, saved.at), seq, events: rows.map(row => projectEvent({ seq: Number(row.seq), kind: row.kind as string, at: row.at as string, payload: JSON.parse(row.payload as string) })) }); return;
+          json(response, { task: taskView, seq, checkpoint, events: rows.map(row => projectEvent({ seq: Number(row.seq), kind: row.kind as string, at: row.at as string, payload: JSON.parse(row.payload as string) })) }); return;
         }
         const after = cursor(url.searchParams.get('after'));
         const head = cursor(url.searchParams.get('head'), Number(engine.store.db.prepare('SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE task_id=?').get(taskId)!.seq));

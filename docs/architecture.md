@@ -1,4 +1,4 @@
-# Cairn 4.2 plugin architecture
+# Cairn 4.3 plugin architecture
 
 Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
 
@@ -87,6 +87,14 @@ Official references: [Codex subagents](https://learn.chatgpt.com/docs/agent-conf
 `cairn_read` retrieves a curated finding by key/ID or a captured observation by alias/ID/result reference. Indexes and history use record pagination. Full task metadata uses `view: "details"`; large records and immutable event payloads use character offsets. Details pages can require a matching revision; individual audit payloads use `view: "history", ref: "event:SEQ"`. UI/export projections retain access to full persisted records.
 
 Existing TypeScript SQLite tasks and reports remain available with their original mode. Older Python formats have no automatic migration. Replacing the public workflow does not erase task history.
+
+## Checkpoint replay semantics
+
+The replay endpoint projects the requested state and its immediately preceding available visible state in the same task. The response includes a semantic checkpoint delta: changes, highlighted node IDs, prior sequence/time, elapsed save interval and gap disclosure. It does not compare against the browser's last visited frame, so direct/backward seeks have the same result. Missing intermediate snapshots produce an explicitly aggregate delta; unavailable baselines produce no inferred highlights.
+
+Graph comparisons exclude storage revisions, timestamps and geometry, and canonicalize dictionary/relation order. Origin/goal signatures contain only meaningful visible state. Branch transitions group the derived review node with its source branch, rather than presenting one returned result as two operations. Removed information is listed without drawing a current ghost node. Actor lanes and review/return links derive from saved branch assignment and acceptance; they do not add domain events, tool telemetry, private reasoning or measured execution spans.
+
+The replay UI labels each frame as a stage checkpoint, shows save time and recorded parallel states, and keeps state colors while outlining changed nodes. Its default camera focuses branch execution and review; fit and source links expose the full graph. A checkpoint may batch updates, and the displayed save interval is not an operation duration or evidence of simultaneous execution. Live updates remain isolated until the user returns live.
 
 ## Native adapters
 
