@@ -105,37 +105,7 @@ test('cross CLI takeover fences checkpoint and finish and cannot promote late ev
   assert.equal(result.phase,'completed');assert.equal(result.owner.epoch,2);store.close();
 });
 
-test('strict completion exposes delivery and confirmation stages and freezes receipted reports',()=>{
-  const store=new Store(':memory:'),engine=new Engine(store);
-  store.register(session,{capture:true,preTool:true,restore:true,stop:true});store.setConfig('gateway',{tools:[{name:'submit',role:'submit'}]});
-  const task=engine.create(session,{origin:'contest',goal:'Diagnose',criteria:['Cause'],profile:'emergency',scope:{teamId:'t',roundId:'r',issueId:'i',matchId:'m'}});
-  observation(engine,task.id,'cause',{resultRef:'real-cause'});
-  const input:CheckpointInput={summary:'Mapping root cause',findings:[{key:'cause',text:'Incorrect mapping scales values',evidence:['E1']}],report:{
-    impact:{text:'Old clients',scope:task.scope,observationIds:['E1']},rootCause:{text:'Mapping defect',level:'root'},solution:{mitigation:'Disable old route',fix:'Correct the mapping',prevention:'Contract checks'},
-  }};
-  assert.equal(engine.finish(task.id,session,{...input,outcome:'completed'}).phase,'ready_for_delivery');
-  assert.deepEqual(store.get(task.id).report?.impact?.observationIds,[store.get(task.id).observations[0]!.id]);
-  engine.beforeTool(task.id,session,'submit','submit',true);
-  assert.throws(()=>engine.checkpoint(task.id,session,input),/in flight/);
-  const receipt=observation(engine,task.id,'submit',{tool:'submit',resultRef:'receipt-ref',receipt:{accepted:true}});
-  engine.delivery(task.id,session,'delivery-1',receipt.id);
-  assert.equal(engine.finish(task.id,session,{outcome:'completed'}).phase,'awaiting_confirmation');
-  const delivered=store.get(task.id);engine.checkpoint(task.id,session,{summary:'Progress only'});assert.deepEqual(store.get(task.id).report,delivered.report);assert.throws(()=>engine.checkpoint(task.id,session,{summary:'Changed conclusion',report:{summary:'Changed report'}}),/frozen/);
-  assert.throws(()=>engine.report(task.id,session,{...delivered.report!,summary:'Changed report'}),/frozen/);
-  assert.throws(()=>engine.claim(task.id,session,{id:delivered.claims[0]!.id,key:'cause',text:'Changed claim',status:'supported',supports:[delivered.observations[0]!.id],refutes:[]}),/frozen/);
-  engine.confirm(task.id);const confirmation=store.get(task.id).confirmedAt;
-  engine.checkpoint(task.id,session,{summary:input.summary,questions:['Archive the receipt']});
-  assert.deepEqual(store.get(task.id).delivery,delivered.delivery);assert.equal(store.get(task.id).confirmedAt,confirmation);
-  assert.equal(engine.finish(task.id,session,{outcome:'completed'}).phase,'completed');store.close();
-});
 
-test('manual contest evidence is readable but remains ineligible for a checkpoint conclusion',()=>{
-  const store=new Store(':memory:'),engine=new Engine(store);
-  store.register(session,{capture:true,preTool:true,restore:true,stop:true});store.setConfig('gateway',{tools:[{name:'query'}]});
-  const task=engine.create(session,{origin:'contest',goal:'Diagnose',criteria:['Cause'],profile:'emergency',scope:{teamId:'t',roundId:'r',issueId:'i',matchId:'m'}});
-  observation(engine,task.id,'manual',{source:'manual',resultRef:'fake'});assert.equal(engine.resolveEvidence(task.id,'E1').source,'manual');
-  assert.throws(()=>engine.checkpoint(task.id,session,{summary:'Claim',findings:[{text:'Claim',evidence:['E1']}]}),/automatically/);store.close();
-});
 
 test('restoration is bounded in UTF-8 bytes while complete evidence and history remain persisted',()=>{
   const {store,engine,task}=setup();observation(engine,task.id,'raw',{output:'secret raw output '.repeat(10_000)});

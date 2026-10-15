@@ -70,7 +70,6 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
  if(!event.callId)return {}; // Never guess a tool identity or deduplicate unrelated calls.
  if(task.status!=='active'&&!(event.type.startsWith('PostToolUse')&&task.calls[callId]))return {};
  if(event.type==='PreToolUse'){
-  if(task.profile==='emergency')return {deny:'Emergency profile requires the configured cairn_tool_* tools for investigation, submission and receipt checks. Their original argument schemas are exposed directly; native tools cannot bypass this evidence and budget boundary.'};
   if(task.observations.some(o=>o.callId===callId&&o.source==='hook'))return {deny:'This tool call already has a captured result; inspect its Cairn evidence before retrying'};
   try{const result=engine.beforeTool(task.id,session,callId,event.tool);return result.duplicate?{deny:'This tool call was already started; reconcile the existing result before retrying'}:{};}
   catch(error){return {deny:(error as Error).message};}

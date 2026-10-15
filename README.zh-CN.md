@@ -4,7 +4,7 @@
 
 **为 Pi、Claude Code、Codex 保留目标、证据链和可恢复的进度。**
 
-Cairn 3.0 将模型操作收敛为五个工具：**开始、恢复、读取、阶段记录、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，只在有价值的阶段保存进度、结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
+Cairn 4.0 将模型操作收敛为五个工具：**开始、恢复、读取、阶段记录、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，只在有价值的阶段保存进度、结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
 
 模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存目标记录，并提供蓝白进度看板。普通任务无需配置工具白名单或 MCP 上游。
 
@@ -152,7 +152,6 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 | 普通 `curated`，传 `budget.deadline` | 时间目标，仅提醒；到期可继续，不自动完成 |
 | 普通 `curated`，传 `maxCalls`／`maxParallel` | 拒绝配置：不统计调用，就不能宣称执行硬限制 |
 | 显式 `captured` | 可限制网关调用和实际经过 hook 的原生调用；不能保证覆盖宿主所有工具路径 |
-| `emergency` 比赛 | 保留共享 30 分钟截止时间及提交预留窗口 |
 
 工具次数、到期或预算耗尽都不代表成功。确实需要停止时保存未满足条件和下一步，标记暂停；之后恢复继续。原演示的六次调用上限只是该样例配置，不是通用默认值。
 
@@ -244,7 +243,7 @@ cairn doctor --target codex
 
 通用 MCP 自动生成本次连接独立的会话身份。可用 `cairn mcp --db FILE --remember` 保存通用 MCP 数据库，`cairn mcp --forget` 清除。数据库优先级为 `--db` → `CAIRN_DB` → MCP 已保存配置 → 当前工作区；原生适配继续使用自己的身份与工作区配置。
 
-仅 MCP 即可显式记录普通任务和恢复状态。原生生命周期与压缩上下文接入取决于宿主实际提供的事件。`doctor` 区分声明能力和已观察到的事件，检查版本、安装、MCP、已配置上游与 hooks 启动观察状态。缺少取证 hooks 不影响 curated 任务；缺少恢复事件时使用显式 read／resume。严格比赛任务缺少要求的能力时拒绝启动或接管。
+仅 MCP 即可显式记录普通任务和恢复状态。原生生命周期与压缩上下文接入取决于宿主实际提供的事件。`doctor` 区分声明能力和已观察到的事件，检查版本、安装、MCP、已配置上游与 hooks 启动观察状态。缺少取证 hooks 不影响 curated 任务；缺少恢复事件时使用显式 read／resume。
 
 ## 可选原始取证：captured 与演示
 
@@ -276,25 +275,41 @@ codex
 
 非空目标目录不会被覆盖。`CAIRN_DB` 只在样例终端设置，避免样例在其他 Git 仓库内时使用父项目数据库；其他工作请开新终端，或执行 `unset CAIRN_DB`。原取证专用链路见 [价格异常完整样例](docs/examples/price-incident.zh-CN.md)，历史真实模型／CLI 验证另见 [验证记录](docs/verification.md)。
 
-## 应急比赛 Profile
+## 用 AI 解决实际问题
 
-普通任务无需此配置。比赛场景先复制仓库中的 [比赛配置模板](profiles/emergency.example.json)，填写主办方正式定义；随后在目标项目指定完成后的配置文件：
+完成宿主或 Multica 接入后，运行 `cairn ui`，在原有 AI 对话中直接给出任务。输入包含实际项目路径、现象与材料、允许操作范围和验收条件；工具由 AI 根据现场情况选择。
 
-```sh
-cairn configure --file /absolute/path/to/official-tools.json
-```
+### 示例：定位并修复项目中的启动失败
 
-模板尚未配置主办方实际工具。比赛要求 `captured`、原生接入、受控网关以及本队／本关／问题／比赛范围。保留跨关卡持久化的 **30 分钟比赛截止时间**、默认最后 30 秒提交预留、真实当关 `result_ref`、影响面、根因层级、止损／修复／预防。人工提示和历史手工观测不能充当比赛证据。
+把下面内容交给 Agent，替换路径和实际错误：
 
-网关按原参数 Schema 暴露 `cairn_tool_<配置名>`，支持 stdio／Streamable HTTP、连接复用与独立请求取消。普通 curated 如已配置只读上游，可无记录透传；submit／receipt 必须走 captured 的交付校验，不能跳过回执保护。普通模式下这些配置不限制 AI 调用宿主其他工具。
+> 使用 Cairn 处理 `/absolute/path/to/project` 的启动失败。现象是执行 `npm run dev` 后出现【粘贴实际错误】，预期是应用能启动并打开首页。你可以阅读源码、运行本地复现、修改相关实现和测试。
+>
+> 完成条件：复现原错误；根据实际文件和运行结果定位原因；修复后原启动路径可用，相关回归检查通过。自主选择工具，不保存逐次调用记录。阶段变化时更新关系图，保存结论、依据和文件引用。最终说明实际改动、执行过的验证及结果、剩余限制。
 
-比赛 finish 校验通过后停留在 `ready_for_delivery`；配置的提交工具注入已校验报告并保存真实回执。回执不明先查询核对，不盲目重提。随后等待人工确认：
+AI 会创建目标，使用宿主工具完成排查、修改和验证，在关键节点保存 checkpoint。关系图展示起点、执行阶段、依据、结论和目标；点击节点可核对引用。`cairn_finish` 在完成条件和依据关联校验通过后完成任务。
 
-```sh
-cairn confirm TASK_ID
-```
+### 中断后继续
 
-Agent 再调用 `cairn_finish {}` 完成。本地校验保证引用结构和范围，主办方负责最终归属、评分与接受结果。
+对 Agent 说：
+
+> 暂停这个 Cairn 任务，保存当前结论、未解决问题和下一步，告诉我 task_id。
+
+新会话继续时说：
+
+> 恢复 Cairn 任务 TASK_ID，明确接管。先核对保存的状态与相关文件，再继续完成原目标。
+
+### 其他实际任务
+
+| 场景 | 给 AI 的材料 | 可以核对的完成条件 |
+| --- | --- | --- |
+| 数据核算 | CSV／表格路径、字段定义、单位和范围 | 总数与差额复核，产出检查文件，说明缺失值及样本限制 |
+| 功能实现 | 项目路径、用户流程、接口和限制 | 关键用户路径可运行，相关测试通过，产物可检查 |
+| 技术调研 | 问题、适用环境、可用来源 | 结论附可打开的引用，明确不确定点，建议可在目标环境验证 |
+
+程序校验目标覆盖与记录关系，AI 和使用者结合原文、实际运行结果判断结论。把“建议执行”“已修改”“已验证”分开表达。
+
+完整操作与可运行练习见 [AI 辅助问题解决指南](docs/goal-workflow.zh-CN.md)。默认模式无需配置上游工具；需要可选 MCP 转接时，才使用 `cairn configure --file upstream-tools.json`。
 
 ## 更新、卸载与数据
 
@@ -311,7 +326,7 @@ cairn uninstall --target codex
 
 全局命令与宿主适配包独立安装，更新全局命令不会替换已安装的适配副本。沿用原 scope／root，并重启宿主会话。安装器合并配置并记录自身条目，卸载时保留被用户修改的登记项及所需运行时。任务数据单独保留。删除全局命令可执行 `npm uninstall --global cairn`，自定义 prefix 时带回相同 `--prefix DIR`。
 
-数据库默认 `<workspace>/.cairn/state.db`；`CAIRN_DB`／`--db` 可覆盖，`CAIRN_WORKSPACE` 可选择工作区。已有 TypeScript SQLite 任务保持原语义：没有 `evidenceMode` 字段的历史任务仍按 captured 解释，不会自动转换。新 public general 任务才默认 curated。早期 Python 数据格式不自动迁移，请勿把任务数据提交到 Git。
+数据库默认 `<workspace>/.cairn/state.db`；`CAIRN_DB`／`--db` 可覆盖，`CAIRN_WORKSPACE` 可选择工作区。已有 TypeScript SQLite 任务保持原语义：没有 `evidenceMode` 字段的历史任务仍按 captured 解释，不会自动转换。公开接口创建的新任务默认 curated。早期 Python 数据格式不自动迁移，请勿把任务数据提交到 Git。
 
 Bootstrap 保留“在当前会话先直接尝试解决”的策略：理解目标与约束、执行有价值的行动、复核并修正。无需单独 bootstrap worker、保活提示、模型池、轮询 dispatcher 或固定 reason／explore 流程。
 
@@ -329,10 +344,10 @@ node scripts/claude-fixture-smoke.mjs
 
 `npm test` 包括类型检查、构建和确定性测试，不调用真实模型。真实宿主 smoke 使用已配置账号，可能消耗额度；Pi／Claude 协议 fixture 使用本地模型 API 服务，只验证接入链路，不代表真实模型推理效果。
 
-实际测试结果与历史模型运行分别记录于 [验证说明](docs/verification.md)。架构边界见 [architecture](docs/architecture.md)，诊断准确率和任务质量需通过 [评测案例与量表](evaluations/README.md) 另行验证。
+当前回归测试和验证范围记录于 [验证说明](docs/verification.md)，实现结构见 [architecture](docs/architecture.md)。任务质量结合用户验收标准、实际来源与运行结果判断。
 
 ## 背景与许可
 
-Cairn 最初是一个以目标为导向的探索引擎，曾在腾讯云 AI 渗透测试挑战赛验证。当前版本将目标、证据和人工提示思想融入通用 CLI 插件。
+Cairn 将目标、证据、人工提示和恢复状态保存在通用 CLI 工作流中，帮助 AI 持续完成可验证的实际任务。
 
 项目采用 [AGPL-3.0](LICENSE) 许可证。

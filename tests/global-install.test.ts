@@ -153,6 +153,10 @@ test('packed global install works offline away from the checkout and supplies al
     const packageDir = join(prefix, process.platform === 'win32' ? 'node_modules' : 'lib/node_modules', 'cairn');
     assert.equal(lstatSync(packageDir).isSymbolicLink(), false);
     assert.equal(existsSync(join(packageDir, 'node_modules')), false);
+    assert.equal(existsSync(join(packageDir, 'profiles')), false);
+    assert.equal(existsSync(join(packageDir, 'evaluations')), false);
+    assert.equal(existsSync(join(packageDir, 'skills/cairn/references/emergency.md')), false);
+    assert.ok(existsSync(join(packageDir, 'skills/cairn/references/solving-problems.md')));
     const command = join(packageDir, 'bin/cairn.mjs');
     const executable = process.platform === 'win32' ? process.execPath : join(prefix, 'bin/cairn');
     if (process.platform !== 'win32') assert.equal(realpathSync(executable), realpathSync(command));
@@ -178,6 +182,9 @@ test('packed global install works offline away from the checkout and supplies al
       assert.ok(plugin.startsWith(workspace));
       assert.ok(existsSync(join(plugin, 'runtime/ui-client.js')));
       assert.ok(existsSync(join(plugin, 'skills/cairn/SKILL.md')));
+      assert.equal(existsSync(join(plugin, 'profiles')), false);
+      assert.equal(existsSync(join(plugin, 'skills/cairn/references/emergency.md')), false);
+      assert.ok(existsSync(join(plugin, 'skills/cairn/references/solving-problems.md')));
       if (target === 'pi') {
         const extension = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(join(plugin, 'runtime/pi-extension.mjs')).href)})`], { cwd: workspace, env, encoding: 'utf8', timeout: 10000 });
         assert.equal(extension.status, 0, extension.stderr);

@@ -2,9 +2,9 @@ export type Host = 'pi' | 'claude' | 'codex' | 'mcp';
 export interface Session { host: Host; sessionId: string; cwd: string }
 export interface Owner extends Session { epoch: number }
 export interface Capabilities { capture: boolean; preTool: boolean; restore: boolean; stop: boolean }
-export interface Scope { workspaceId?: string; issueId?: string; teamId?: string; roundId?: string; matchId?: string }
+export type Scope = Record<string, string>;
 export type EvidenceMode = 'curated' | 'captured';
-export interface Budget { deadline?: string; maxCalls?: number; maxParallel?: number; submitReserveMs?: number }
+export interface Budget { deadline?: string; maxCalls?: number; maxParallel?: number }
 export interface ProgressInput {
   key: string; title: string; status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled'; detail?: string;
 }
@@ -15,7 +15,6 @@ export interface Observation {
   source: 'hook' | 'gateway' | 'manual'; resultRef?: string; scope: Scope;
   actor: {host:Host;sessionId:string;epoch:number};
   status: 'success' | 'error'; capturedAt: string; eligible: boolean;
-  receipt?: unknown;
 }
 export interface Claim {
   id: string; text: string; status: 'proposed' | 'supported' | 'refuted' | 'inconclusive';
@@ -31,9 +30,6 @@ export interface EvidenceCitation { observationId: string; resultRef?: string; s
 export interface Report {
   summary: string; citations: EvidenceCitation[];
   curatedReferences?: { claimId: string; statement: string; basis?: string; references: string[] }[];
-  impact?: { text: string; scope: Scope; observationIds: string[] };
-  rootCause?: { text: string; level: 'symptom' | 'service' | 'code' | 'root'; trigger?: string; amplification?: string };
-  solution?: { mitigation: string; fix: string; prevention: string };
 }
 /** One explicit reasoning milestone. Evidence aliases are local to the task. */
 export interface CheckpointInput {
@@ -44,17 +40,17 @@ export interface CheckpointInput {
   }[];
   progress?: ProgressInput[];
   questions?: string[]; next?: string;
-  report?: { summary?: string; impact?: Report['impact']; rootCause?: Report['rootCause']; solution?: Report['solution'] };
+  report?: { summary?: string };
 }
 export interface Checkpoint { summary: string; questions: string[]; next?: string; at: string }
 export type FinishInput = Partial<CheckpointInput> & { outcome: 'completed' | 'suspended' };
 export interface Task {
-  id: string; origin: string; goal: string; constraints: string[]; criteria: Criterion[]; profile: 'general' | 'emergency';
+  id: string; origin: string; goal: string; constraints: string[]; criteria: Criterion[];
   scope: Scope; owner: Owner; revision: number; createdAt: string; budget: Budget;
   status: 'active' | 'suspended' | 'completed'; observations: Observation[]; claims: Claim[];
   actions: Action[]; hints: { id: string; text: string; author: string }[];
   calls: Record<string, { status: 'running' | 'finished'; tool: string; startedAt: string; epoch?:number }>;
-  report?: Report; delivery?: { key: string; receipt: unknown; recordedAt: string }; confirmedAt?: string;
+  report?: Report;
   checkpoint?: Checkpoint;
   /** Older records omit evidenceMode and retain captured semantics. */
   evidenceMode?: EvidenceMode; progress?: ProgressItem[];

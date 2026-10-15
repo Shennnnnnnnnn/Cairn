@@ -74,12 +74,11 @@ test('typed tools retain original parameters and concurrent catalog loads do not
  const result=await runtime.invoke('cairn_tool_read',{}) as any;assert.equal(result.evidence.ref,'E1');assert.equal(result.evidence.resultRef,'ref-read');assert.equal(engine.store.get(start.taskId).observations.length,1);
 });
 
-test('unavailable upstream keeps the five management tools and reports actual degraded capability',async(t)=>{
+test('unavailable optional upstream keeps the five management tools and reports degraded capability',async(t)=>{
  const {store,runtime}=fixture();t.after(async()=>{await runtime.close();store.close();});
  store.setConfig('gateway',gatewaySchema.parse({servers:{missing:{command:'/nonexistent/cairn-fixture'}},tools:[{name:'read',server:'missing',upstream:'read'}]}));
  const catalog=await runtime.list();assert.equal(catalog.length,5);assert.equal(runtime.catalogStatus.ok,false);
  const state=await runtime.invoke('cairn_read',{view:'tasks'}) as any;assert.equal(state.upstream.ok,false);
- await assert.rejects(runtime.invoke('cairn_start',{goal:'Strict task',profile:'emergency',scope:{teamId:'t',roundId:'r',issueId:'i',matchId:'m'}}),/upstream tools are unavailable/);
 });
 
 test('legacy reservations without an execution epoch stay audit-only after takeover',()=>{

@@ -46,20 +46,9 @@ export class Engine {
     return this.store.transaction(() => {
       const task = this.store.get(taskId); this.own(task, session);
       if (task.status !== 'active' && !(allowSuspended && task.status === 'suspended')) throw new CairnError('inactive_task', `Task is ${task.status}`);
-      const changesProof=['claim.revised','criterion.updated','report.saved'].includes(kind);
-      if(changesProof)this.assertNoSubmission(task);
-      const previous=changesProof?proofState(task):undefined, delivered=task.delivery;
       const result = fn(task);
-      if(changesProof&&previous!==proofState(task)){
-        if(delivered)throw new CairnError('report_frozen','The delivered report and its goal evidence are frozen; create a follow-up task');
-        task.delivery=undefined;task.confirmedAt=undefined;
-      }else if(delivered){task.delivery=delivered;}
       task.revision++; this.store.save(task, kind, {input:payload,result:result??null,owner:task.owner,revision:task.revision}, this.at()); return result;
     });
-  }
-  private assertNoSubmission(task:Task){
-    const submits=this.store.config<{tools:{name:string;role?:string}[]}>('gateway')?.tools.filter(t=>t.role==='submit').map(t=>t.name)??[];
-    if(Object.values(task.calls).some(c=>c.status==='running'&&submits.includes(c.tool)))throw new CairnError('submission_in_flight','Goal evidence and report are frozen while a submission is in flight');
   }
   private progressOn(task:Task,items:ProgressInput[],source:'agent'|'host',replace=false):boolean{
     if(!Array.isArray(items))throw new CairnError('invalid_input','Progress must be an array');
@@ -103,35 +92,20 @@ export class Engine {
       item.status='blocked';item.detail=detail;item.updatedAt=this.at();
     }
   }
-  create(session: Session, input: { origin: string; goal: string; constraints?:string[]; criteria: string[]; profile?: 'general'|'emergency'; scope?: Scope; budget?: Partial<Budget>; evidenceMode?:EvidenceMode; progress?:ProgressInput[] }): Task {
+  create(session: Session, input: { origin: string; goal: string; constraints?:string[]; criteria: string[]; scope?: Scope; budget?: Partial<Budget>; evidenceMode?:EvidenceMode; progress?:ProgressInput[] }): Task {
     requireText(input.goal, 'goal'); requireText(input.origin, 'origin');
     if (!input.criteria.length || input.criteria.some(c => !c.trim())) throw new CairnError('invalid_input', 'Supply at least one nonempty completion criterion');
     return this.store.transaction(() => {
       const existing = this.active(session);
       if (existing?.status === 'active') throw new CairnError('active_task', 'Suspend or complete the current task before creating another');
-      const scope = input.scope ?? {}, profile = input.profile ?? 'general', evidenceMode=input.evidenceMode??'captured';
+      const scope = input.scope ?? {}, evidenceMode=input.evidenceMode??'captured';
       if(!['captured','curated'].includes(evidenceMode))throw new CairnError('invalid_input','Evidence mode must be curated or captured');
-      if(profile==='emergency'&&evidenceMode==='curated')throw new CairnError('missing_capabilities','Emergency profile requires captured evidence with genuine platform references');
       if(evidenceMode==='curated'&&(input.budget?.maxCalls!==undefined||input.budget?.maxParallel!==undefined))throw new CairnError('invalid_budget','Curated tasks do not record tool calls, so call counts and concurrency cannot be enforced; omit maxCalls/maxParallel or use captured mode');
       const budget: Budget = { ...(evidenceMode==='captured'?{maxParallel:3}:{}), ...input.budget };
       if (budget.deadline && !Number.isFinite(Date.parse(budget.deadline))) throw new CairnError('invalid_input', 'Invalid deadline');
       if ((budget.maxParallel!==undefined&&(budget.maxParallel < 1 || !Number.isInteger(budget.maxParallel))) || (budget.maxCalls !== undefined && (!Number.isInteger(budget.maxCalls) || budget.maxCalls < 1))) throw new CairnError('invalid_input', 'Invalid budget');
-      if (profile === 'emergency') {
-        if (!scope.teamId || !scope.roundId || !scope.issueId || !scope.matchId) throw new CairnError('missing_scope', 'Emergency tasks need teamId, roundId, issueId and matchId');
-        const caps = this.store.session(session)?.capabilities;
-        if (!caps?.capture || !caps.preTool || !caps.restore || !caps.stop) throw new CairnError('missing_capabilities', 'Emergency profile requires native capture, preTool, restore and stop integration. Run doctor and load trusted hooks.');
-        const tools = this.store.config<{tools: unknown[]}>('gateway');
-        if (!tools?.tools.length) throw new CairnError('missing_whitelist', 'Configure the official competition whitelist and result_ref mappings before starting an emergency task');
-        const match = this.store.db.prepare('SELECT * FROM matches WHERE id=?').get(scope.matchId);
-        if (match && match.team !== scope.teamId) throw new CairnError('scope_mismatch', 'Match belongs to another team');
-        const deadline = match?.deadline as string ?? new Date(this.now().getTime() + 30*60_000).toISOString();
-        if (Date.parse(deadline) <= this.now().getTime()) throw new CairnError('deadline', 'Match deadline has passed');
-        this.store.db.prepare('INSERT OR IGNORE INTO matches VALUES (?,?,?)').run(scope.matchId, scope.teamId, deadline);
-        budget.deadline = budget.deadline && Date.parse(budget.deadline) < Date.parse(deadline) ? budget.deadline : deadline;
-        budget.submitReserveMs??=30000;
-      }
       const task: Task = { id: id('task'), origin: input.origin, goal: input.goal,constraints:input.constraints??[],
-        criteria: input.criteria.map((text,i) => ({id:`c${i+1}`,text,claimIds:[]})), profile, scope, budget,evidenceMode,
+        criteria: input.criteria.map((text,i) => ({id:`c${i+1}`,text,claimIds:[]})), scope, budget,evidenceMode,
         owner: {...session,epoch:1}, revision:1, createdAt:this.at(), status:'active',
         observations:[], claims:[], actions:[], hints:[], calls:{}, interrupted:false };
       if(input.progress!==undefined)this.progressOn(task,input.progress,'agent');
@@ -145,10 +119,6 @@ export class Engine {
       if(current?.status==='active'&&current.id!==taskId)throw new CairnError('active_task','Suspend or complete the current task before resuming another');
       if (task.status === 'completed') throw new CairnError('completed_task', 'Completed tasks are immutable; create a new task for follow-up');
       if (!takeover && (task.owner.host !== session.host || task.owner.sessionId !== session.sessionId || task.owner.cwd !== session.cwd)) throw new CairnError('takeover_required', 'A different session or workspace owns this task; explicit takeover is required');
-      if (task.profile === 'emergency') {
-        const caps = this.store.session(session)?.capabilities;
-        if (!caps?.capture || !caps.preTool || !caps.restore || !caps.stop) throw new CairnError('missing_capabilities', 'This host cannot resume a strict emergency task');
-      }
       if (takeover) {
         task.owner = {...session,epoch:task.owner.epoch+1};
         for (const call of Object.values(task.calls)) if (call.status === 'running') call.status = 'finished';
@@ -221,7 +191,6 @@ export class Engine {
     throw new CairnError('invalid_evidence',`Evidence ${ref} does not belong to this task`);
   }
   private checkpointOn(task:Task,input:CheckpointInput){
-    this.assertNoSubmission(task);
     if(typeof input.summary!=='string')throw new CairnError('invalid_input','Checkpoint summary is required');
     requireText(input.summary,'checkpoint summary');
     if(input.questions!==undefined&&(!Array.isArray(input.questions)||input.questions.some(q=>typeof q!=='string'||!q.trim())))throw new CairnError('invalid_input','Questions must be nonempty strings');
@@ -301,21 +270,8 @@ export class Engine {
       ...(isCurated?{curatedReferences:task.claims.filter(claim=>claim.status==='supported'&&hasBasis(claim)&&covers(claim.scope,task.scope)).map(claim=>({claimId:claim.id,statement:claim.text,...(claim.basis===undefined?{}:{basis:claim.basis}),references:claim.references??[]}))}:{})};
     if(typeof report.summary!=='string')throw new CairnError('invalid_input','Report summary must be a string');
     requireText(report.summary,'report summary');
-    if(input.report?.impact){
-      const impact=input.report.impact;
-      if(!Array.isArray(impact.observationIds))throw new CairnError('invalid_input','Impact observationIds must be an array');
-      report.impact={...task.report?.impact,...impact,observationIds:[...new Set(impact.observationIds.map(ref=>{
-        const o=this.resolve(task,ref);this.evidence(task,o.id,impact.scope);return o.id;
-      }))]};
-    }
-    if(input.report?.rootCause)report.rootCause={...task.report?.rootCause,...input.report.rootCause};
-    if(input.report?.solution)report.solution={...task.report?.solution,...input.report.solution};
     task.report=report;
     const proofChanged=previous!==proofState(task);
-    if(proofChanged){
-      if(task.delivery)throw new CairnError('report_frozen','The delivered report and its goal evidence are frozen; create a follow-up task');
-      task.delivery=undefined;task.confirmedAt=undefined;
-    }
     const progressChanged=input.progress===undefined?false:this.progressOn(task,input.progress,'agent');
     const next={summary:input.summary,questions:input.questions??task.checkpoint?.questions??[],next:input.next??task.checkpoint?.next};
     const {at,...oldCheckpoint}=task.checkpoint??{at:''};
@@ -350,13 +306,9 @@ export class Engine {
       if(hasContent)changed=this.checkpointOn(task,{...input,summary:input.summary??task.checkpoint?.summary??task.report?.summary??task.goal,
         ...((input.report!==undefined||input.summary!==undefined)?{report:{...input.report,...(input.report?.summary!==undefined?{summary:input.report.summary}:input.summary!==undefined?{summary:input.summary}:{})}}:{})});
       const validation=task.report?this.evaluateReport(task,task.report):{...this.evaluate(task),ok:false,issues:[...this.evaluate(task).issues,'A checkpoint with cited findings is required before completion']};
-      let phase:'completed'|'suspended'|'incomplete'|'ready_for_delivery'|'awaiting_confirmation'='incomplete';
+      let phase:'completed'|'suspended'|'incomplete'='incomplete';
       if(input.outcome==='suspended'){task.status='suspended';task.interrupted=true;this.pauseProgress(task);phase='suspended';changed=true;}
-      else if(validation.ok){
-        if(task.profile==='emergency'&&!task.delivery)phase='ready_for_delivery';
-        else if(task.profile==='emergency'&&!task.confirmedAt)phase='awaiting_confirmation';
-        else {task.status='completed';phase='completed';changed=true;}
-      }
+      else if(validation.ok){task.status='completed';phase='completed';changed=true;}
       if(changed){task.revision++;this.store.save(task,'task.finished',{input,phase,validation,owner:task.owner,revision:task.revision},this.at());}
       else if(phase==='incomplete'){
         const fingerprint=createHash('sha256').update(JSON.stringify(validation)).digest('hex');
@@ -390,7 +342,6 @@ export class Engine {
     const o=task.observations.find(x=>x.id===ref);
     if(!o||!o.eligible||o.status!=='success')throw new CairnError('invalid_evidence',`Observation ${ref} is missing, failed or late`);
     if(!covers(o.scope,scope))throw new CairnError('scope_mismatch',`Observation ${ref} does not cover the claimed scope`);
-    if(task.profile==='emergency'&&(o.source==='manual'||!o.resultRef))throw new CairnError('invalid_evidence','Competition evidence must be automatically captured with a real result_ref');
     return o;
   }
   validateReport(taskId:string, report:Report):Check {
@@ -404,7 +355,6 @@ export class Engine {
       const o=this.evidence(task,citation.observationId,task.scope);
       if(!citation.statement.trim())issues.push('Each citation needs an explanation');
       if(citation.resultRef!==undefined&&citation.resultRef!==o.resultRef)issues.push(`Invalid result_ref for ${o.id}`);
-      if(task.profile==='emergency'&&citation.resultRef!==o.resultRef)issues.push(`Missing result_ref for ${o.id}`);
     }catch(e){issues.push((e as Error).message);}
     if(curated(task)){
       const curatedRefs=report.curatedReferences??[],citedClaims=new Set<string>();
@@ -427,15 +377,6 @@ export class Engine {
         if(claim&&!claim.supports.some(o=>cited.has(o)))issues.push(`Report does not cite evidence for ${criterion.id}/${claim.id}`);
       }
     }
-    if(task.profile==='emergency'){
-      if(!report.impact?.text.trim()||!report.impact.observationIds.length)issues.push('Impact analysis and scope evidence are required');
-      if(report.impact){
-        if(!covers(report.impact.scope,task.scope))issues.push('Impact scope must include this team, round and issue');
-        for(const ref of report.impact.observationIds)try{this.evidence(task,ref,report.impact.scope);}catch(e){issues.push((e as Error).message);}
-      }
-      if(!report.rootCause?.text.trim()||!report.rootCause.level)issues.push('Root cause and causal level are required');
-      if(!report.solution?.mitigation.trim()||!report.solution.fix.trim()||!report.solution.prevention.trim())issues.push('Mitigation, root fix and prevention are required');
-    }
     return {ok:!issues.length,issues:[...new Set(issues)],unmet:check.unmet};
   }
   report(taskId:string,session:Session,report:Report){
@@ -445,38 +386,16 @@ export class Engine {
     return this.edit(taskId,session,'task.completed',{},task=>{
       if(!task.report)throw new CairnError('invalid_report','Save and validate a report before completion');
       const check=this.validateReport(taskId,task.report);if(!check.ok)throw new CairnError('invalid_report',check.issues.join('; '));
-      if(task.profile==='emergency'&&(!task.delivery||!task.confirmedAt))throw new CairnError('confirmation_required','Competition completion requires a submission receipt and team confirmation via cairn confirm');
       task.status='completed';return {status:task.status};
     });
   }
-  delivery(taskId:string,session:Session,key:string,observationId:string){
-    return this.edit(taskId,session,'delivery.recorded',{key,observationId},task=>{
-      if(task.delivery){if(task.delivery.key!==key)throw new CairnError('already_delivered','A different delivery is already recorded');return task.delivery;}
-      if(!task.report||!this.validateReport(taskId,task.report).ok)throw new CairnError('invalid_report','Validate the report before recording delivery');
-      const observation=this.evidence(task,observationId,task.scope);
-      const tools=this.store.config<{tools:{name:string;role?:string}[]}>('gateway');
-      if(task.profile==='emergency'&&!tools?.tools.some(t=>t.name===observation.tool&&['submit','receipt'].includes(t.role??'')))throw new CairnError('invalid_receipt','Receipt must come from a configured platform submission or receipt tool');
-      if(task.profile==='emergency'&&!observation.receipt)throw new CairnError('invalid_receipt','The captured platform result contains no mapped receipt');
-      task.delivery={key,receipt:observation.receipt??observation.output,recordedAt:this.at()};return task.delivery;
-    });
-  }
-  confirm(taskId:string){
-    return this.store.transaction(()=>{const task=this.store.get(taskId);if(task.status!=='active'||!task.delivery)throw new CairnError('invalid_state','An active task with a delivery receipt is required');task.confirmedAt=this.at();task.revision++;this.store.save(task,'team.confirmed',{},this.at());});
-  }
-  beforeTool(taskId:string,session:Session,callId:string,tool:string,submission=false,receipt=false):{duplicate:boolean;untracked?:boolean}{
+  beforeTool(taskId:string,session:Session,callId:string,tool:string):{duplicate:boolean;untracked?:boolean}{
     if(curated(this.assertActiveOwner(taskId,session)))return {duplicate:false,untracked:true};
     return this.edit(taskId,session,'tool.started',{callId,tool},task=>{
       if(task.calls[callId])return {duplicate:true};
       if(task.budget.deadline&&this.now().getTime()>=Date.parse(task.budget.deadline))throw new CairnError('deadline','Task deadline has passed');
-      if(task.profile==='emergency'&&!submission&&!receipt&&task.budget.deadline&&Date.parse(task.budget.deadline)-this.now().getTime()<=(task.budget.submitReserveMs??30000))throw new CairnError('submission_window','Investigation budget ended; reserve the remaining time for report submission and receipt checks');
       if(task.budget.maxCalls!==undefined&&Object.keys(task.calls).length>=task.budget.maxCalls)throw new CairnError('call_budget','Tool call budget exhausted');
       if(Object.values(task.calls).filter(c=>c.status==='running').length>=(task.budget.maxParallel??3))throw new CairnError('concurrency','Maximum parallel tool calls reached');
-      if(submission){
-        if(task.delivery)throw new CairnError('already_delivered','Submission receipt already exists; inspect it before retrying');
-        if(Object.values(task.calls).some(c=>c.status==='running'&&c.tool===tool))throw new CairnError('submission_in_flight','Another submission is in flight');
-        if(Object.values(task.calls).some(c=>c.tool===tool))throw new CairnError('ambiguous_submission','A prior submission was attempted; reconcile its receipt before retrying');
-        if(!task.report||!this.validateReport(taskId,task.report).ok)throw new CairnError('invalid_report','Report must pass validation before submission');
-      }
       task.calls[callId]={status:'running',tool,startedAt:this.at(),epoch:task.owner.epoch};return {duplicate:false};
     });
   }
@@ -509,7 +428,7 @@ export class Engine {
       (b.updatedAt??'').localeCompare(a.updatedAt??'')||Number(relevant.has(b.id))-Number(relevant.has(a.id))||t.claims.indexOf(b)-t.claims.indexOf(a)).slice(0,12);
     const selected=new Set(claims.flatMap(c=>[...c.supports,...c.refutes]));
     const observations=t.observations.filter(o=>selected.has(o.id)||t.observations.indexOf(o)>=t.observations.length-12).slice(-18);
-    const state={taskId:t.id,goal:text(t.goal,1500),origin:text(t.origin,500),constraints:t.constraints.slice(0,8).map(c=>text(c,300)),status:t.status,profile:t.profile,evidenceMode:t.evidenceMode??'captured',scope:scope(t.scope),
+    const state={taskId:t.id,goal:text(t.goal,1500),origin:text(t.origin,500),constraints:t.constraints.slice(0,8).map(c=>text(c,300)),status:t.status,evidenceMode:t.evidenceMode??'captured',scope:scope(t.scope),
       owner:{...t.owner,sessionId:text(t.owner.sessionId,256),cwd:text(t.owner.cwd,500)},revision:t.revision,
       criteria:t.criteria.slice(0,24).map(c=>({...c,text:text(c.text,450),claimIds:c.claimIds.slice(0,8)})),
       claims:claims.map(c=>({...c,...(c.key?{key:text(c.key,180)}:{}),text:text(c.text,650),...(c.basis===undefined?{}:{basis:text(c.basis,900)}),...(c.references===undefined?{}:{references:c.references.slice(0,8).map(ref=>text(ref,350))}),...(c.relatedCriteria===undefined?{}:{relatedCriteria:c.relatedCriteria.slice(0,12)}),scope:scope(c.scope),supports:c.supports.slice(0,8),refutes:c.refutes.slice(0,8),evidence:c.supports.slice(0,8).map(alias),against:c.refutes.slice(0,8).map(alias),covers:t.criteria.filter(criterion=>criterion.claimIds.includes(c.id)).map(c=>c.id).slice(0,12)})),
@@ -520,7 +439,6 @@ export class Engine {
       checkpoint:t.checkpoint?{summary:text(t.checkpoint.summary,1800),questions:t.checkpoint.questions.slice(0,8).map(q=>text(q,350)),next:t.checkpoint.next?text(t.checkpoint.next,600):undefined,at:t.checkpoint.at}:undefined,
       budget:t.budget,budgetPolicy:curated(t)?'advisory':'enforced',remainingMs:t.budget.deadline?Math.max(0,Date.parse(t.budget.deadline)-this.now().getTime()):null,
       check:{ok:check.ok,issues:check.issues.slice(0,24).map(issue=>text(issue,250)),unmet:check.unmet.slice(0,24)},
-      delivery:t.delivery?{key:text(t.delivery.key,256),recordedAt:t.delivery.recordedAt,recorded:true}:undefined,confirmedAt:t.confirmedAt,
       totals:{claims:t.claims.length,observations:t.observations.length,criteria:t.criteria.length,progress:t.progress?.length??0,eligibleEvidence:t.observations.filter(o=>o.eligible&&o.status==='success').length},
       truncated:{claims:0,observations:0,criteria:0,constraints:0,actions:0,hints:0,progress:0,questions:0,text:false,checkIssues:Math.max(0,check.issues.length-24),bytes:0},
       readMore:curated(t)?'Findings and file/link references are agent-curated, not automatically verified. Full findings, progress and reports remain in the UI and persisted history.':'Use cairn_read with E# or an observation ID for original input/output. Task history and the full report remain available in the UI and persisted audit log.',

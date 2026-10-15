@@ -46,8 +46,8 @@ test('error, empty successful result and healthy result retain different semanti
  const empty=evidence(engine,task.id,s,{callId:'empty',output:[]});assert.deepEqual(empty.output,[]);assert.equal(empty.status,'success');store.close();
 });
 test('scope coverage is enforced',()=>{
- const {store,engine,task}=setup(),o=evidence(engine,task.id,s,{scope:{roundId:'r1'}});
- assert.throws(()=>engine.claim(task.id,s,{text:'other round',status:'supported',supports:[o.id],refutes:[],scope:{roundId:'r2'}}),/scope/);store.close();
+ const {store,engine,task}=setup(),o=evidence(engine,task.id,s,{scope:{environment:'r1'}});
+ assert.throws(()=>engine.claim(task.id,s,{text:'other round',status:'supported',supports:[o.id],refutes:[],scope:{environment:'r2'}}),/scope/);store.close();
 });
 test('parallel and total call budgets are reserved atomically',()=>{
  const store=new Store(':memory:'),engine=new Engine(store),task=engine.create(s,{origin:'a',goal:'b',criteria:['c'],budget:{maxParallel:1,maxCalls:2}});
@@ -59,10 +59,6 @@ test('out-of-order parallel results converge without losing a reservation',()=>{
  const {store,engine,task}=setup();engine.beforeTool(task.id,s,'first','a');engine.beforeTool(task.id,s,'second','b');
  evidence(engine,task.id,s,{callId:'second'});assert.equal(engine.check(task.id).issues.includes('Tool calls are still running'),true);
  evidence(engine,task.id,s,{callId:'first'});assert.equal(Object.values(store.get(task.id).calls).filter(c=>c.status==='finished').length,2);store.close();
-});
-test('report and completion evidence are frozen while a submission is in flight',()=>{
- const {store,engine,task}=setup();const {report}=solve(engine,task.id);store.setConfig('gateway',{tools:[{name:'submit',role:'submit'}]});
- engine.beforeTool(task.id,s,'submit','submit',true);assert.throws(()=>engine.report(task.id,s,report),/frozen/);assert.throws(()=>engine.beforeTool(task.id,s,'submit2','submit',true),/in flight|running/);store.close();
 });
 test('deadline blocks calls and makes late results ineligible',()=>{
  const store=new Store(':memory:');let clock=new Date('2026-10-15T01:00:00Z');const engine=new Engine(store,()=>clock),task=engine.create(s,{origin:'a',goal:'b',criteria:['c'],budget:{deadline:'2026-10-15T01:01:00Z'}});
@@ -79,23 +75,4 @@ test('database restart preserves current state and complete audit history',()=>{
  const task=engine.create(s,{origin:'a',goal:'b',criteria:['c']});solve(engine,task.id);const count=store.events(task.id).length;store.close();
  if(process.platform!=='win32')assert.equal(statSync(path).mode&0o777,0o600);
  store=new Store(path);engine=new Engine(store);assert.equal(engine.active(s)?.id,task.id);assert.equal(engine.check(task.id).ok,true);assert.equal(store.events(task.id).length,count);store.close();rmSync(dir,{recursive:true});
-});
-test('emergency profile refuses missing integration, whitelist and scope',()=>{
- const store=new Store(':memory:'),engine=new Engine(store),input={origin:'a',goal:'b',criteria:['c'],profile:'emergency' as const,scope:{teamId:'t',roundId:'r1',issueId:'i',matchId:'m'}};
- assert.throws(()=>engine.create(s,input),/native capture/);
- store.register(s,{capture:true,preTool:true,restore:true,stop:true});assert.throws(()=>engine.create(s,input),/whitelist/);store.close();
-});
-test('emergency rounds share a match deadline and require automatic refs and human confirmation',()=>{
- const store=new Store(':memory:');let clock=new Date('2026-10-15T01:00:00Z');const engine=new Engine(store,()=>clock);
- store.register(s,{capture:true,preTool:true,restore:true,stop:true});store.setConfig('gateway',{tools:[{name:'submit',role:'submit'}]});
- const task=engine.create(s,{origin:'a',goal:'b',criteria:['c'],profile:'emergency',scope:{teamId:'t',roundId:'r1',issueId:'i1',matchId:'m'}});
- const manual=evidence(engine,task.id,s,{source:'manual',resultRef:'fake'});assert.throws(()=>engine.claim(task.id,s,{text:'x',status:'supported',supports:[manual.id],refutes:[]}),/automatically/);
- const o=evidence(engine,task.id,s,{callId:'real',resultRef:'ref-real'}),c=engine.claim(task.id,s,{text:'cause',status:'supported',supports:[o.id],refutes:[]});engine.satisfy(task.id,s,'c1',[c.id]);
- const report:Report={summary:'cause',citations:[{observationId:o.id,resultRef:'ref-real',statement:'proves cause'}],impact:{text:'all records queried',scope:task.scope,observationIds:[o.id]},rootCause:{text:'cause',level:'root'},solution:{mitigation:'route to healthy reader',fix:'correct mapping',prevention:'mapping checks'}};
- assert.equal(engine.validateReport(task.id,{...report,citations:[{...report.citations[0]!,resultRef:'forged'}]}).ok,false);
- engine.report(task.id,s,report);assert.throws(()=>engine.complete(task.id,s),/confirmation/);
- const receipt=evidence(engine,task.id,s,{callId:'submit',tool:'submit',resultRef:'receipt',receipt:'accepted',output:{receipt:'accepted'}});engine.delivery(task.id,s,'delivery',receipt.id);
- assert.throws(()=>engine.complete(task.id,s),/confirmation/);engine.confirm(task.id);engine.complete(task.id,s);
- clock=new Date('2026-10-15T01:10:00Z');const next=engine.create(s,{origin:'next',goal:'next',criteria:['c'],profile:'emergency',scope:{teamId:'t',roundId:'r2',issueId:'i2',matchId:'m'}});
- assert.equal(next.budget.deadline,task.budget.deadline);assert.equal(next.budget.deadline,'2026-10-15T01:30:00.000Z');store.close();
 });

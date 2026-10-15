@@ -24,7 +24,7 @@ Checkpoint `summary` describes current progress without replacing an existing re
 
 ### Curated: the public general default
 
-`cairn_start` defaults to `evidence_mode: "curated"` for the general profile. No gateway or tool whitelist is necessary. Native host tools remain freely selectable under the host's own permissions.
+`cairn_start` defaults to `evidence_mode: "curated"` for new tasks. No gateway or tool whitelist is necessary. Native host tools remain freely selectable under the host's own permissions.
 
 Curated findings store:
 
@@ -38,11 +38,11 @@ No `tool.started`, raw observation or tool-call metadata is stored for curated h
 
 ### Captured: explicit raw evidence
 
-New general tasks opt in with `evidence_mode: "captured"`; emergency tasks require captured evidence. Existing tasks without an `evidenceMode` field retain captured semantics. Starting a new public task with a different default does not convert old records.
+Tasks opt in with `evidence_mode: "captured"`. Existing tasks without an `evidenceMode` field retain captured semantics. Starting a new public task with a different default does not convert old records.
 
 An `Observation` is an original tool result record, not an agent role. It includes original input/output, source, scope, actor host/session/epoch, time, result status and eligibility. Append-only E1/E2 aliases refer to its positions in a task. Immutable IDs and unambiguous genuine platform `result_ref` values are also accepted. Missing, ambiguous, cross-task, failed or late references cannot support completion.
 
-Findings use `evidence` and `against` to link supporting and refuting observations. Original records stay separate from interpretations and human hints. A finding with unresolved captured counterevidence cannot be supported. Changes to goal proof invalidate confirmation; delivered report/proof content remains frozen. Historical manual observations retain their source and do not become automatic capture.
+Findings use `evidence` and `against` to link supporting and refuting observations. Original records stay separate from interpretations and human hints. A finding with unresolved captured counterevidence cannot be supported. Historical manual observations retain their source and do not become automatic capture.
 
 Captured validation establishes structural integrity, task/scope membership and eligibility. The agent must still review relevance and contradictions; diagnostic truth needs evaluation against labelled cases.
 
@@ -52,7 +52,7 @@ Curated tasks have no default `maxCalls` or `maxParallel`. Supplying them is rej
 
 Captured calls reserve configured count/parallel limits atomically, and apply deadlines to gateway requests and native tool paths actually covered by hooks. The historical captured concurrency default remains three when unspecified. This is not a universal quota over arbitrary host paths. Hooks can be missing, and hosted tools may not invoke local hooks.
 
-The emergency profile adds its shared 30-minute match deadline and default final 30-second submission reserve. Exhausting any budget leaves an incomplete goal; suspend with a gap report if further work must stop. A six-call fixture budget is sample configuration, not a general success threshold.
+Budget exhaustion does not establish completion; suspend with a gap report if further work must stop. A six-call fixture budget is sample configuration, not a general success threshold.
 
 ## Identity, subagents and ownership
 
@@ -86,23 +86,15 @@ Native plan integration is conditional and captured-only. A successful Codex `up
 
 In curated mode all other native pre/post tool events remain unrecorded and unblocked by Cairn. In captured mode PreToolUse reserves budgets and PostToolUse records results. Actual Cairn namespaces are excluded from recursive capture; similarly named tools on another server are not exempt.
 
-User interruption takes priority. Stop hints are bounded and do not replace core finish/submit validation. Declared capabilities describe adapter implementation; observed lifecycle events show what actually ran. `doctor` reports both with installation/version/MCP/upstream status. An installed hook does not prove complete tool coverage. Missing hooks degrade automatic restoration or captured evidence; explicit curated management remains available. Emergency start/resume rejects missing required integration.
+User interruption takes priority. Stop hints are bounded and do not replace core completion validation. Declared capabilities describe adapter implementation; observed lifecycle events show what actually ran. `doctor` reports both with installation/version/MCP/upstream status. An installed hook does not prove complete tool coverage. Missing hooks degrade automatic restoration or captured evidence; explicit curated management remains available.
 
 ## Optional typed upstream gateway
 
-`cairn configure --file FILE` stores optional local upstream configuration. The five goal tools work without it. Each configured tool maps a safe public name to a server, original upstream name, role and optional result/scope/receipt paths:
+The five management tools work without an upstream configuration. An optional gateway can expose configured MCP tools with their original input schemas, using stdio or Streamable HTTP. Tool selection and permissions remain with the host.
 
-- `read`: an optional read tool; curated tasks can use it without storing calls/results.
-- `submit`: captured-only validated delivery, requiring report and receipt mappings.
-- `receipt`: captured-only query to reconcile a prior ambiguous submission.
+Generic mappings identify the server, upstream tool, optional result-reference path and arbitrary string-valued scope paths. Cairn does not inject business reports into tool arguments or orchestrate external acceptance. Original arguments pass through unchanged.
 
-`Gateway.list` preserves upstream JSON Schemas, descriptions and constraints; `ToolRuntime` exposes `cairn_tool_<name>` with original arguments and validates them. The injected report field is removed from the public submit schema without broadly rewriting alternatives or references. Names are restricted to 1–53 ASCII letters/digits/underscores/hyphens; unsafe mapping keys, prototype paths and duplicate names are rejected. Configuration credentials are not returned in the tool catalog.
-
-`Gateway.callUnrecorded` requires an active curated general owner and a read role. It checks ownership before connecting and again before dispatch, propagates cancellation and creates no Cairn call/observation records on success or failure. Its request timeout is transport protection, not a whole-goal deadline. It does not constrain native tools. Submit/receipt cannot use this route to bypass delivery checks.
-
-`Gateway.call` retains the captured path: atomically reserve limits, execute, extract scope/reference/receipt and append original results. Scope extraction failure retains the raw result as an error observation. Successful submission without a receipt remains immutable captured evidence and returns an ambiguity error; another submit is blocked until a configured receipt query reconciles the previous attempt. A receipt query without a submission cannot manufacture delivery. In-flight submissions freeze report/proof changes.
-
-One gateway reuses a client and cached paginated catalog per server. Concurrent requests share connection promises. Close is idempotent and awaits pending connection cleanup. Configuration changes replace clients. Transport/protocol faults evict connections; per-request cancellation, timeout and ordinary RPC errors do not stop unrelated healthy requests. Calls, especially external writes, are never retried automatically.
+Captured calls reserve explicit budgets and append original results; curated calls forward without retaining tool input/output. Both use shared connections, paginated catalogs, independent request cancellation and idempotent close. Scope/reference extraction errors preserve the original failure in captured mode. Transport faults evict dead connections; ordinary tool failures and cancellation do not tear down independent requests. External actions are never automatically retried.
 
 ## Blue-and-white progress UI
 
@@ -115,11 +107,3 @@ The relationship graph is the default main view; there is no separate progress b
 The graph displays stored, reported state, not live process liveness. `active` does not mean a process is running. Paused/stale work is not shown as executing; missing telemetry does not mean idle. Goal coverage comes from core validation and may decrease after revised findings. Raw observations are labelled as original evidence where present; curated conclusions display basis/references and agent provenance. The timeline emphasizes human-readable milestone summaries and expandable detail, with captured evidence events filterable separately. Phase labels describe persisted state, not a fixed execution pipeline.
 
 The server has no browser mutation endpoints. Host/origin checks, no CORS permission and nonce CSP protect local data from cross-site access. Closing the UI does not stop the host. Bootstrap remains a direct useful first attempt in the ongoing host session, without a second model runtime.
-
-## Emergency profile
-
-Emergency requires captured evidence, native integration, an official configured tool gateway and team/round/issue/match scope. A stored 30-minute match deadline spans rounds and survives restarts or task recreation, with a default final 30-second submission reserve. Reports require impact scope evidence, root cause/causal level, genuine result references and mitigation/fix/prevention. Human hints and manual observations are ineligible evidence.
-
-Validated finish remains active as `ready_for_delivery`. The typed submit injects the saved report and records/reconciles the real receipt. `cairn confirm TASK_ID` records human team confirmation outside model tools; a subsequent finish completes. Core entry points enforce these invariants independently of Stop hook behavior.
-
-Official tool names and exact result/scope/receipt mappings remain organizer integration inputs. The example profile is an unconfigured template. Local checks do not replace the organizer's authoritative reference ownership and scoring.

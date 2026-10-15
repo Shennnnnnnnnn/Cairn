@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 **Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-Cairn 3.0 gives the model five operations: **start, resume, read, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then saves meaningful progress, conclusions, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
+Cairn 4.0 gives the model five operations: **start, resume, read, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then saves meaningful progress, conclusions, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn keeps the goal and its progress in SQLite, with an optional blue-and-white dashboard. No upstream gateway or tool whitelist is required for an ordinary task.
 
@@ -215,7 +215,7 @@ Omit `--target` to update only the global command. See the [Chinese Multica guid
 
 MCP alone is sufficient for explicit curated checkpoints and recovery. Native lifecycle/context restoration depends on actual host integration. Curated goals do not automatically mirror native plans, and Claude/Pi have no guaranteed native-plan mapping in Cairn. Captured Codex plan events require a previously reserved call for the current task and epoch; hosted paths may bypass local hooks.
 
-`doctor` separates declared capabilities from observed lifecycle events and checks installation, version, MCP and configured upstream availability. Missing capture hooks do not prevent a curated task; missing restoration events require explicit read/resume. Strict emergency tasks reject missing required native integration.
+`doctor` separates declared capabilities from observed lifecycle events and checks installation, version, MCP and configured upstream availability. Missing capture hooks do not prevent a curated task; missing restoration events require explicit read/resume.
 
 ## Optional captured evidence and the complete diagnosis demo
 
@@ -243,26 +243,19 @@ Ask the agent to read `PROMPT.md`. Use `--target pi` or `--target claude` for th
 
 The [captured price-incident walkthrough](docs/examples/price-incident.zh-CN.md) explains inputs, actual references and exports. Previous real-model/real-CLI runs remain historical verification, described separately in [verification](docs/verification.md).
 
-## Emergency competition profile
+## Solve actual problems with AI
 
-```sh
-# In the target project, use your completed official configuration.
-cairn configure --file /absolute/path/to/official-tools.json
-```
+After installing the host or Multica integration, run `cairn ui` and give the agent a concrete goal. Include the real project/input path, symptoms and material, allowed changes, and observable acceptance criteria. The agent selects its own tools.
 
-The repository's [emergency example](profiles/emergency.example.json) is an **unconfigured template**. Copy and complete it with the organizer's actual tool names, commands and scope/result/receipt mappings before using the command above. Ordinary curated goals do not need this setup.
+For a local startup defect:
 
-The emergency profile requires captured evidence, native integration, a controlled gateway and team/round/issue/match scope. It preserves the shared **30-minute match deadline**, the default final 30-second submission reserve, genuine current-round `result_ref` citations, impact scope, root cause/causal level and mitigation/fix/prevention. Human hints and historical manual observations cannot supply competition evidence.
+> Use Cairn to fix the startup failure in `/absolute/path/to/project`. The actual error is [paste error]; the expected result is a working development server and homepage. You may read source, reproduce locally and modify the relevant implementation and tests. Reproduce the failure, establish the cause from inspected files/results, implement the fix and verify the original path plus relevant regressions. Preserve useful findings and source references, update the graph at milestones, and finish only when the criteria hold. Report the actual changes, checks/results and remaining limits.
 
-Configured tools expose original schemas as `cairn_tool_<name>`. The gateway supports stdio and Streamable HTTP, reuses connections and propagates request cancellation without stopping independent requests. In curated mode an optional configured read tool can be forwarded without recording calls/results; submit and receipt roles require captured mode and its delivery checks. Configuration does not restrict arbitrary native host tools in curated mode.
+Cairn preserves the goal, findings, references and handoff state. The host agent performs the actual diagnosis, edits, calculations or research. Completion is based on goal coverage and recorded evidence relationships; source truth and causal correctness still require review.
 
-A valid emergency finish remains active as `ready_for_delivery`. The configured submit tool injects the saved report and records a real receipt; ambiguous submission requires receipt reconciliation, never blind resubmission. It then waits for human team confirmation:
+To pause, ask the agent to save open questions and the next action and return its task ID. In another session, request an explicit takeover of that ID, review the saved state and continue. Data checks can use reconciled totals and an output file as criteria; implementation work can use a working user path and regression results; research can use source-linked conclusions and a verified experiment.
 
-```sh
-cairn confirm TASK_ID
-```
-
-Call `cairn_finish {}` again to complete. The organizer remains authoritative for reference ownership and scoring.
+See the [Chinese practical workflow guide](docs/goal-workflow.zh-CN.md) for reusable prompts and a runnable local exercise. Default tasks need no upstream configuration; optional MCP forwarding can be configured separately with `cairn configure --file upstream-tools.json`.
 
 ## Update, data and development
 
@@ -293,10 +286,10 @@ node scripts/pi-fixture-smoke.mjs
 node scripts/claude-fixture-smoke.mjs
 ```
 
-`npm test` typechecks, builds and runs deterministic tests without live models. Real-host smoke tests use configured accounts and may consume quota. Protocol fixtures use local model API servers and do not validate model reasoning. See [verification](docs/verification.md) for measured results, [architecture](docs/architecture.md) for implementation boundaries and [evaluations](evaluations/README.md) for diagnostic quality criteria.
+`npm test` typechecks, builds and runs deterministic tests without live models. Real-host smoke tests use configured accounts and may consume quota. Protocol fixtures use local model API servers and do not validate model reasoning. See [verification](docs/verification.md) for measured results and [architecture](docs/architecture.md) for implementation details. Task quality should be assessed against the user's acceptance criteria, inspected sources and actual verification results.
 
 ## Background and license
 
-Cairn originated as a goal-directed exploration engine, validated in the Tencent Cloud AI penetration testing challenge. It carries its goal, evidence and human-hint ideas into reusable CLI plugins.
+Cairn preserves goals, evidence, human context and recovery state across supported CLI hosts so agents can continue verifiable work.
 
 Licensed under [AGPL-3.0](LICENSE).

@@ -108,7 +108,7 @@ test('checkpoint progress, findings and goal coverage roll back atomically on in
   assert.deepEqual(store.get(task.id),before);assert.equal(store.events(task.id).length,events);store.close();
 });
 
-test('curated deadlines are advisory while captured budgets and emergency requirements remain enforced',()=>{
+test('curated deadlines are advisory while explicit captured budgets remain enforced',()=>{
   const {store,engine,task}=setup();engine.suspend(task.id,owner);
   assert.throws(()=>engine.create(owner,{origin:'user',goal:'Invalid budget',criteria:['Goal'],evidenceMode:'curated',budget:{maxCalls:4}}),/cannot be enforced/);
   assert.throws(()=>engine.create(owner,{origin:'user',goal:'Invalid budget',criteria:['Goal'],evidenceMode:'curated',budget:{maxParallel:2}}),/cannot be enforced/);
@@ -122,7 +122,6 @@ test('curated deadlines are advisory while captured budgets and emergency requir
   assert.throws(()=>engine.beforeTool(captured.id,owner,'two','query'),/budget exhausted/);
   assert.throws(()=>engine.checkpoint(captured.id,owner,{summary:'No raw evidence',findings:[{text:'Cannot substitute rationale',status:'supported',basis:'A model says so',references:['https://example.test']}]}),/supporting observations/);
   engine.suspend(captured.id,owner);
-  assert.throws(()=>engine.create(owner,{origin:'contest',goal:'Contest',criteria:['Goal'],profile:'emergency',evidenceMode:'curated'}),/requires captured/);
   store.close();
 });
 
@@ -178,24 +177,24 @@ test('content-free failed completion checks are visible once per state without c
 
 test('curated completion and report validation reject foreign or incomplete scopes while preserving separate exploration',()=>{
   const store=new Store(':memory:'),engine=new Engine(store);
-  const scope={teamId:'team-A',roundId:'round-1'};
-  const task=engine.create(owner,{origin:'user',goal:'Explain this team and round',criteria:['Explain the cause'],scope,evidenceMode:'curated'});
+  const scope={workspaceId:'team-A',environment:'round-1'};
+  const task=engine.create(owner,{origin:'user',goal:'Explain this project and environment',criteria:['Explain the cause'],scope,evidenceMode:'curated'});
   const initial=store.get(task.id),initialEvents=store.events(task.id).length;
-  for(const findingScope of [{teamId:'team-B',roundId:'round-2'},{teamId:'team-A',roundId:'round-2'},{teamId:'team-A'}]){
+  for(const findingScope of [{workspaceId:'team-B',environment:'round-2'},{workspaceId:'team-A',environment:'round-2'},{workspaceId:'team-A'}] as Record<string,string>[]){
     assert.throws(()=>engine.finish(task.id,owner,{outcome:'completed',summary:'Wrong scope',findings:[{
       key:'wrong',text:'Another scope has a mapping error',basis:'Source review for another cohort',scope:findingScope,covers:['c1'],
     }]}),/must cover this task scope/);
     assert.deepEqual(store.get(task.id),initial);assert.equal(store.events(task.id).length,initialEvents,'scope rejection is atomic');
   }
-  engine.checkpoint(task.id,owner,{summary:'Compared another round for context',findings:[{
-    key:'comparison',text:'Another round had a mapping problem',basis:'Reviewed the other round report',scope:{teamId:'team-B',roundId:'round-2'},covers:[],
+  engine.checkpoint(task.id,owner,{summary:'Compared another environment for context',findings:[{
+    key:'comparison',text:'Another environment had a mapping problem',basis:'Reviewed the other round report',scope:{workspaceId:'team-B',environment:'round-2'},covers:[],
   }]});
   const foreign=store.get(task.id).claims[0]!;
   assert.deepEqual(store.get(task.id).criteria[0]?.claimIds,[]);
   assert.deepEqual(store.get(task.id).report?.curatedReferences,[],'separate exploration is not included in this task report');
   assert.throws(()=>engine.satisfy(task.id,owner,'c1',[foreign.id]),/must cover this task scope/);
-  engine.checkpoint(task.id,owner,{summary:'This round verified',findings:[{
-    key:'current',text:'This task has a mapping defect',basis:'Reviewed the current round source',scope:{...scope,issueId:'current-issue'},covers:['c1'],
+  engine.checkpoint(task.id,owner,{summary:'This environment verified',findings:[{
+    key:'current',text:'This task has a mapping defect',basis:'Reviewed the current environment source',scope:{...scope,issueId:'current-issue'},covers:['c1'],
   }]});
   const saved=store.get(task.id),current=saved.claims.find(claim=>claim.key==='current')!,validReport=saved.report!;
   assert.equal(engine.evaluate(saved).ok,true);assert.equal(engine.evaluateReport(saved,validReport).ok,true);
@@ -205,7 +204,7 @@ test('curated completion and report validation reject foreign or incomplete scop
   const foreignReport={...validReport,curatedReferences:[{claimId:foreign.id,statement:foreign.text,basis:foreign.basis,references:foreign.references??[]}]};
   assert.equal(engine.evaluateReport(forgedProjection,foreignReport).ok,false);
   assert.ok(engine.evaluateReport(saved,foreignReport).issues.some(issue=>issue.includes('does not cover this task scope')));
-  assert.throws(()=>engine.claim(task.id,owner,{...current,scope:{teamId:'team-B',roundId:'round-2'}}),/must cover this task scope/);
+  assert.throws(()=>engine.claim(task.id,owner,{...current,scope:{workspaceId:'team-B',environment:'round-2'}}),/must cover this task scope/);
   assert.equal(engine.report(task.id,owner,foreignReport).ok,false);
   assert.equal(engine.finish(task.id,owner,{outcome:'completed'}).phase,'incomplete','a report with foreign-scope references cannot complete an otherwise covered task');
   engine.report(task.id,owner,validReport);

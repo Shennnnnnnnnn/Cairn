@@ -8,7 +8,7 @@ import { installMultica, multicaStatus, uninstallMultica } from '../src/multica.
 
 const workspaceId = 'workspace-a';
 const skillBody = '---\nname: cairn\ndescription: Keep goals and curated evidence.\n---\n\n# Cairn\n';
-const referenceBody = '# Emergency\n';
+const referenceBody = '# Practical work\n';
 class FakeMultica {
   servers: any[] = [];
   skills: any[] = [];
@@ -68,6 +68,10 @@ class FakeMultica {
       const path = value('--path'); let file = skill.files.find((item: any) => item.path === path);
       if (!file) { file = { id: `file-${skill.files.length + 1}`, path }; skill.files.push(file); }
       file.content = readFileSync(value('--content-file'), 'utf8'); result = file;
+    } else if (key === 'skill files delete') {
+      assert.ok(!input.includes('--output'), 'Multica file deletion does not accept an output flag');
+      write = true; const skill = this.skills.find(item => item.id === args[3]);
+      skill.files = skill.files.filter((item: any) => item.id !== args[4]); result = null;
     } else if (key === 'agent skills list') result = this.bindings.get(args[3]!) ?? [];
     else if (key === 'agent skills add') {
       write = true;
@@ -90,14 +94,14 @@ function fixture() {
   writeFileSync(join(source, 'runtime/cairn.mjs'), 'console.log("fixture runtime");\n');
   writeFileSync(join(source, 'runtime/ui-client.js'), 'fixture UI');
   writeFileSync(join(source, 'skills/cairn/SKILL.md'), skillBody);
-  writeFileSync(join(source, 'skills/cairn/references/emergency.md'), referenceBody);
+  writeFileSync(join(source, 'skills/cairn/references/solving-problems.md'), referenceBody);
   const fake = new FakeMultica();
   const options = { root, workspaceId, agent: '排障助手', db: join(root, 'data/state.db') };
   const dependencies = { runner: fake.run, bundles, node: '/absolute/node' };
   return { root, bundles, source, fake, options, dependencies, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 function seedSkill(fake: FakeMultica) {
-  fake.skills.push({ id: 'skill-existing', name: 'cairn', content: skillBody, files: [{ id: 'ref-existing', path: 'references/emergency.md', content: referenceBody }] });
+  fake.skills.push({ id: 'skill-existing', name: 'cairn', content: skillBody, files: [{ id: 'ref-existing', path: 'references/solving-problems.md', content: referenceBody }] });
 }
 
 test('Multica installation registers a self-contained generic MCP and skill, preserves other bindings, and is idempotent', () => {
@@ -109,7 +113,7 @@ test('Multica installation registers a self-contained generic MCP and skill, pre
     assert.equal(installed.configured, true); assert.equal(installed.workspaceId, workspaceId);
     assert.deepEqual(f.fake.configurations[0], { command: '/absolute/node', args: [installed.runtime, 'mcp'], env: { CAIRN_HOST: 'mcp', CAIRN_DB: f.options.db } });
     assert.ok(existsSync(installed.runtime!));
-    assert.equal(f.fake.skills[0].content, skillBody); assert.equal(f.fake.skills[0].files[0].content, referenceBody);
+    assert.equal(f.fake.skills[0].content, skillBody); assert.equal(f.fake.skills[0].files.find((file: any) => file.path === 'references/solving-problems.md')?.content, referenceBody);assert.ok(!f.fake.skills[0].files.some((file: any) => file.path === 'references/emergency.md'));
     const writes = f.fake.writes;
     installMultica(f.options, f.dependencies);
     assert.equal(f.fake.writes, writes, 'repeated install must not re-register or re-bind');
@@ -185,7 +189,7 @@ test('owned skill updates replace only unchanged prior content and use file payl
   try {
     installMultica(f.options, f.dependencies);
     writeFileSync(join(f.source, 'skills/cairn/SKILL.md'), `${skillBody}Updated guidance\n`);
-    writeFileSync(join(f.source, 'skills/cairn/references/emergency.md'), `${referenceBody}Updated reference\n`);
+    writeFileSync(join(f.source, 'skills/cairn/references/solving-problems.md'), `${referenceBody}Updated reference\n`);
     installMultica(f.options, f.dependencies);
     assert.match(f.fake.skills[0].content, /Updated guidance/);
     assert.match(f.fake.skills[0].files[0].content, /Updated reference/);
@@ -316,7 +320,7 @@ test('explicit adoption migrates the exact published v3.0.2 skill, while a one-b
       } else {
         assert.equal(installMultica({ ...f.options, adopt: true }, f.dependencies).installed, true);
         assert.equal(f.fake.skills[0].content, skillBody);
-        assert.equal(f.fake.skills[0].files[0].content, referenceBody);
+        assert.equal(f.fake.skills[0].files.find((file: any) => file.path === 'references/solving-problems.md')?.content, referenceBody);assert.ok(!f.fake.skills[0].files.some((file: any) => file.path === 'references/emergency.md'));
       }
     } finally { f.cleanup(); }
   }
@@ -337,6 +341,36 @@ for (const failure of ['before-reference-write', 'lost-skill-response'] as const
     assert.equal(existsSync(join(f.root, '.cairn/installations/multica/default.json')), false);
     assert.equal(installMultica(f.options, f.dependencies).installed, true);
     assert.equal(f.fake.skills.length, 1); assert.equal(f.fake.servers.length, 1);
-    assert.equal(f.fake.skills[0].files[0].content, referenceBody);
+    assert.equal(f.fake.skills[0].files.find((file: any) => file.path === 'references/solving-problems.md')?.content, referenceBody);assert.ok(!f.fake.skills[0].files.some((file: any) => file.path === 'references/emergency.md'));
   } finally { f.cleanup(); }
+});
+
+for (const failure of ['before-delete','lost-delete-response'] as const) test(`managed obsolete skill references are removed safely after ${failure}`,()=>{
+ const f=fixture();
+ try{
+  const initial=installMultica(f.options,f.dependencies);
+  rmSync(join(f.source,'skills/cairn/references/solving-problems.md'));
+  writeFileSync(join(f.source,'skills/cairn/references/project-work.md'),'# Updated project workflow\n');
+  if(failure==='before-delete')f.fake.failBefore='skill files delete';else f.fake.failAfter='skill files delete';
+  assert.throws(()=>installMultica(f.options,f.dependencies),/simulated/);
+  const partial=JSON.parse(readFileSync(join(f.root,'.cairn/installations/multica',workspaceId,'receipt.json'),'utf8'));
+  assert.equal(partial.skillPending,true);assert.equal(partial.complete,false);
+  const updated=installMultica(f.options,f.dependencies);
+  assert.equal(updated.skillId,initial.skillId);assert.equal(updated.serverId,initial.serverId);
+  assert.deepEqual(f.fake.skills[0].files.map((file:any)=>file.path),['references/project-work.md']);
+  assert.equal(f.fake.skills.length,1);assert.equal(f.fake.servers.length,1);
+  assert.equal(multicaStatus(f.options,f.dependencies).installed,true);
+ }finally{f.cleanup();}
+});
+
+test('edited obsolete skill files are preserved and block an upgrade before mutations',()=>{
+ const f=fixture();
+ try{
+  installMultica(f.options,f.dependencies);
+  f.fake.skills[0].files[0].content+='User notes that must survive.\n';
+  rmSync(join(f.source,'skills/cairn/references/solving-problems.md'));
+  const writes=f.fake.writes;
+  assert.throws(()=>installMultica(f.options,f.dependencies),/unowned edit/);
+  assert.equal(f.fake.writes,writes);assert.match(f.fake.skills[0].files[0].content,/User notes/);
+ }finally{f.cleanup();}
 });

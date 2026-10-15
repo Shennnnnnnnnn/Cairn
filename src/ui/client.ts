@@ -32,7 +32,7 @@ const kinds: Record<string, string> = {
   'task.checkpoint': '保存检查点', 'task.finished': '更新完成状态',
   'tool.started': '开始工具调用', 'observation.captured': '记录观测', 'claim.revised': '更新假设与结论',
   'criterion.updated': '更新完成条件', 'action.updated': '更新行动', 'hint.added': '收到人工提示',
-  'report.saved': '保存报告', 'delivery.recorded': '记录交付回执', 'team.confirmed': '队伍确认', 'continuation.suggested': '检查未完成事项',
+  'report.saved': '保存报告', 'continuation.suggested': '检查未完成事项',
 };
 const statuses: Record<string, string> = { proposed: '待验证', supported: '已支持', refuted: '已反驳', inconclusive: '证据不足', planned: '已规划', running: '进行中', completed: '已完成', failed: '失败', cancelled: '已取消', success: '成功', error: '失败' };
 let tasks: TaskSummary[] = [], current: TaskView | undefined, selectedTask = '', selectedNode = 'origin';
@@ -107,7 +107,7 @@ async function refresh() {
 }
 function renderCurrent() {
   const task = current!;
-  text('task-id', `${task.id.slice(0, 19).toUpperCase()} · ${task.profile === 'emergency' ? '应急比赛' : '通用任务'}`);
+  text('task-id', `${task.id.slice(0, 19).toUpperCase()} · 通用任务`);
   text('goal', task.goal); text('phase', task.phase.label); byId('phase').className = `phase ${task.phase.key}`;
   text('owner', `${task.owner.host} · ${task.owner.epoch > 1 ? `接管 ${task.owner.epoch - 1} 次` : '主会话'}`);
   text('created', `创建于 ${new Date(task.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}`);
@@ -118,7 +118,7 @@ function tick() {
   if (!current) return;
   const deadline = current.budget.deadline, now = Date.now();
   byId('clock-stat').hidden = !deadline || current.status === 'completed';
-  text('clock-label', current.profile === 'emergency' ? '比赛剩余时间' : '提醒剩余时间');
+  text('clock-label', '提醒剩余时间');
   const clock = byId('clock'); clock.classList.toggle('expired', !!deadline && Date.parse(deadline) <= now);
   clock.textContent = deadline ? formatDuration(Date.parse(deadline) - now) : '';
 
@@ -305,15 +305,12 @@ function renderEvents() {
   } else recent.append(create('p', 'note', '下一次任务变化会自动显示在这里。'));
 }
 function renderReport() {
-  const task = current!, panel = byId('report-panel'); panel.replaceChildren(create('h2', 'panel-title', '诊断与交付报告'));
+  const task = current!, panel = byId('report-panel'); panel.replaceChildren(create('h2', 'panel-title', '任务结果与依据'));
   if (!task.report) { panel.append(create('p', 'note', '尚未保存报告。Agent 记录检查点或完成任务时，会按结论及其证据生成报告引用。')); return; }
   if(task.reportCheck&&!task.reportCheck.ok)panel.append(create('div','notice',`报告仍需补齐：${task.reportCheck.issues.join('；')}`));
   const section = (title: string, value: string | undefined) => { if (!value) return; const block = create('section', 'report-section'); block.append(create('h3', '', title), create('p', '', value)); panel.append(block); };
-  section('结论摘要', task.report.summary); section('影响面', task.report.impact?.text);
-  section(`根因${task.report.rootCause ? ` · ${{symptom:'现象级',service:'服务级',code:'代码级',root:'根因级'}[task.report.rootCause.level]}` : ''}`, task.report.rootCause?.text);
-  section('触发因', task.report.rootCause?.trigger); section('放大机制', task.report.rootCause?.amplification);
-  section('应急止血', task.report.solution?.mitigation); section('根因修复', task.report.solution?.fix); section('防复发', task.report.solution?.prevention);
-  section('交付状态', task.delivered ? task.confirmedAt ? '已有交付回执，队伍已确认。' : '已有交付回执。' : task.profile==='emergency'?'尚未记录外部交付回执。':task.status==='completed'?'报告已保存，任务已完成。':'报告已保存，等待任务完成检查。');
+  section('结果总结', task.report.summary);
+  section('完成状态', task.status==='completed'?'目标条件与依据校验已通过，任务已完成。':'报告已保存，等待目标完成检查。');
   const citations = create('section', 'report-section'); citations.append(create('h3', '', '引用证据'));
   for (const item of task.report.curatedReferences ?? []) { const card = create('div', 'curated-citation'); card.append(create('p', '', item.statement)); if (item.basis) card.append(create('p', 'note', item.basis)); for (const ref of item.references) sourceReference(card, ref); citations.append(card); }
   for (const citation of task.report.citations) { reference(citations, citation.observationId, 'obs'); citations.append(create('p', 'note', citation.statement)); } panel.append(citations);

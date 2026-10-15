@@ -1,13 +1,13 @@
 import type { Engine } from '../core/engine.js';
 import type { Task, Observation, Check } from '../core/types.js';
 
-export type ObservationIndex = Omit<Observation, 'input' | 'output' | 'receipt'> & { ref: string };
+export type ObservationIndex = Omit<Observation, 'input' | 'output'> & { ref: string };
 export type WorkItem = {
   key: string; title: string; status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled';
   detail?: string; source: 'agent' | 'host' | 'criterion' | 'action'; updatedAt: string; statusLabel: string;
 };
-export type TaskView = Omit<Task, 'observations' | 'delivery' | 'progress'> & {
-  observations: ObservationIndex[]; delivered: boolean; check: Check; reportCheck?: Check;
+export type TaskView = Omit<Task, 'observations' | 'progress'> & {
+  observations: ObservationIndex[]; check: Check; reportCheck?: Check;
   progress: { satisfied: number; total: number };
   workItems: WorkItem[]; workGroups: { running: WorkItem[]; completed: WorkItem[]; waiting: WorkItem[] };
   workCounts: { running: number; completed: number; waiting: number; blocked: number; questions: number };
@@ -66,15 +66,14 @@ export function projectTask(engine: Engine, task: Task): TaskView {
   let phase = { key: 'investigating', label: workCounts.running ? 'Agent 报告执行中' : '目标推进中' };
   if (task.status === 'completed') phase = { key: 'completed', label: '已完成' };
   else if (task.status === 'suspended') phase = { key: 'suspended', label: '已暂停' };
-  else if (task.budget.deadline && Date.parse(task.budget.deadline) <= engine.now().getTime()) phase = { key: 'expired', label: task.profile === 'emergency' ? '比赛时间已到' : '提醒时间已到' };
-  else if (task.delivery && !task.confirmedAt && task.profile === 'emergency') phase = { key: 'confirmation', label: '待队伍确认' };
-  else if (task.report && check.ok) phase = { key: 'reporting', label: reportCheck?.ok ? task.profile === 'emergency' ? '待提交报告' : '报告待完成' : '报告待补齐' };
+  else if (task.budget.deadline && Date.parse(task.budget.deadline) <= engine.now().getTime()) phase = { key: 'expired', label: '提醒时间已到' };
+  else if (task.report && check.ok) phase = { key: 'reporting', label: reportCheck?.ok ? '报告待完成' : '报告待补齐' };
   else if (check.ok) phase = { key: 'verifying', label: '条件已满足' };
   else if (!task.observations.length && !metrics.calls && !task.checkpoint && !work.items.some(i => i.source !== 'criterion')) phase = { key: 'starting', label: '目标已建立' };
-  const { observations, delivery, progress: _stages, ...rest } = task;
+  const { observations, progress: _stages, ...rest } = task;
   return {
-    ...rest, calls: captured ? rest.calls : {}, actions: captured ? rest.actions : [], check, reportCheck, phase, progress, workItems: work.items, workGroups, workCounts, progressSource: work.source, updatedAt, metrics, delivered: !!delivery,
-    observations: captured ? observations.map(({ input, output, receipt, ...index }, i) => ({ ...index, ref: `E${i + 1}` })) : [],
+    ...rest, calls: captured ? rest.calls : {}, actions: captured ? rest.actions : [], check, reportCheck, phase, progress, workItems: work.items, workGroups, workCounts, progressSource: work.source, updatedAt, metrics,
+    observations: captured ? observations.map(({ input, output, ...index }, i) => ({ ...index, ref: `E${i + 1}` })) : [],
   };
 }
 export function summaries(engine: Engine): TaskSummary[] {
@@ -88,7 +87,7 @@ export type TimelineEvent = { seq: number; kind: string; at: string; subject: st
 const titles: Record<string, string> = {
   'task.created': '开始目标', 'task.resumed': '接管并恢复', 'task.suspended': '暂停任务', 'task.completed': '已完成', 'task.checkpoint': '保存阶段进展',
   'tool.started': '开始历史工具调用', 'observation.captured': '保存原始观测', 'claim.revised': '更新结论', 'criterion.updated': '更新目标条件', 'action.updated': '更新行动进展',
-  'hint.added': '补充人工提示', 'report.saved': '保存报告', 'delivery.recorded': '收到交付回执', 'team.confirmed': '队伍确认', 'continuation.suggested': '提醒未完成事项',
+  'hint.added': '补充人工提示', 'report.saved': '保存报告', 'continuation.suggested': '提醒未完成事项',
 };
 /** Timeline projections allow only authored summaries and lifecycle metadata, never raw tool results. */
 export function projectEvent(row: { seq: number; kind: string; at: string; payload: any }): TimelineEvent {
@@ -98,7 +97,7 @@ export function projectEvent(row: { seq: number; kind: string; at: string; paylo
   const advanced = ['tool.started', 'observation.captured', 'claim.revised', 'criterion.updated', 'action.updated', 'report.saved'].includes(row.kind);
   if (row.kind === 'task.finished' || row.kind === 'task.checked') {
     status = value(payload.phase);
-    title = ({ completed: '已完成', suspended: '暂停任务', incomplete: '完成检查未通过', ready_for_delivery: '报告已就绪，待交付', awaiting_confirmation: '等待队伍确认' } as Record<string, string>)[status] ?? '完成检查';
+    title = ({ completed: '已完成', suspended: '暂停任务', incomplete: '完成检查未通过' } as Record<string, string>)[status] ?? '完成检查';
     summary = value(input.summary);
     detail = Array.isArray(payload.validation?.issues) ? payload.validation.issues.filter((s: unknown) => typeof s === 'string').join('\n') : '';
   } else if (row.kind === 'task.resumed') { summary = payload.takeover ? '新会话接管目标，继续已有结论与未解决问题。' : '继续当前会话保存的目标与进展。'; }

@@ -2,7 +2,7 @@
 
 这个样例展示 Cairn 的完整链路：**目标 → 工具原始结果 → 证据别名 → 结论与反证 → 阶段记录 → 暂停 → 新会话接管 → 完成校验 → 报告导出**。
 
-数据是明确标记的本地虚构数据，使用 `general` Profile。价格、用户数和 `demo:` 引用都不属于真实生产系统或比赛主办方。演示工具通过真正的 stdio MCP 进程返回结果，由 Cairn Gateway 自动采证；默认演示中的操作顺序和结论由固定脚本提供，不请求模型账号，也不验证模型推理能力。
+数据是明确标记的本地虚构数据，使用显式 `captured` 模式。价格、用户数和 `demo:` 引用都不属于真实生产系统。演示工具通过真正的 stdio MCP 进程返回结果，由 Cairn Gateway 自动采证；默认演示中的操作顺序和结论由固定脚本提供，不请求模型账号，也不验证模型推理能力。
 
 
 ![全局 cairn demo 的实际执行结果：四条模拟证据、一次接管与目标完成](../images/demo-chain.png)
@@ -92,9 +92,13 @@ cairn demo --no-ui --delay 0 --json
     "用原始工具证据解释源价格与显示价格相差 100 倍的机制，并审查服务崩溃假设",
     "用版本分布证据确认影响范围，并交付止损、修复和预防建议"
   ],
-  "profile": "general",
-  "scope": {"workspaceId": "demo-price-unit"},
-  "budget": {"maxCalls": 6, "maxParallel": 2}
+  "scope": {
+    "workspaceId": "demo-price-unit"
+  },
+  "budget": {
+    "maxCalls": 6,
+    "maxParallel": 2
+  }
 }
 ```
 
@@ -105,7 +109,9 @@ cairn demo --no-ui --delay 0 --json
 调用 `cairn_tool_service_health`：
 
 ```json
-{"service": "quote-display"}
+{
+  "service": "quote-display"
+}
 ```
 
 工具返回 `demo: true`、`result_ref: "demo:service-health"`、`process: "healthy"`、`crash_count: 0`。Gateway 保存原始输入和输出，返回证据别名 `E1`，同时保留原始 observation ID 与 `resultRef`。
@@ -117,7 +123,10 @@ cairn demo --no-ui --delay 0 --json
 调用 `cairn_tool_price_sample`：
 
 ```json
-{"symbol": "DEMO.600001", "version": "1.4"}
+{
+  "symbol": "DEMO.600001",
+  "version": "1.4"
+}
 ```
 
 返回的关键部分是：
@@ -134,8 +143,14 @@ cairn demo --no-ui --delay 0 --json
     "structuredContent": {
       "demo": true,
       "result_ref": "demo:price-sample-v1.4",
-      "source": {"value": 10.26, "unit": "CNY"},
-      "display": {"value": 1026, "unit": "CNY"},
+      "source": {
+        "value": 10.26,
+        "unit": "CNY"
+      },
+      "display": {
+        "value": 1026,
+        "unit": "CNY"
+      },
       "ratio": 100
     }
   }
@@ -156,12 +171,16 @@ cairn demo --no-ui --delay 0 --json
       "key": "crash",
       "text": "价格异常由 quote-display 进程崩溃引起",
       "status": "refuted",
-      "against": ["E1"]
+      "against": [
+        "E1"
+      ]
     },
     {
       "key": "price-ratio",
       "text": "1.4 客户端将样例源价格 10.26 元显示为 1026 元，放大 100 倍",
-      "evidence": ["E2"]
+      "evidence": [
+        "E2"
+      ]
     }
   ],
   "questions": [
@@ -179,7 +198,9 @@ cairn demo --no-ui --delay 0 --json
 调用 `cairn_finish`：
 
 ```json
-{"outcome": "suspended"}
+{
+  "outcome": "suspended"
+}
 ```
 
 返回 `phase: "suspended"`、`status: "suspended"`。先前的结论、两个未解决问题和下一步仍保留。驱动器随后关闭第一个 MCP 连接，结束其上游工具连接。
@@ -191,7 +212,10 @@ cairn demo --no-ui --delay 0 --json
 固定驱动器创建 `demo-resumed-session` 的新 MCP 连接，调用 `cairn_resume`：
 
 ```json
-{"task_id": "本次创建的真实任务ID", "takeover": true}
+{
+  "task_id": "本次创建的真实任务ID",
+  "takeover": true
+}
 ```
 
 返回同一个任务的目标、结论、E1／E2 证据入口和两个问题，执行代次增加为 `owner.epoch: 2`。旧会话不能再提交完成结果；Cairn 恢复任务状态，不复制宿主的聊天历史。若摘要不够，模型可以调用 `cairn_read {"view":"evidence","ref":"E2"}` 查看原始数据。
@@ -216,37 +240,36 @@ E2 和 E3 共同支持重复单位换算的机制解释；E4 支持“这个窗�
     {
       "key": "unit-conversion",
       "text": "输入已经是 CNY 元，1.4 代码再次乘以 100，与价格样例吻合；崩溃假设已被 E1 反驳。",
-      "evidence": ["E1", "E2", "E3"],
-      "covers": ["c1"]
+      "evidence": [
+        "E1",
+        "E2",
+        "E3"
+      ],
+      "covers": [
+        "c1"
+      ]
     },
     {
       "key": "impact",
       "text": "虚构窗口中 1.4 的 300/1000 用户受影响；建议回退映射或升级、修复重复换算并增加回归测试，尚未执行。",
-      "evidence": ["E2", "E3", "E4"],
-      "covers": ["c2"]
+      "evidence": [
+        "E2",
+        "E3",
+        "E4"
+      ],
+      "covers": [
+        "c2"
+      ]
     }
   ],
   "questions": [],
-  "next": "演示已完成；真实环境需要实际验证修复效果。",
-  "report": {
-    "impact": {
-      "text": "仅此虚构窗口：1.4 客户端 300/1000 用户受影响，不能外推至生产环境。",
-      "scope": {"workspaceId": "demo-price-unit"},
-      "observationIds": ["E4"]
-    },
-    "rootCause": {"text": "1.4 对单位已为 CNY 元的输入再次乘以 100。", "level": "code"},
-    "solution": {
-      "mitigation": "建议回退映射或引导升级；未实际执行。",
-      "fix": "建议按输入单位显式转换一次。",
-      "prevention": "建议增加单位契约、价格样例及版本对照回归。"
-    }
-  }
+  "next": "演示已完成；真实环境需要实际验证修复效果。"
 }
 ```
 
 核心将 E# 解析为持久 observation ID，维护结论与条件的关系，并从覆盖完成条件的已支持结论生成报告引用。校验成功后返回 `phase: "completed"`、`status: "completed"`、`validation.ok: true`，覆盖进度成为 **2/2**。如果证据缺失、属于其他任务或条件未覆盖，finish 会保留 active 状态并返回缺口。
 
-本样例为 `general`，不演示真实比赛提交工具、提交回执或队伍确认。严格比赛任务还需要正式白名单、范围校验及交付确认流程。
+本样例展示工具原始结果与结论分离；日常默认模式只保存 AI 整理的依据与引用。
 
 ### 最终证据引用表
 
@@ -257,7 +280,7 @@ E2 和 E3 共同支持重复单位换算的机制解释；E4 支持“这个窗�
 | E3 | `demo:client-mapping-v1.4` | 重复乘以 100；与 E2 共同支持 c1，支撑修复建议 |
 | E4 | `demo:version-impact` | 版本与人数分布；支持 c2 的影响面判断 |
 
-E# 是任务内别名，`result_ref` 是本地工具返回的虚构来源引用，两者均不能伪装为主办方证据。默认报告 citations 来自覆盖完成条件的已支持结论，最终涵盖 E1–E4。E1 同时反驳旧假设并支持最终判断中对该假设的排除；可在 HTML 证据图或 JSON 快照中检查完整关系。程序校验引用和覆盖结构，因果解释仍需审阅。
+E# 是任务内别名，`result_ref` 是本地工具返回的虚构来源引用，它们指向本地样例来源。默认报告 citations 来自覆盖完成条件的已支持结论，最终涵盖 E1–E4。E1 同时反驳旧假设并支持最终判断中对该假设的排除；可在 HTML 证据图或 JSON 快照中检查完整关系。程序校验引用和覆盖结构，因果解释仍需审阅。
 
 ## 8. 交给真实 Pi、Claude Code 或 Codex
 

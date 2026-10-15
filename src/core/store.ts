@@ -14,7 +14,6 @@ export class Store {
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, state TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL REFERENCES tasks(id), kind TEXT NOT NULL, payload TEXT NOT NULL, at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(host TEXT NOT NULL, id TEXT NOT NULL, cwd TEXT NOT NULL, task_id TEXT, epoch INTEGER, capabilities TEXT NOT NULL DEFAULT '{}', seen TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(host,id));
-      CREATE TABLE IF NOT EXISTS matches(id TEXT PRIMARY KEY, team TEXT NOT NULL, deadline TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
   }
   close() { this.db.close(); }

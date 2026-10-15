@@ -11,7 +11,7 @@ export async function startMcp(engine:Engine,session:Session) {
   const server=new Server({name:'cairn',version:VERSION},{capabilities:{tools:{}}});
   server.setRequestHandler(ListToolsRequestSchema,async()=>({tools:(await runtime.list()).map(tool=>({
     name:tool.name,description:tool.description,inputSchema:tool.inputSchema as {type:'object'},
-    annotations:{readOnlyHint:tool.readOnly??tool.role==='read',destructiveHint:tool.role==='submit',openWorldHint:!!tool.role},
+    annotations:{readOnlyHint:tool.readOnly??false,openWorldHint:tool.name.startsWith('cairn_tool_')},
   }))}));
   server.setRequestHandler(CallToolRequestSchema,async(request,extra)=>{
     try {

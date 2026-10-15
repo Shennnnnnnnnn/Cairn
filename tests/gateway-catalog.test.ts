@@ -6,14 +6,14 @@ import {tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Store} from '../src/core/store.js';
 import {Engine} from '../src/core/engine.js';
-import {Gateway,gatewaySchema,publicInputSchema,valueAt,structuredResult} from '../src/gateway.js';
+import {Gateway,gatewaySchema,valueAt,structuredResult} from '../src/gateway.js';
 import type {Session} from '../src/core/types.js';
 
 function setup(evidenceMode:'captured'|'curated'='captured'){
  const dir=mkdtempSync(join(tmpdir(),'cairn-gateway-catalog-')),audit=join(dir,'audit.jsonl'),store=new Store(':memory:'),engine=new Engine(store),session:Session={host:'pi',sessionId:'fixture',cwd:dir};
- const config=gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/gateway-catalog.mjs'),audit]}},tools:['read','submit','receipt','slow','rpc_error','crash'].map(name=>({name,server:'fixture',upstream:name,role:name==='submit'?'submit':name==='receipt'?'receipt':'read',resultRefPath:'result_ref',scopePaths:{teamId:'team_id'},reportPath:name==='submit'?'payload.report':undefined,receiptPath:['submit','receipt'].includes(name)?'receipt':undefined,timeoutMs:name==='slow'?100:2000}))});
+ const config=gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/gateway-catalog.mjs'),audit]}},tools:['read','slow','rpc_error','crash'].map(name=>({name,server:'fixture',upstream:name,resultRefPath:'result_ref',scopePaths:{environment:'environment'},timeoutMs:name==='slow'?100:2000}))});
  store.setConfig('gateway',config);
- const task=engine.create(session,{origin:'fixture',goal:'Diagnose measured behavior',criteria:['A supported conclusion'],scope:{teamId:'team'},evidenceMode}),gateway=new Gateway(engine);
+ const task=engine.create(session,{origin:'fixture',goal:'Diagnose measured behavior',criteria:['A supported conclusion'],scope:{environment:'staging'},evidenceMode}),gateway=new Gateway(engine);
  const events=()=>readFileSync(audit,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
  const readyReport=async()=>{
   const observation=await gateway.call(task.id,session,'read',{probe:'measured'}),claim=engine.claim(task.id,session,{text:'A measured cause',status:'supported',supports:[observation.id],refutes:[]});
@@ -24,35 +24,22 @@ function setup(evidenceMode:'captured'|'curated'='captured'){
  return {dir,audit,store,engine,session,task,gateway,config,events,readyReport,cleanup};
 }
 
-test('public gateway schemas preserve original constraints and remove only injected report fields',()=>{
- const schema={type:'object' as const,properties:{payload:{type:'object',properties:{report:{type:'object'},label:{type:'string',description:'Keep upstream description'}},required:['report','label'],additionalProperties:false}},required:['payload'],additionalProperties:false,$defs:{unchanged:{type:'string'}}};
- const original=structuredClone(schema),publicSchema=publicInputSchema(schema,{role:'submit',reportPath:'payload.report'});
- assert.deepEqual(schema,original);
- assert.deepEqual(publicSchema.properties.payload.properties,{label:original.properties.payload.properties.label});
- assert.deepEqual(publicSchema.properties.payload.required,['label']);
- assert.deepEqual(publicSchema.required,['payload']);assert.equal(publicSchema.additionalProperties,false);assert.deepEqual(publicSchema.$defs,original.$defs);
- assert.deepEqual(publicInputSchema(schema,{role:'read'}),schema);
- const top={type:'object' as const,properties:{report:{type:'object'},target:{type:'string'}},required:['report','target']};
- assert.deepEqual(publicInputSchema(top,{role:'submit',reportPath:'report'}),{type:'object',properties:{target:{type:'string'}},required:['target']});
- const indirect={type:'object' as const,properties:{payload:{$ref:'#/$defs/payload'}},$defs:{payload:{type:'object',properties:{report:{type:'object'}}}}};
- assert.deepEqual(publicInputSchema(indirect,{role:'submit',reportPath:'payload.report'}),indirect);
-});
 
 test('gateway whitelist rejects unsafe or duplicate dynamic tool names and mapping paths',()=>{
  const base={servers:{fixture:{command:process.execPath}},tools:[{name:'read',server:'fixture',upstream:'read'}]};
  assert.ok(gatewaySchema.safeParse(base).success);
  for(const name of ['bad.name','bad name','__proto__','constructor','prototype','x'.repeat(54)])assert.equal(gatewaySchema.safeParse({...base,tools:[{...base.tools[0],name}]}).success,false,name);
  assert.equal(gatewaySchema.safeParse({...base,tools:[base.tools[0],base.tools[0]]}).success,false);
- assert.equal(gatewaySchema.safeParse({...base,tools:[{...base.tools[0],scopePaths:{unexpected:'value'}}]}).success,false);
- assert.equal(valueAt(Object.create({receipt:'inherited'}),'receipt'),undefined);assert.equal(valueAt({payload:{}},'payload.constructor'),undefined);
- for(const reportPath of ['payload.__proto__.report','payload..report','constructor.report'])assert.equal(gatewaySchema.safeParse({...base,tools:[{...base.tools[0],role:'submit',reportPath,receiptPath:'receipt'}]}).success,false,reportPath);
+ assert.equal(gatewaySchema.safeParse({...base,tools:[{...base.tools[0],scopePaths:{environment:'metadata.environment'}}]}).success,true);
+ assert.equal(valueAt(Object.create({field:'inherited'}),'field'),undefined);assert.equal(valueAt({payload:{}},'payload.constructor'),undefined);
+ for(const resultRefPath of ['payload.__proto__.ref','payload..ref','constructor.ref'])assert.equal(gatewaySchema.safeParse({...base,tools:[{...base.tools[0],resultRefPath}]}).success,false,resultRefPath);
 });
 
 test('parallel catalog and calls share one real upstream process and cached paginated original schemas',async()=>{
  const fixture=setup();
  try{
   const [first,second,a,b]=await Promise.all([fixture.gateway.list(),fixture.gateway.list(),fixture.gateway.call(fixture.task.id,fixture.session,'read',{probe:'a'}),fixture.gateway.call(fixture.task.id,fixture.session,'read',{probe:'b'})]);
-  assert.equal(first.length,6);assert.deepEqual(first,second);
+  assert.equal(first.length,4);assert.deepEqual(first,second);
   const schema=first.find(tool=>tool.name==='read')!.inputSchema;
   assert.equal(schema.description,'Preserved upstream object');assert.equal((schema.properties?.probe as any).description,'Original typed argument');assert.deepEqual(schema.required,['probe']);assert.equal(schema.additionalProperties,false);assert.ok(schema.$defs);
   assert.equal((a.output as any).structuredContent.pid,(b.output as any).structuredContent.pid);
@@ -70,7 +57,7 @@ test('parallel catalog and calls share one real upstream process and cached pagi
 test('scope failures retain raw results, RPC errors preserve transport and closed connections reconnect without retries',async()=>{
  const fixture=setup();
  try{
-  const bad=structuredClone(fixture.config);bad.tools.find(tool=>tool.name==='read')!.scopePaths={teamId:'absent'};fixture.store.setConfig('gateway',bad);
+  const bad=structuredClone(fixture.config);bad.tools.find(tool=>tool.name==='read')!.scopePaths={environment:'absent'};fixture.store.setConfig('gateway',bad);
   await assert.rejects(fixture.gateway.call(fixture.task.id,fixture.session,'read',{probe:'scope'}),/Missing upstream scope/);
   const observed=fixture.store.get(fixture.task.id).observations.at(-1)!;
   assert.equal(observed.status,'error');assert.equal((observed.output as any).structuredContent.probe,'scope');
@@ -90,28 +77,6 @@ test('scope failures retain raw results, RPC errors preserve transport and close
  }finally{await fixture.cleanup();}
 });
 
-test('receipt reconciliation requires a prior submission and preserves ambiguous successful submission evidence',async()=>{
- const fixture=setup();
- try{
-  await fixture.readyReport();
-  const early=await fixture.gateway.call(fixture.task.id,fixture.session,'receipt',{});
-  assert.ok(early.receipt);assert.equal(fixture.store.get(fixture.task.id).delivery,undefined);
-  const config=structuredClone(fixture.config);config.tools.find(tool=>tool.name==='submit')!.receiptPath='missing';fixture.store.setConfig('gateway',config);
-  const callerArgs={payload:{label:'original'}};
-  await assert.rejects(fixture.gateway.call(fixture.task.id,fixture.session,'submit',callerArgs),/reconcile/);
-  assert.deepEqual(callerArgs,{payload:{label:'original'}});
-  const submitted=fixture.store.get(fixture.task.id).observations.filter(observation=>observation.tool==='submit');
-  assert.equal(submitted.length,1);assert.equal(submitted[0]!.status,'success');assert.ok((submitted[0]!.output as any).structuredContent.receipt);
-  assert.deepEqual((submitted[0]!.input as any).payload.report,fixture.store.get(fixture.task.id).report);
-  await assert.rejects(fixture.gateway.call(fixture.task.id,fixture.session,'submit',{payload:{label:'retry'}}),/prior submission/);
-  await assert.rejects(fixture.gateway.call(fixture.task.id,fixture.session,'receipt',{team:'foreign'}),/scope/);
-  assert.equal(fixture.store.get(fixture.task.id).delivery,undefined);
-  const receipt=await fixture.gateway.call(fixture.task.id,fixture.session,'receipt',{});
-  assert.deepEqual(fixture.store.get(fixture.task.id).delivery?.receipt,receipt.receipt);
-  assert.equal(fixture.events().filter(event=>event.event==='call'&&event.name==='submit').length,1);
-  assert.equal(fixture.store.get(fixture.task.id).observations.filter(observation=>observation.tool==='submit').length,1);
- }finally{await fixture.cleanup();}
-});
 
 test('cancelling or timing out one request leaves independent requests on the shared transport running',async()=>{
  const fixture=setup();
@@ -165,12 +130,11 @@ test('curated MCP passthrough returns real upstream results without tool events 
  }finally{await fixture.cleanup();}
 });
 
-test('unrecorded passthrough requires active ownership and read role without bypassing captured delivery gates',async()=>{
+test('unrecorded passthrough requires active ownership and the matching evidence mode',async()=>{
  const fixture=setup('curated');
  try{
   await fixture.gateway.list();const before=fixture.events().filter(event=>event.event==='call').length;
-  await assert.rejects(fixture.gateway.call(fixture.task.id,fixture.session,'read',{probe:'wrong-mode'}),/unrecorded read/);
-  for(const name of ['submit','receipt'])await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,name,{}),/captured mode|delivery checks/);
+  await assert.rejects(fixture.gateway.call(fixture.task.id,fixture.session,'read',{probe:'wrong-mode'}),/unrecorded forwarding/);
   await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'unknown',{}),/configured MCP/);
   await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,{...fixture.session,cwd:'/wrong-directory'},'read',{probe:'wrong'}),/owns|takeover/);
   fixture.engine.suspend(fixture.task.id,fixture.session);await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'read',{probe:'paused'}),/suspended/);
@@ -180,7 +144,7 @@ test('unrecorded passthrough requires active ownership and read role without byp
   assert.deepEqual(fixture.store.get(fixture.task.id).calls,{});assert.deepEqual(fixture.store.get(fixture.task.id).observations,[]);
  }finally{await fixture.cleanup();}
  const captured=setup();
- try{await assert.rejects(captured.gateway.callUnrecorded(captured.task.id,captured.session,'read',{probe:'bypass'}),/curated general task/);assert.equal(existsSync(captured.audit),false);}
+ try{await assert.rejects(captured.gateway.callUnrecorded(captured.task.id,captured.session,'read',{probe:'bypass'}),/curated task/);assert.equal(existsSync(captured.audit),false);}
  finally{await captured.cleanup();}
 });
 

@@ -37,7 +37,6 @@ test('fresh demo uses actual typed stdio tools, checkpoints, closed-session take
       assert.equal(task.owner.epoch, 2);
       assert.equal(task.owner.sessionId, 'demo-resumed-session');
       assert.match(task.origin, /本地确定性演示/);
-      assert.equal(task.profile, 'general');
       assert.equal(task.budget.maxCalls, 6);
       assert.equal(task.budget.maxParallel, 2);
       assert.equal(Object.keys(task.calls).length, 4);
@@ -64,7 +63,7 @@ test('fresh demo uses actual typed stdio tools, checkpoints, closed-session take
       assert.deepEqual(task.checkpoint!.questions, []);
       assert.deepEqual(new Set(task.report!.citations.map(c => c.resultRef)), new Set(task.observations.map(o => o.resultRef)));
       assert.ok(task.criteria.every(c => c.claimIds.length));
-      assert.match(task.report!.solution!.mitigation, /未实际执行/);
+      assert.match(task.report!.summary, /尚未执行/);
       const history = store.events(task.id);
       const suspended = history.find(e => e.kind === 'task.finished' && e.payload.phase === 'suspended')!;
       const resumed = history.find(e => e.kind === 'task.resumed')!;

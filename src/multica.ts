@@ -62,6 +62,7 @@ function command(args: string[]): unknown {
   const result = spawnSync('multica', args, { encoding: 'utf8', timeout: 30_000, maxBuffer: 12 * 1024 * 1024 });
   // Never echo CLI output: errors can contain a credential-bearing MCP configuration.
   if (result.error || result.status !== 0) throw new CairnError('multica_command_failed', `Multica ${args.slice(0, 3).filter(arg => !arg.startsWith('--')).join(' ')} failed. Check login, workspace permissions and CLI availability; retry the same command after resolving it.`);
+  if (!args.includes('--output')) return null;
   try { return result.stdout.trim() ? JSON.parse(result.stdout) : null; }
   catch { throw new CairnError('multica_invalid_response', 'Multica returned invalid JSON. Update Multica and retry; no response content was logged.'); }
 }
@@ -87,7 +88,7 @@ function context(options: MulticaOptions, dependencies: MulticaDependencies) {
   const requested = options.workspaceId?.trim() || selection?.workspaceId;
   const ws = object(runner(['workspace', 'get', ...(requested ? [requested] : []), '--output', 'json']), 'workspace');
   if (typeof ws.id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(ws.id)) throw new CairnError('multica_invalid_response', 'Multica did not return a valid workspace ID.');
-  const call = (args: string[]) => runner([...args, '--workspace-id', ws.id, '--output', 'json']);
+  const call = (args: string[], jsonOutput = true) => runner([...args, '--workspace-id', ws.id, ...(jsonOutput ? ['--output', 'json'] : [])]);
   const dir = join(base, ws.id);
   const receiptPath = join(dir, 'receipt.json');
   const receipt: Receipt | undefined = existsSync(receiptPath) ? json(receiptPath) : undefined;
@@ -134,8 +135,9 @@ const legacySkillHashes: Record<string, string> = {
   'SKILL.md': '934ece9d72bdad1e63365453b6b480c97bb1f8b6b3f8678bc7940929f7d7fb65',
   'references/emergency.md': '16915bd81e8f44eaf68e432e03ad4023a43e5777c3f84954a6a23beb09db062c',
 };
-function knownLegacySkill(actual: Record<string, string>) {
-  return Object.keys(actual).length === Object.keys(legacySkillHashes).length && Object.entries(actual).every(([path, content]) => legacySkillHashes[path] === digest(content));
+function knownLegacySkill(actual: Record<string, string>): Record<string, string> | undefined {
+  const versions = [legacySkillHashes, { ...legacySkillHashes, 'SKILL.md': '519ff66e0b6debddcae4b4c9626acc5c0d7cd3c39015b933cdc89aad0c7e5c77' }];
+  return versions.find(hashes => Object.keys(actual).length === Object.keys(hashes).length && Object.entries(actual).every(([path, content]) => hashes[path] === digest(content)));
 }
 function assertSkillUnedited(actual: Record<string, string>, desired: Record<string, string>, previous?: Record<string, string>, pending = false) {
   for (const [path, content] of Object.entries(actual)) {
@@ -143,10 +145,10 @@ function assertSkillUnedited(actual: Record<string, string>, desired: Record<str
     throw new CairnError('install_conflict', `The Multica cairn skill contains an unowned edit in ${path}. Preserve or resolve the edit before updating; --adopt does not overwrite skill edits.`);
   }
   for (const path of Object.keys(previous ?? {})) {
-    if (!(path in actual) && !pending) throw new CairnError('install_conflict', `The Multica cairn skill file ${path} was removed. Resolve the edit before updating.`);
+    if (path in desired && !(path in actual) && !pending) throw new CairnError('install_conflict', `The Multica cairn skill file ${path} was removed. Resolve the edit before updating.`);
   }
   if (!previous && !pending && !skillMatches(actual, desired)) throw new CairnError('install_conflict', 'The existing Multica cairn skill differs from the bundled skill. Resolve its content before installing; it will not be overwritten.');
-  if (Object.keys(actual).some(path => !(path in desired))) throw new CairnError('install_conflict', 'The Multica cairn skill contains extra files; preserve or resolve them before updating.');
+  if (Object.entries(actual).some(([path, content]) => !(path in desired) && previous?.[path] !== digest(content))) throw new CairnError('install_conflict', 'The Multica cairn skill contains extra files; preserve or resolve them before updating.');
 }
 
 /** Install only Cairn's MCP/skill registration. Models, instructions and unrelated bindings are untouched. */
@@ -179,7 +181,7 @@ export function installMultica(options: MulticaOptions = {}, dependencies: Multi
   let actual: Record<string, string> = {};
   if (skill) {
     actual = remoteFiles(object(c.call(['skill', 'get', skill.id, '--with-content']), 'skill'));
-    const priorHashes = c.receipt?.skillFiles ?? (options.adopt && knownLegacySkill(actual) ? legacySkillHashes : undefined);
+    const priorHashes = c.receipt?.skillFiles ?? (options.adopt ? knownLegacySkill(actual) : undefined);
     assertSkillUnedited(actual, files, priorHashes, c.receipt?.skillPending);
   }
   const assigned = entries(c.call(['agent', 'mcp', 'list', c.agent.id]), 'assigned MCP server');
@@ -232,6 +234,17 @@ export function installMultica(options: MulticaOptions = {}, dependencies: Multi
     }
     receipt.skillFiles[path] = digest(content); persist();
   }
+  for (const path of Object.keys(actual).filter(path => !(path in files))) {
+    const current = object(c.call(['skill', 'get', skill.id, '--with-content']), 'skill');
+    const obsolete = current.files.find((file: Entry) => file.path === path);
+    if (obsolete) {
+      if (typeof obsolete.id !== 'string' || digest(obsolete.content) !== receipt.skillFiles[path]) throw new CairnError('install_conflict', `The managed skill file ${path} changed during update; preserve the edit before retrying.`);
+      c.call(['skill', 'files', 'delete', skill.id, obsolete.id], false);
+    }
+    delete receipt.skillFiles[path]; persist();
+  }
+  const updatedSkill = remoteFiles(object(c.call(['skill', 'get', skill.id, '--with-content']), 'skill'));
+  if (!skillMatches(updatedSkill, files)) throw new CairnError('multica_skill_incomplete', 'The Cairn skill files do not match the installed version; retry to reconcile the update.');
   receipt.skillPending = false; persist();
   const binding = assigned.find(item => item.id === receipt.serverId);
   receipt.agents[c.agent.id] ??= { name: c.agent.name, mcpOwned: !binding || !!options.adopt };

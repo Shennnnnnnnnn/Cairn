@@ -10,7 +10,7 @@ import {Engine} from '../src/core/engine.js';
 import {Gateway,gatewaySchema} from '../src/gateway.js';
 import type {Session} from '../src/core/types.js';
 import {handleNative} from '../src/adapters/hooks.js';
-const config=gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/upstream.mjs')]}},tools:['read','submit','receipt','slow'].map(name=>({name,server:'fixture',upstream:name,role:name==='submit'?'submit':name==='receipt'?'receipt':'read',resultRefPath:'result_ref',reportPath:name==='submit'?'report':undefined,receiptPath:['submit','receipt'].includes(name)?'receipt':undefined,scopePaths:{teamId:'team_id',roundId:'round_id',issueId:'issue_id'}}))});
+const config=gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/upstream.mjs')]}},tools:['read','slow'].map(name=>({name,server:'fixture',upstream:name,resultRefPath:'result_ref',scopePaths:{workspaceId:'workspace_id',environment:'environment',issueId:'issue_id'}}))});
 test('five-tool MCP lifecycle binds once, captures native evidence, and restores across CLIs',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'cairn-mcp-')),db=join(dir,'state.db');
  const local=new Store(db),engine=new Engine(local),session:Session={host:'claude',sessionId:'session1',cwd:'/workspace'};
@@ -42,26 +42,8 @@ test('five-tool MCP lifecycle binds once, captures native evidence, and restores
 test('gateway records real upstream refs, rejects unknown tools and failed results',async(t)=>{
  const store=new Store(':memory:'),engine=new Engine(store),session:Session={host:'pi',sessionId:'p',cwd:'/w'};
  store.setConfig('gateway',config);const task=engine.create(session,{origin:'a',goal:'b',criteria:['c']});const gateway=new Gateway(engine);t.after(async()=>{await gateway.close();store.close();});
- assert.equal((await gateway.list()).length,4);await assert.rejects(gateway.call(task.id,session,'not-allowed',{}),/whitelist/);
- const observation=await gateway.call(task.id,session,'read',{});assert.equal(observation.resultRef,'ref-read');assert.equal(observation.source,'gateway');assert.equal(observation.scope.roundId,'round');
+ assert.equal((await gateway.list()).length,2);await assert.rejects(gateway.call(task.id,session,'not-allowed',{}),/configured/);
+ const observation=await gateway.call(task.id,session,'read',{});assert.equal(observation.resultRef,'ref-read');assert.equal(observation.source,'gateway');assert.equal(observation.scope.environment,'staging');
  const failure=await gateway.call(task.id,session,'read',{fail:true});assert.equal(failure.status,'error');
  assert.throws(()=>engine.claim(task.id,session,{text:'bad',status:'supported',supports:[failure.id],refutes:[]}),/failed/);
-});
-test('submission gates prevent ambiguous and concurrent retries; cancellation propagates',async(t)=>{
- const store=new Store(':memory:'),engine=new Engine(store),session:Session={host:'pi',sessionId:'p',cwd:'/w'};store.setConfig('gateway',config);
- const task=engine.create(session,{origin:'a',goal:'b',criteria:['c']}),gateway=new Gateway(engine);t.after(async()=>{await gateway.close();store.close();});
- await assert.rejects(gateway.call(task.id,session,'submit',{}),/validation/);
- const obs=await gateway.call(task.id,session,'read',{}),claim=engine.claim(task.id,session,{text:'cause',status:'supported',supports:[obs.id],refutes:[]});engine.satisfy(task.id,session,'c1',[claim.id]);engine.report(task.id,session,{summary:'cause',citations:[{observationId:obs.id,statement:'metric'}]});
- await gateway.call(task.id,session,'submit',{});assert.ok(store.get(task.id).delivery);await assert.rejects(gateway.call(task.id,session,'submit',{}),/receipt already/);
- const controller=new AbortController();const slow=gateway.call(task.id,session,'slow',{},controller.signal);setTimeout(()=>controller.abort(),100);await assert.rejects(slow);
- assert.equal(store.get(task.id).observations.at(-1)?.status,'error');assert.ok(!Object.values(store.get(task.id).calls).some(c=>c.status==='running'));
-});
-test('lost submission receipt is reconciled without resubmitting the external write',async(t)=>{
- const store=new Store(':memory:'),engine=new Engine(store),session:Session={host:'pi',sessionId:'p',cwd:'/w'};
- const cfg=structuredClone(config);cfg.tools.find(t=>t.name==='submit')!.receiptPath='missing_receipt';store.setConfig('gateway',cfg);
- const task=engine.create(session,{origin:'a',goal:'b',criteria:['c']}),gateway=new Gateway(engine);t.after(async()=>{await gateway.close();store.close();});const obs=await gateway.call(task.id,session,'read',{});
- const claim=engine.claim(task.id,session,{text:'cause',status:'supported',supports:[obs.id],refutes:[]});engine.satisfy(task.id,session,'c1',[claim.id]);engine.report(task.id,session,{summary:'cause',citations:[{observationId:obs.id,statement:'measured'}]});
- await assert.rejects(gateway.call(task.id,session,'submit',{}),/reconcile/);await assert.rejects(gateway.call(task.id,session,'submit',{}),/prior submission/);
- const receipt=await gateway.call(task.id,session,'receipt',{});engine.delivery(task.id,session,`submission:${task.id}`,receipt.id);assert.ok(store.get(task.id).delivery);
- const submitted=store.get(task.id).observations.find(o=>o.tool==='submit')!;assert.deepEqual((submitted.input as any).report,store.get(task.id).report);
 });

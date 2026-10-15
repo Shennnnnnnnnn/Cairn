@@ -32,13 +32,12 @@ test('Cairn tool calls do not recursively capture their own database traffic',()
  const task=engine.create(session,{origin:'a',goal:'b',criteria:['c']});handleNative(engine,'codex',{type:'PostToolUse',sessionId:'s',cwd:'/w',tool:'mcp__cairn__cairn_read',callId:'1',output:{}});
  assert.equal(store.get(task.id).observations.length,0);store.close();
 });
-test('only actual Cairn host namespaces bypass recursive capture and strict native gating',()=>{
+test('only actual Cairn host namespaces bypass recursive capture',()=>{
  assert.equal(isCairnTool('pi','cairn_finish'),true);assert.equal(isCairnTool('pi','cairn_tool_metrics'),true);
  assert.equal(isCairnTool('claude','mcp__plugin_cairn_cairn__cairn_checkpoint'),true);assert.equal(isCairnTool('codex','mcp__cairn__cairn_tool_logs'),true);
  for(const name of ['mcp__other__cairn_read','not_cairn_read','cairn_fake','mcp__cairn__cairn_read_extra'])assert.equal(isCairnTool('codex',name),false);
  const store=new Store(':memory:'),engine=new Engine(store),s:Session={host:'codex',sessionId:'s',cwd:'/w'},task=engine.create(s,{origin:'a',goal:'b',criteria:['c']});
- store.transaction(()=>{const strict=store.get(task.id);strict.profile='emergency';store.save(strict,'fixture.strict',{},engine.at());});
- assert.match(handleNative(engine,'codex',{type:'PreToolUse',sessionId:'s',cwd:'/w',tool:'mcp__other__cairn_read',callId:'spoof'}).deny!,/cairn_tool/);
+ assert.deepEqual(handleNative(engine,'codex',{type:'PreToolUse',sessionId:'s',cwd:'/w',tool:'mcp__other__cairn_read',callId:'spoof'}),{});assert.ok(store.get(task.id).calls['codex:s:spoof']);
  assert.deepEqual(handleNative(engine,'codex',{type:'PreToolUse',sessionId:'s',cwd:'/w',tool:'mcp__cairn__cairn_tool_metrics',callId:'ours'}),{});store.close();
 });
 test('startup declaration and observed native capabilities remain distinguishable',()=>{

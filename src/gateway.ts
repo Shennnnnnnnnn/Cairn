@@ -5,7 +5,6 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { z } from 'zod';
 import { Engine } from './core/engine.js';
 import { CairnError, type Session, type Scope, type Observation } from './core/types.js';
-import { markdown } from './export.js';
 import { VERSION } from './version.js';
 
 const unsafeKeys = new Set(['__proto__', 'constructor', 'prototype']);
@@ -13,40 +12,25 @@ const mappingPath = z.string().min(1).refine(path => path.split('.').every(key =
 const publicName = z.string().regex(/^[A-Za-z0-9_-]{1,53}$/, 'Tool names must contain 1–53 letters, digits, underscores or hyphens').refine(name => !unsafeKeys.has(name), 'Reserved tool name');
 export const gatewaySchema = z.object({
   servers: z.record(z.string(), z.object({ command: z.string().optional(), args: z.array(z.string()).default([]), env: z.record(z.string(), z.string()).optional(), url: z.url().optional(), headers: z.record(z.string(), z.string()).optional() }).refine(server => !!server.command !== !!server.url, 'Use exactly one command or url')),
-  tools: z.array(z.object({ name: publicName, server: z.string(), upstream: z.string().min(1), role: z.enum(['read', 'submit', 'receipt']).default('read'), resultRefPath: mappingPath.optional(), scopePaths: z.record(z.string().refine(key => ['workspaceId', 'issueId', 'teamId', 'roundId', 'matchId'].includes(key), 'Unknown scope field'), mappingPath).optional(), receiptPath: mappingPath.optional(), reportPath: mappingPath.optional(), reportFormat: z.enum(['json', 'markdown']).default('json'), timeoutMs: z.number().int().min(100).max(300000).default(30000) }))
+  tools: z.array(z.object({
+    name: publicName, server: z.string(), upstream: z.string().min(1),
+    role: z.literal('read').optional(),
+    resultRefPath: mappingPath.optional(),
+    scopePaths: z.record(z.string().min(1).refine(key => !unsafeKeys.has(key), 'Unsafe scope key'), mappingPath).optional(),
+    timeoutMs: z.number().int().min(100).max(300000).default(30000),
+  }).strict().transform(({role, ...tool}) => tool))
 }).superRefine((config, ctx) => {
   const names = new Set<string>();
   for (const tool of config.tools) {
     if (!Object.hasOwn(config.servers, tool.server)) ctx.addIssue({ code: 'custom', message: `Unknown server ${tool.server}` });
     if (names.has(tool.name)) ctx.addIssue({ code: 'custom', message: `Duplicate tool ${tool.name}` });
-    if (tool.role === 'submit' && (!tool.reportPath || !tool.receiptPath)) ctx.addIssue({ code: 'custom', message: `Submission tool ${tool.name} requires reportPath and receiptPath` });
     names.add(tool.name);
   }
 });
 export type GatewayConfig = z.infer<typeof gatewaySchema>;
 export type GatewayTool = GatewayConfig['tools'][number];
-type InputSchema = Awaited<ReturnType<Client['listTools']>>['tools'][number]['inputSchema'];
 type Catalog = Awaited<ReturnType<Client['listTools']>>['tools'];
 type Connection = { name: string; fingerprint: string; client: Client; ready: Promise<Client>; catalog?: Promise<Catalog>; closing?: Promise<void> };
-
-/** Preserve the upstream schema, hiding only the report value supplied by Cairn. */
-export function publicInputSchema<T extends InputSchema>(schema: T, tool: Pick<GatewayTool, 'role' | 'reportPath'>): T {
-  const result = structuredClone(schema);
-  if (tool.role !== 'submit' || !tool.reportPath) return result;
-  const path = tool.reportPath.split('.');
-  if (path.some(key => !key || unsafeKeys.has(key))) throw new CairnError('invalid_mapping', 'Unsafe report path');
-  let current: any = result;
-  for (const key of path.slice(0, -1)) {
-    // Do not rewrite references, alternatives or array schemas as if they were objects.
-    const next = current?.properties?.[key];
-    if (!next || typeof next !== 'object' || Array.isArray(next)) return result;
-    current = next;
-  }
-  const leaf = path.at(-1)!;
-  if (current.properties && typeof current.properties === 'object') delete current.properties[leaf];
-  if (Array.isArray(current.required)) current.required = current.required.filter((key: string) => key !== leaf);
-  return result;
-}
 
 export function valueAt(value: unknown, path: string): unknown {
   let current: any = value;
@@ -71,7 +55,7 @@ export class Gateway {
   constructor(readonly engine: Engine) {}
   config(): GatewayConfig {
     const config = this.engine.store.config<GatewayConfig>('gateway');
-    if (!config) throw new CairnError('missing_whitelist', 'No upstream whitelist configured');
+    if (!config) throw new CairnError('missing_upstream', 'No optional upstream tools configured');
     return gatewaySchema.parse(config);
   }
   private dispose(connection: Connection): Promise<void> {
@@ -126,28 +110,17 @@ export class Gateway {
     const catalog = new Map(await Promise.all(names.map(async name => [name, await this.catalog(name)] as const)));
     return config.tools.map(tool => {
       const upstream = catalog.get(tool.server)?.find(candidate => candidate.name === tool.upstream);
-      if (!upstream) throw new CairnError('missing_tool', `Whitelisted upstream ${tool.name} is unavailable`);
-      return { name: tool.name, role: tool.role, description: upstream.description, inputSchema: structuredClone(upstream.inputSchema) };
+      if (!upstream) throw new CairnError('missing_tool', `Configured upstream ${tool.name} is unavailable`);
+      return { name: tool.name, description: upstream.description, inputSchema: structuredClone(upstream.inputSchema) };
     });
   }
   async call(taskId: string, session: Session, name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<Observation> {
     if (this.closed) throw new CairnError('gateway_closed', 'Gateway has been closed');
     const task = this.engine.store.get(taskId), config = this.config(), tool = config.tools.find(candidate => candidate.name === name);
-    if (task.evidenceMode === 'curated') throw new CairnError('invalid_mode', 'Curated tasks use unrecorded read passthrough and cannot bypass captured delivery checks');
-    if (!tool) throw new CairnError('not_allowed', `Tool ${name} is not on the configured whitelist`);
-    let args = input;
-    if (tool.role === 'submit') {
-      args = structuredClone(input);
-      const path = tool.reportPath!.split('.'); let current: any = args;
-      for (const key of path.slice(0, -1)) {
-        if (current[key] === undefined) current[key] = {};
-        if (!current[key] || typeof current[key] !== 'object' || Array.isArray(current[key])) throw new CairnError('invalid_mapping', `Report path ${tool.reportPath} traverses a non-object argument`);
-        current = current[key];
-      }
-      current[path.at(-1)!] = tool.reportFormat === 'markdown' ? markdown(task) : task.report;
-    }
+    if (task.evidenceMode === 'curated') throw new CairnError('invalid_mode', 'Use unrecorded forwarding for curated tasks');
+    if (!tool) throw new CairnError('not_allowed', `Tool ${name} is not configured`);
     const callId = `gateway:${randomUUID()}`;
-    this.engine.beforeTool(taskId, session, callId, name, tool.role === 'submit', tool.role === 'receipt');
+    this.engine.beforeTool(taskId, session, callId, name);
     let connection: Connection | undefined, rawResult: unknown, observation: Observation | undefined, transportFailed = false;
     try {
       try {
@@ -156,7 +129,7 @@ export class Gateway {
         const remaining = task.budget.deadline ? Date.parse(task.budget.deadline) - this.engine.now().getTime() : Infinity;
         if (remaining <= 0) throw new CairnError('deadline', 'Task expired while connecting to the upstream server');
         signal?.throwIfAborted();
-        rawResult = await connection.client.callTool({ name: tool.upstream, arguments: args }, undefined, { timeout: Math.max(1, Math.min(tool.timeoutMs, remaining)), resetTimeoutOnProgress: false, signal });
+        rawResult = await connection.client.callTool({ name: tool.upstream, arguments: input }, undefined, { timeout: Math.max(1, Math.min(tool.timeoutMs, remaining)), resetTimeoutOnProgress: false, signal });
       } catch (error) { transportFailed = !!connection && !connection.client.transport; throw error; }
       const result = rawResult as Awaited<ReturnType<Client['callTool']>>, structured = structuredResult(result), scope: Scope = { ...task.scope };
       for (const [key, path] of Object.entries(tool.scopePaths ?? {})) {
@@ -165,33 +138,23 @@ export class Gateway {
         scope[key as keyof Scope] = value;
       }
       const ref = tool.resultRefPath ? valueAt(structured, tool.resultRefPath) : undefined;
-      const receipt = tool.receiptPath ? valueAt(structured, tool.receiptPath) : undefined;
-      observation = this.engine.observe(taskId, session, { callId, tool: name, input: args, output: result, source: 'gateway', status: result.isError ? 'error' : 'success', scope, resultRef: typeof ref === 'string' ? ref : undefined, receipt });
-      if (tool.role === 'submit' && !result.isError) {
-        if (!receipt) throw new CairnError('ambiguous_submission', 'Submission returned no mapped receipt; reconcile through a configured receipt tool before retrying');
-        this.engine.delivery(taskId, session, `submission:${taskId}`, observation.id);
-      } else if (tool.role === 'receipt' && !result.isError && receipt) {
-        const latest = this.engine.store.get(taskId), submitNames = new Set(config.tools.filter(candidate => candidate.role === 'submit').map(candidate => candidate.name));
-        if (!latest.delivery && Object.values(latest.calls).some(call => submitNames.has(call.tool))) this.engine.delivery(taskId, session, `submission:${taskId}`, observation.id);
-      }
+      observation = this.engine.observe(taskId, session, { callId, tool: name, input, output: result, source: 'gateway', status: result.isError ? 'error' : 'success', scope, resultRef: typeof ref === 'string' ? ref : undefined });
       return observation;
     } catch (error) {
-      // A successful platform submission remains immutable even when its receipt is missing.
-      if (!observation) this.engine.observe(taskId, session, { callId, tool: name, input: args, output: rawResult ?? { error: (error as Error).message }, source: 'gateway', status: 'error' });
+      if (!observation) this.engine.observe(taskId, session, { callId, tool: name, input, output: rawResult ?? { error: (error as Error).message }, source: 'gateway', status: 'error' });
       if (transportFailed && connection) await this.dispose(connection);
       throw error;
     }
   }
   /** Optional MCP passthrough for curated goals. It deliberately creates no Cairn
    * tool-call or observation records; arbitrary native tools do not need this path.
-   * Submission and receipt tools must keep their captured delivery safeguards. */
+   * The host remains responsible for tool permissions and external side effects. */
   async callUnrecorded(taskId: string, session: Session, name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<Awaited<ReturnType<Client['callTool']>>> {
     if (this.closed) throw new CairnError('gateway_closed', 'Gateway has been closed');
     const task = this.engine.assertActiveOwner(taskId, session);
-    if (task.evidenceMode !== 'curated' || task.profile === 'emergency') throw new CairnError('invalid_mode', 'Unrecorded MCP calls require a curated general task');
+    if (task.evidenceMode !== 'curated') throw new CairnError('invalid_mode', 'Unrecorded MCP calls require a curated task');
     const tool = this.config().tools.find(candidate => candidate.name === name);
     if (!tool) throw new CairnError('not_allowed', `Tool ${name} is not a configured MCP passthrough`);
-    if (tool.role !== 'read') throw new CairnError('capture_required', 'Submission and receipt tools require captured mode and its delivery checks');
     signal?.throwIfAborted();
     const connection = await this.connection(tool.server);
     // Connecting can outlive an explicit takeover or pause. Recheck immediately

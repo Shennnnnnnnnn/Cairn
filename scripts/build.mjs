@@ -14,7 +14,6 @@ for(const host of ['pi','claude','codex']){
  await cp(join(dist,'cairn.mjs'),join(dir,'runtime/cairn.mjs'));
  await cp(join(dist,'ui-client.js'),join(dir,'runtime/ui-client.js'));
  await cp(join(root,'skills'),join(dir,'skills'),{recursive:true});
- await cp(join(root,'profiles'),join(dir,'profiles'),{recursive:true});
  if(host==='pi'){
   await cp(join(dist,'pi-extension.mjs'),join(dir,'runtime/pi-extension.mjs'));
   await json(join(dir,'package.json'),{name:'cairn-pi',version,type:'module',pi:{extensions:['./runtime/pi-extension.mjs'],skills:['./skills/cairn']}});continue;
