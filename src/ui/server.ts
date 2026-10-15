@@ -1,0 +1,101 @@
+import { createServer, type ServerResponse } from 'node:http';
+import { randomBytes } from 'node:crypto';
+import type { AddressInfo } from 'node:net';
+import { Engine } from '../core/engine.js';
+import { CairnError } from '../core/types.js';
+import { html, markdown } from '../export.js';
+import { renderPage } from './page.js';
+import { projectTask, summaries } from './view.js';
+
+export interface UiOptions { port?: number; host?: string; pollMs?: number }
+export async function startUi(engine: Engine, options: UiOptions = {}) {
+  const host = options.host ?? '127.0.0.1', port = options.port ?? 8000;
+  if (!['127.0.0.1', 'localhost', '::1'].includes(host)) throw new CairnError('invalid_host', 'The evidence dashboard binds only to loopback addresses');
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new CairnError('invalid_port', 'Port must be an integer from 0 to 65535');
+  const clients = new Map<ServerResponse, number>();
+  const sequence = () => Number(engine.store.db.prepare('SELECT COALESCE(MAX(seq),0) AS seq FROM events').get()!.seq);
+  const send = (response: ServerResponse, event: string, seq: number) => response.write(`id: ${seq}\nevent: ${event}\ndata: ${JSON.stringify({ sequence: seq })}\n\n`);
+  const json = (response: ServerResponse, value: unknown, status = 200) => {
+    response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value));
+  };
+  const timer = setInterval(() => {
+    if (!clients.size) return;
+    try {
+      const seq = sequence();
+      for (const [response, cursor] of clients) if (seq !== cursor) { send(response, 'change', seq); clients.set(response, seq); }
+    } catch { for (const response of clients.keys()) response.end(); clients.clear(); }
+  }, Math.max(50, options.pollMs ?? 500));
+  timer.unref();
+  const heartbeat = setInterval(() => { for (const response of clients.keys()) response.write(': connection alive\n\n'); }, 15000);
+  heartbeat.unref();
+  const server = createServer((request, response) => {
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Referrer-Policy', 'no-referrer');
+    const address = server.address() as AddressInfo | null;
+    const allowedHosts = new Set([`localhost:${address?.port}`, `127.0.0.1:${address?.port}`, `[::1]:${address?.port}`]);
+    // Keep raw evidence local, including against DNS rebinding and cross-origin requests.
+    if (!request.headers.host || !allowedHosts.has(request.headers.host)) { json(response, { error: 'Invalid host' }, 403); return; }
+    if (request.headers.origin && request.headers.origin !== `http://${request.headers.host}` || request.headers['sec-fetch-site'] === 'cross-site') {
+      json(response, { error: 'Cross-origin access is not allowed' }, 403); return;
+    }
+    if (request.method !== 'GET') { response.setHeader('Allow', 'GET'); json(response, { error: 'Dashboard is read-only' }, 405); return; }
+    try {
+      const url = new URL(request.url ?? '/', `http://${request.headers.host}`);
+      if (url.pathname === '/') {
+        const nonce = randomBytes(18).toString('base64');
+        response.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`);
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end(renderPage(nonce)); return;
+      }
+      if (url.pathname === '/favicon.ico') { response.writeHead(204); response.end(); return; }
+      if (url.pathname === '/api/tasks') { json(response, { tasks: summaries(engine), sequence: sequence() }); return; }
+      if (url.pathname === '/api/stream') {
+        response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+        const seq = sequence(); clients.set(response, seq); send(response, 'ready', seq);
+        response.on('close', () => clients.delete(response)); return;
+      }
+      const match = /^\/api\/tasks\/([^/]+)(?:\/(observations|events|export)(?:\/([^/]+))?)?$/.exec(url.pathname);
+      if (!match) { json(response, { error: 'Not found' }, 404); return; }
+      const taskId = decodeURIComponent(match[1]!), task = engine.store.get(taskId);
+      if (!match[2]) { json(response, projectTask(engine, task)); return; }
+      if (match[2] === 'observations') {
+        const observation = task.observations.find(o => o.id === decodeURIComponent(match[3] ?? ''));
+        if (!observation) throw new CairnError('not_found', 'Observation does not belong to this task');
+        json(response, observation); return;
+      }
+      if (match[2] === 'events') {
+        const after = Number(url.searchParams.get('after') ?? 0);
+        if (!Number.isSafeInteger(after) || after < 0) throw new CairnError('invalid_input', 'Invalid event cursor');
+        const rows = after ? engine.store.db.prepare('SELECT seq,kind,at,payload FROM events WHERE task_id=? AND seq>? ORDER BY seq LIMIT 100').all(taskId, after)
+          : engine.store.db.prepare('SELECT seq,kind,at,payload FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 100').all(taskId).reverse();
+        const events = rows.map(row => {
+          const payload = JSON.parse(row.payload as string), input = payload.input ?? payload;
+          // Timeline summaries never copy raw command output or whole task snapshots.
+          return { seq: Number(row.seq), kind: row.kind as string, at: row.at as string,
+            subject: input.summary ?? input.tool ?? input.text ?? input.goal ?? input.criterionId ?? payload.phase ?? payload.result?.text ?? '',
+            observationId: row.kind === 'observation.captured' ? payload.id : undefined };
+        });
+        json(response, { events }); return;
+      }
+      const format = url.searchParams.get('format') ?? 'markdown';
+      if (!['json', 'markdown', 'html'].includes(format)) throw new CairnError('invalid_input', 'Invalid export format');
+      const extension = { markdown: 'md', html: 'html', json: 'json' }[format]!;
+      response.setHeader('Content-Disposition', `attachment; filename="cairn-${task.id.replace(/[^a-z0-9_-]/gi, '')}.${extension}"`);
+      response.writeHead(200, { 'Content-Type': format === 'json' ? 'application/json; charset=utf-8' : format === 'html' ? 'text/html; charset=utf-8' : 'text/markdown; charset=utf-8' });
+      response.end(format === 'json' ? JSON.stringify(task, null, 2) : format === 'html' ? html(task) : markdown(task));
+    } catch (error) { json(response, { error: (error as Error).message }, (error as CairnError).code === 'not_found' ? 404 : 400); }
+  });
+  try {
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => { server.off('error', reject); resolve(); }); });
+  } catch (error) { clearInterval(timer); clearInterval(heartbeat); throw error; }
+  const address = server.address() as AddressInfo;
+  return {
+    server, url: `http://${host === '::1' ? '[::1]' : host}:${address.port}`,
+    close: async () => {
+      clearInterval(timer); clearInterval(heartbeat);
+      for (const response of clients.keys()) response.end(); clients.clear();
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    },
+  };
+}

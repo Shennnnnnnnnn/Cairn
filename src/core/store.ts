@@ -28,6 +28,11 @@ export class Store {
     if (!row) throw new CairnError('not_found', `Task ${id} does not exist`);
     return JSON.parse(row.state as string);
   }
+  taskForCall(callId:string):Task|undefined {
+    const rows=this.db.prepare("SELECT state FROM tasks WHERE EXISTS (SELECT 1 FROM json_each(tasks.state, '$.calls') WHERE key=?) OR EXISTS (SELECT 1 FROM json_each(tasks.state, '$.observations') WHERE json_extract(value, '$.callId')=?)").all(callId,callId);
+    if(rows.length>1)throw new CairnError('ambiguous_call','Tool call belongs to multiple tasks');
+    return rows[0]?JSON.parse(rows[0].state as string):undefined;
+  }
   save(task: Task, kind: string, payload: unknown, at: string) {
     this.db.prepare('INSERT INTO tasks VALUES (?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state').run(task.id, JSON.stringify(task));
     this.db.prepare('INSERT INTO events(task_id,kind,payload,at) VALUES (?,?,?,?)').run(task.id, kind, JSON.stringify(payload), at);

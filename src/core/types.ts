@@ -15,6 +15,7 @@ export interface Observation {
 export interface Claim {
   id: string; text: string; status: 'proposed' | 'supported' | 'refuted' | 'inconclusive';
   supports: string[]; refutes: string[]; scope: Scope; revision: number;
+  key?: string; updatedAt?: string;
 }
 export interface Action {
   id: string; purpose: string; stopCondition: string;
@@ -27,13 +28,26 @@ export interface Report {
   rootCause?: { text: string; level: 'symptom' | 'service' | 'code' | 'root'; trigger?: string; amplification?: string };
   solution?: { mitigation: string; fix: string; prevention: string };
 }
+/** One explicit reasoning milestone. Evidence aliases are local to the task. */
+export interface CheckpointInput {
+  summary: string;
+  findings?: {
+    key?: string; text: string; status?: Claim['status']; evidence?: string[]; against?: string[];
+    covers?: string[]; scope?: Scope;
+  }[];
+  questions?: string[]; next?: string;
+  report?: { summary?: string; impact?: Report['impact']; rootCause?: Report['rootCause']; solution?: Report['solution'] };
+}
+export interface Checkpoint { summary: string; questions: string[]; next?: string; at: string }
+export type FinishInput = Partial<CheckpointInput> & { outcome: 'completed' | 'suspended' };
 export interface Task {
   id: string; origin: string; goal: string; constraints: string[]; criteria: Criterion[]; profile: 'general' | 'emergency';
   scope: Scope; owner: Owner; revision: number; createdAt: string; budget: Budget;
   status: 'active' | 'suspended' | 'completed'; observations: Observation[]; claims: Claim[];
   actions: Action[]; hints: { id: string; text: string; author: string }[];
-  calls: Record<string, { status: 'running' | 'finished'; tool: string; startedAt: string }>;
+  calls: Record<string, { status: 'running' | 'finished'; tool: string; startedAt: string; epoch?:number }>;
   report?: Report; delivery?: { key: string; receipt: unknown; recordedAt: string }; confirmedAt?: string;
+  checkpoint?: Checkpoint;
   continuation?: { revision: number; count: number }; interrupted: boolean;
 }
 export interface Check { ok: boolean; issues: string[]; unmet: string[] }

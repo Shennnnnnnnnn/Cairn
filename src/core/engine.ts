@@ -1,10 +1,27 @@
 import { randomUUID } from 'node:crypto';
 import { Store } from './store.js';
-import { CairnError, type Session, type Scope, type Task, type Observation, type Claim, type Report, type Check, type Budget } from './types.js';
+import { CairnError, type Session, type Scope, type Task, type Observation, type Claim, type Report, type Check, type Budget, type CheckpointInput, type FinishInput } from './types.js';
 
 const id = (prefix: string) => `${prefix}_${randomUUID()}`;
 export const covers = (actual: Scope, required: Scope) => Object.entries(required).every(([k,v]) => actual[k as keyof Scope] === v);
 function requireText(value: string, name: string) { if (!value.trim()) throw new CairnError('invalid_input', `${name} must not be empty`); }
+const proofState = (task: Task) => JSON.stringify({
+  claims: task.claims.map(({revision,updatedAt,...claim})=>claim), criteria: task.criteria, report: task.report,
+});
+const sameClaim = (a: Omit<Claim,'id'|'revision'>, b: Omit<Claim,'id'|'revision'>) =>
+  a.text===b.text && a.status===b.status && JSON.stringify(a.supports)===JSON.stringify(b.supports) &&
+  JSON.stringify(a.refutes)===JSON.stringify(b.refutes) && JSON.stringify(a.scope)===JSON.stringify(b.scope) && a.key===b.key;
+function clipText(value:string,bytes:number){
+  if(Buffer.byteLength(value,'utf8')<=bytes)return value;
+  let prefix=value.slice(0,bytes-3);
+  while(Buffer.byteLength(prefix,'utf8')>bytes-3)prefix=prefix.slice(0,-1);
+  if(/[\uD800-\uDBFF]$/.test(prefix))prefix=prefix.slice(0,-1);
+  return `${prefix}…`;
+}
+function boundedCheck(check:Check){
+  return {ok:check.ok,issues:check.issues.slice(0,12).map(issue=>clipText(issue,220)),unmet:check.unmet.slice(0,24),
+    omittedIssues:Math.max(0,check.issues.length-12),omittedUnmet:Math.max(0,check.unmet.length-24)};
+}
 
 export class Engine {
   constructor(readonly store: Store, readonly now: () => Date = () => new Date()) {}
@@ -14,17 +31,27 @@ export class Engine {
   }
   private own(task: Task, session: Session) {
     const bound = this.store.session(session);
-    if (task.owner.host !== session.host || task.owner.sessionId !== session.sessionId || bound?.epoch !== task.owner.epoch)
+    if (task.owner.host !== session.host || task.owner.sessionId !== session.sessionId || task.owner.cwd !== session.cwd || bound?.taskId !== task.id || bound?.epoch !== task.owner.epoch)
       throw new CairnError('stale_owner', 'This session no longer owns this task. Explicitly resume with takeover to continue.');
   }
   private edit<T>(taskId: string, session: Session, kind: string, payload: unknown, fn: (task: Task) => T, allowSuspended = false): T {
     return this.store.transaction(() => {
       const task = this.store.get(taskId); this.own(task, session);
       if (task.status !== 'active' && !(allowSuspended && task.status === 'suspended')) throw new CairnError('inactive_task', `Task is ${task.status}`);
-      const submits=this.store.config<{tools:{name:string;role?:string}[]}>('gateway')?.tools.filter(t=>t.role==='submit').map(t=>t.name)??[];
-      if(['claim.revised','criterion.updated','report.saved'].includes(kind)&&Object.values(task.calls).some(c=>c.status==='running'&&submits.includes(c.tool)))throw new CairnError('submission_in_flight','Goal evidence and report are frozen while a submission is in flight');
-      const result = fn(task); task.revision++; this.store.save(task, kind, {input:payload,result:result??null,owner:task.owner,revision:task.revision}, this.at()); return result;
+      const changesProof=['claim.revised','criterion.updated','report.saved'].includes(kind);
+      if(changesProof)this.assertNoSubmission(task);
+      const previous=changesProof?proofState(task):undefined, delivered=task.delivery;
+      const result = fn(task);
+      if(changesProof&&previous!==proofState(task)){
+        if(delivered)throw new CairnError('report_frozen','The delivered report and its goal evidence are frozen; create a follow-up task');
+        task.delivery=undefined;task.confirmedAt=undefined;
+      }else if(delivered){task.delivery=delivered;}
+      task.revision++; this.store.save(task, kind, {input:payload,result:result??null,owner:task.owner,revision:task.revision}, this.at()); return result;
     });
+  }
+  private assertNoSubmission(task:Task){
+    const submits=this.store.config<{tools:{name:string;role?:string}[]}>('gateway')?.tools.filter(t=>t.role==='submit').map(t=>t.name)??[];
+    if(Object.values(task.calls).some(c=>c.status==='running'&&submits.includes(c.tool)))throw new CairnError('submission_in_flight','Goal evidence and report are frozen while a submission is in flight');
   }
   create(session: Session, input: { origin: string; goal: string; constraints?:string[]; criteria: string[]; profile?: 'general'|'emergency'; scope?: Scope; budget?: Partial<Budget> }): Task {
     requireText(input.goal, 'goal'); requireText(input.origin, 'origin');
@@ -60,8 +87,10 @@ export class Engine {
   resume(taskId: string, session: Session, takeover = false): Task {
     return this.store.transaction(() => {
       const task = this.store.get(taskId);
+      const current=this.active(session);
+      if(current?.status==='active'&&current.id!==taskId)throw new CairnError('active_task','Suspend or complete the current task before resuming another');
       if (task.status === 'completed') throw new CairnError('completed_task', 'Completed tasks are immutable; create a new task for follow-up');
-      if (!takeover && (task.owner.host !== session.host || task.owner.sessionId !== session.sessionId)) throw new CairnError('takeover_required', 'A different session owns this task; explicit takeover is required');
+      if (!takeover && (task.owner.host !== session.host || task.owner.sessionId !== session.sessionId || task.owner.cwd !== session.cwd)) throw new CairnError('takeover_required', 'A different session or workspace owns this task; explicit takeover is required');
       if (task.profile === 'emergency') {
         const caps = this.store.session(session)?.capabilities;
         if (!caps?.capture || !caps.preTool || !caps.restore || !caps.stop) throw new CairnError('missing_capabilities', 'This host cannot resume a strict emergency task');
@@ -108,8 +137,146 @@ export class Engine {
       const action={...input,id:old?.id??id('action')};if(old)task.actions[task.actions.indexOf(old)]=action;else task.actions.push(action);return action;
     });
   }
+  /** Resolve a local alias, immutable ID or unambiguous platform reference, including failed observations for inspection. */
+  resolveEvidence(taskId:string,ref:string):Observation{return this.resolve(this.store.get(taskId),ref);}
+  private resolve(task:Task,ref:string):Observation{
+    if(typeof ref!=='string'||!ref.trim())throw new CairnError('invalid_evidence','Evidence reference must be nonempty');
+    const alias=/^E([1-9]\d*)$/.exec(ref);
+    if(alias){const observation=task.observations[Number(alias[1])-1];if(observation)return observation;}
+    else {
+      const exact=task.observations.find(o=>o.id===ref);if(exact)return exact;
+      const matches=task.observations.filter(o=>o.resultRef===ref);
+      if(matches.length>1)throw new CairnError('ambiguous_evidence',`result_ref ${ref} identifies multiple observations; use E# or an observation ID`);
+      if(matches[0])return matches[0];
+    }
+    throw new CairnError('invalid_evidence',`Evidence ${ref} does not belong to this task`);
+  }
+  private checkpointOn(task:Task,input:CheckpointInput){
+    this.assertNoSubmission(task);
+    if(typeof input.summary!=='string')throw new CairnError('invalid_input','Checkpoint summary is required');
+    requireText(input.summary,'checkpoint summary');
+    if(input.questions!==undefined&&(!Array.isArray(input.questions)||input.questions.some(q=>typeof q!=='string'||!q.trim())))throw new CairnError('invalid_input','Questions must be nonempty strings');
+    if(input.next!==undefined&&typeof input.next!=='string')throw new CairnError('invalid_input','Next action must be a string');
+    if(input.findings!==undefined&&!Array.isArray(input.findings))throw new CairnError('invalid_input','Findings must be an array');
+    const previous=proofState(task),keys=new Set<string>();
+    for(const finding of input.findings??[]){
+      if(typeof finding.text!=='string')throw new CairnError('invalid_input','Finding text is required');
+      requireText(finding.text,'finding');
+      if(finding.key!==undefined){
+        if(typeof finding.key!=='string'||!finding.key.trim())throw new CairnError('invalid_input','Finding key must be nonempty');
+        if(keys.has(finding.key))throw new CairnError('invalid_input',`Finding key ${finding.key} is repeated in this checkpoint`);
+        keys.add(finding.key);
+      }
+      let old=finding.key?task.claims.find(c=>c.key===finding.key):undefined;
+      const scope=finding.scope??old?.scope??task.scope;
+      const refs=(values:string[]|undefined,existing:string[])=>{
+        if(values===undefined)return existing;
+        if(!Array.isArray(values))throw new CairnError('invalid_evidence','Evidence references must be an array');
+        return [...new Set(values.map(ref=>{const o=this.resolve(task,ref);this.evidence(task,o.id,scope);return o.id;}))];
+      };
+      const supports=refs(finding.evidence,old?.supports??[]),refutes=refs(finding.against,old?.refutes??[]);
+      // Retained references are checked too: takeover and scope changes cannot rehabilitate invalid evidence.
+      for(const ref of [...supports,...refutes])this.evidence(task,ref,scope);
+      let status=finding.status??old?.status??(supports.length?(refutes.length?'inconclusive':'supported'):(refutes.length?'refuted':'proposed'));
+      // Editing a hypothesis is not a declaration that it has been proved.
+      if(finding.status===undefined&&old?.status==='supported'&&(!supports.length||refutes.length))status=refutes.length?'inconclusive':'proposed';
+      if(finding.status===undefined&&old?.status==='refuted'&&!refutes.length)status=supports.length?'inconclusive':'proposed';
+      if(!['proposed','supported','refuted','inconclusive'].includes(status))throw new CairnError('invalid_input','Invalid finding status');
+      if(status==='supported'&&(!supports.length||refutes.length))throw new CairnError('unsupported_claim','Supported findings need supporting observations and no unresolved refutations');
+      if(status==='refuted'&&!refutes.length)throw new CairnError('unsupported_claim','Refuted findings need refuting observations');
+      const value={text:finding.text,status,supports,refutes,scope,...(finding.key?{key:finding.key}:{})};
+      // Unkeyed exact retries reuse the original conclusion; readable keys permit deliberate revisions.
+      old??=task.claims.find(c=>sameClaim(c,value));
+      const claim:Claim=old&&sameClaim(old,value)?old:{...value,id:old?.id??id('claim'),revision:(old?.revision??0)+1,updatedAt:this.at()};
+      let criteria:Task['criteria']|undefined;
+      if(finding.covers!==undefined){
+        if(!Array.isArray(finding.covers))throw new CairnError('invalid_input','Finding covers must be an array');
+        criteria=[...new Set(finding.covers)].map(ref=>{
+          const matches=task.criteria.filter(c=>c.id===ref||c.text===ref);
+          if(matches.length!==1)throw new CairnError('invalid_criterion',`Criterion ${ref} is unknown or ambiguous; use its c# identifier`);
+          return matches[0]!;
+        });
+      }else if(!old&&task.criteria.length===1&&status==='supported')criteria=[task.criteria[0]!];
+      if(old)task.claims[task.claims.indexOf(old)]=claim;else task.claims.push(claim);
+      if(criteria!==undefined){
+        for(const criterion of task.criteria)criterion.claimIds=criterion.claimIds.filter(ref=>ref!==claim.id);
+        for(const criterion of criteria)criterion.claimIds.push(claim.id);
+      }
+    }
+    const citationKeys=new Set<string>(),citations:Report['citations']=[];
+    for(const criterion of task.criteria)for(const claimId of criterion.claimIds){
+      const claim=task.claims.find(c=>c.id===claimId);
+      if(!claim||claim.status!=='supported'||!claim.supports.length||claim.refutes.length)continue;
+      for(const ref of claim.supports){
+        const observation=this.evidence(task,ref,task.scope),key=`${ref}\0${claim.text}`;
+        if(!citationKeys.has(key)){citationKeys.add(key);citations.push({observationId:ref,...(observation.resultRef?{resultRef:observation.resultRef}:{}),statement:claim.text});}
+      }
+    }
+    const report:Report={...task.report,summary:input.report?.summary??input.summary,citations};
+    if(typeof report.summary!=='string')throw new CairnError('invalid_input','Report summary must be a string');
+    requireText(report.summary,'report summary');
+    if(input.report?.impact){
+      const impact=input.report.impact;
+      if(!Array.isArray(impact.observationIds))throw new CairnError('invalid_input','Impact observationIds must be an array');
+      report.impact={...task.report?.impact,...impact,observationIds:[...new Set(impact.observationIds.map(ref=>{
+        const o=this.resolve(task,ref);this.evidence(task,o.id,impact.scope);return o.id;
+      }))]};
+    }
+    if(input.report?.rootCause)report.rootCause={...task.report?.rootCause,...input.report.rootCause};
+    if(input.report?.solution)report.solution={...task.report?.solution,...input.report.solution};
+    task.report=report;
+    const proofChanged=previous!==proofState(task);
+    if(proofChanged){
+      if(task.delivery)throw new CairnError('report_frozen','The delivered report and its goal evidence are frozen; create a follow-up task');
+      task.delivery=undefined;task.confirmedAt=undefined;
+    }
+    const next={summary:input.summary,questions:input.questions??task.checkpoint?.questions??[],next:input.next??task.checkpoint?.next};
+    const {at,...oldCheckpoint}=task.checkpoint??{at:''};
+    const changed=proofChanged||JSON.stringify(next)!==JSON.stringify(oldCheckpoint);
+    if(changed)task.checkpoint={...next,at:this.at()};
+    return changed;
+  }
+  checkpoint(taskId:string,session:Session,input:CheckpointInput){
+    return this.store.transaction(()=>{
+      const task=this.store.get(taskId);this.own(task,session);
+      if(task.status!=='active')throw new CairnError('inactive_task',`Task is ${task.status}`);
+      if(this.checkpointOn(task,input)){
+        task.revision++;this.store.save(task,'task.checkpoint',{input,owner:task.owner,revision:task.revision},this.at());
+      }
+      return {...this.context(taskId),validation:boundedCheck(this.evaluateReport(task,task.report!))};
+    });
+  }
+  finish(taskId:string,session:Session,input:FinishInput){
+    return this.store.transaction(()=>{
+      const task=this.store.get(taskId);this.own(task,session);
+      if(!['completed','suspended'].includes(input.outcome))throw new CairnError('invalid_input','Finish outcome must be completed or suspended');
+      const hasContent=['summary','findings','questions','next','report'].some(key=>input[key as keyof FinishInput]!==undefined);
+      if(task.status==='completed'){
+        if(hasContent||input.outcome!=='completed')throw new CairnError('completed_task','Completed tasks are immutable; create a new task for follow-up');
+        return {...this.context(taskId),phase:'completed' as const,validation:boundedCheck(this.evaluateReport(task,task.report!))};
+      }
+      if(task.status==='suspended'){
+        if(hasContent||input.outcome!=='suspended')throw new CairnError('inactive_task','Resume the suspended task before changing it');
+        return {...this.context(taskId),phase:'suspended' as const,validation:boundedCheck(task.report?this.evaluateReport(task,task.report):this.evaluate(task))};
+      }
+      let changed=false;
+      if(hasContent)changed=this.checkpointOn(task,{...input,summary:input.summary??task.checkpoint?.summary??task.report?.summary??task.goal});
+      const validation=task.report?this.evaluateReport(task,task.report):{...this.evaluate(task),ok:false,issues:[...this.evaluate(task).issues,'A checkpoint with cited findings is required before completion']};
+      let phase:'completed'|'suspended'|'incomplete'|'ready_for_delivery'|'awaiting_confirmation'='incomplete';
+      if(input.outcome==='suspended'){task.status='suspended';task.interrupted=true;phase='suspended';changed=true;}
+      else if(validation.ok){
+        if(task.profile==='emergency'&&!task.delivery)phase='ready_for_delivery';
+        else if(task.profile==='emergency'&&!task.confirmedAt)phase='awaiting_confirmation';
+        else {task.status='completed';phase='completed';changed=true;}
+      }
+      if(changed){task.revision++;this.store.save(task,'task.finished',{input,phase,validation,owner:task.owner,revision:task.revision},this.at());}
+      return {...this.context(taskId),phase,validation:boundedCheck(validation)};
+    });
+  }
   check(taskId: string): Check {
-    const task=this.store.get(taskId);
+    return this.evaluate(this.store.get(taskId));
+  }
+  evaluate(task:Task):Check {
     const unmet=task.criteria.filter(c=>!c.claimIds.length || c.claimIds.some(ref=>{
       const claim=task.claims.find(x=>x.id===ref);
       return !claim || claim.status!=='supported' || !claim.supports.length || claim.refutes.length || claim.supports.some(o=>!task.observations.find(x=>x.id===o&&x.eligible&&x.status==='success'));
@@ -127,7 +294,10 @@ export class Engine {
     return o;
   }
   validateReport(taskId:string, report:Report):Check {
-    const task=this.store.get(taskId),check=this.check(taskId),issues=[...check.issues];
+    return this.evaluateReport(this.store.get(taskId),report);
+  }
+  evaluateReport(task:Task,report:Report):Check {
+    const check=this.evaluate(task),issues=[...check.issues];
     if(!report.summary.trim())issues.push('Report summary is required');
     if(!report.citations.length)issues.push('At least one evidence citation is required');
     for(const citation of report.citations)try{
@@ -153,7 +323,7 @@ export class Engine {
     return {ok:!issues.length,issues:[...new Set(issues)],unmet:check.unmet};
   }
   report(taskId:string,session:Session,report:Report){
-    return this.edit(taskId,session,'report.saved',report,task=>{task.report=report;task.delivery=undefined;task.confirmedAt=undefined;return this.validateReport(taskId,report);});
+    return this.edit(taskId,session,'report.saved',report,task=>{task.report=report;return this.evaluateReport(task,report);});
   }
   complete(taskId:string,session:Session){
     return this.edit(taskId,session,'task.completed',{},task=>{
@@ -190,7 +360,7 @@ export class Engine {
         if(Object.values(task.calls).some(c=>c.tool===tool))throw new CairnError('ambiguous_submission','A prior submission was attempted; reconcile its receipt before retrying');
         if(!task.report||!this.validateReport(taskId,task.report).ok)throw new CairnError('invalid_report','Report must pass validation before submission');
       }
-      task.calls[callId]={status:'running',tool,startedAt:this.at()};return {duplicate:false};
+      task.calls[callId]={status:'running',tool,startedAt:this.at(),epoch:task.owner.epoch};return {duplicate:false};
     });
   }
   observe(taskId:string,session:Session,input:Omit<Observation,'id'|'capturedAt'|'eligible'|'scope'|'actor'> & {scope?:Scope}){
@@ -198,19 +368,61 @@ export class Engine {
       const task=this.store.get(taskId);
       const old=task.observations.find(o=>o.callId===input.callId&&o.source===input.source);if(old)return old;
       let owned=true;try{this.own(task,session);}catch{owned=false;}
-      const eligible=owned&&task.status==='active'&&!task.interrupted&&(!task.budget.deadline||this.now().getTime()<Date.parse(task.budget.deadline));
-      const observation:Observation={...input,id:id('obs'),scope:input.scope??task.scope,actor:{host:session.host,sessionId:session.sessionId,epoch:this.store.session(session)?.epoch??0},eligible,capturedAt:this.at()};
+      const reservation=task.calls[input.callId],epoch=reservation?(reservation.epoch??0):(this.store.session(session)?.epoch??0);
+      const eligible=owned&&epoch===task.owner.epoch&&task.status==='active'&&!task.interrupted&&(!task.budget.deadline||this.now().getTime()<Date.parse(task.budget.deadline));
+      const observation:Observation={...input,id:id('obs'),scope:input.scope??task.scope,actor:{host:session.host,sessionId:session.sessionId,epoch},eligible,capturedAt:this.at()};
       task.observations.push(observation);
-      if(owned&&task.calls[input.callId])task.calls[input.callId]!.status='finished';
+      if(reservation)reservation.status='finished';
       task.revision++;this.store.save(task,'observation.captured',observation,this.at());return observation;
     });
   }
   context(taskId:string){
     const t=this.store.get(taskId);
-    return {taskId:t.id,goal:t.goal,origin:t.origin,constraints:t.constraints,status:t.status,owner:t.owner,criteria:t.criteria,
-      claims:t.claims,observations:t.observations.map(({output,input,...o})=>o),actions:t.actions,hints:t.hints,
+    let textTruncated=false;
+    const text=(value:string,bytes:number)=>{
+      if(Buffer.byteLength(value,'utf8')<=bytes)return value;
+      textTruncated=true;return clipText(value,bytes);
+    };
+    const scope=(value:Scope)=>Object.fromEntries(Object.entries(value).map(([key,value])=>[key,text(value,160)])) as Scope;
+    const alias=(observationId:string)=>`E${t.observations.findIndex(o=>o.id===observationId)+1}`;
+    const check=this.evaluate(t);
+    const relevant=new Set(t.criteria.flatMap(c=>c.claimIds));
+    const claims=t.claims.slice().sort((a,b)=>
+      (b.updatedAt??'').localeCompare(a.updatedAt??'')||Number(relevant.has(b.id))-Number(relevant.has(a.id))||t.claims.indexOf(b)-t.claims.indexOf(a)).slice(0,12);
+    const selected=new Set(claims.flatMap(c=>[...c.supports,...c.refutes]));
+    const observations=t.observations.filter(o=>selected.has(o.id)||t.observations.indexOf(o)>=t.observations.length-12).slice(-18);
+    const state={taskId:t.id,goal:text(t.goal,1500),origin:text(t.origin,500),constraints:t.constraints.slice(0,8).map(c=>text(c,300)),status:t.status,profile:t.profile,scope:scope(t.scope),
+      owner:{...t.owner,sessionId:text(t.owner.sessionId,256),cwd:text(t.owner.cwd,500)},revision:t.revision,
+      criteria:t.criteria.slice(0,24).map(c=>({...c,text:text(c.text,450),claimIds:c.claimIds.slice(0,8)})),
+      claims:claims.map(c=>({...c,...(c.key?{key:text(c.key,180)}:{}),text:text(c.text,650),scope:scope(c.scope),supports:c.supports.slice(0,8),refutes:c.refutes.slice(0,8),evidence:c.supports.slice(0,8).map(alias),against:c.refutes.slice(0,8).map(alias),covers:t.criteria.filter(criterion=>criterion.claimIds.includes(c.id)).map(c=>c.id).slice(0,12)})),
+      observations:observations.map(o=>({ref:alias(o.id),id:o.id,tool:text(o.tool,160),source:o.source,status:o.status,eligible:o.eligible,...(o.resultRef?{resultRef:text(o.resultRef,256)}:{}),scope:scope(o.scope),capturedAt:o.capturedAt})),
+      actions:t.actions.slice(-4).map(a=>({...a,purpose:text(a.purpose,350),stopCondition:text(a.stopCondition,240),observationIds:a.observationIds.slice(0,6)})),
+      hints:t.hints.slice(-4).map(h=>({...h,text:text(h.text,450),author:text(h.author,120)})),
+      checkpoint:t.checkpoint?{summary:text(t.checkpoint.summary,1800),questions:t.checkpoint.questions.slice(0,8).map(q=>text(q,350)),next:t.checkpoint.next?text(t.checkpoint.next,600):undefined,at:t.checkpoint.at}:undefined,
       budget:t.budget,remainingMs:t.budget.deadline?Math.max(0,Date.parse(t.budget.deadline)-this.now().getTime()):null,
-      check:this.check(taskId),delivery:t.delivery,revision:t.revision};
+      check:{ok:check.ok,issues:check.issues.slice(0,24).map(issue=>text(issue,250)),unmet:check.unmet.slice(0,24)},
+      delivery:t.delivery?{key:text(t.delivery.key,256),recordedAt:t.delivery.recordedAt,recorded:true}:undefined,confirmedAt:t.confirmedAt,
+      totals:{claims:t.claims.length,observations:t.observations.length,criteria:t.criteria.length,eligibleEvidence:t.observations.filter(o=>o.eligible&&o.status==='success').length},
+      truncated:{claims:0,observations:0,criteria:0,constraints:0,actions:0,hints:0,questions:0,text:false,checkIssues:Math.max(0,check.issues.length-24),bytes:0},
+      readMore:'Use cairn_read with E# or an observation ID for original input/output. Task history and the full report remain available in the UI and persisted audit log.',
+    };
+    const size=()=>Buffer.byteLength(JSON.stringify(state),'utf8');
+    // Bound restoration even for very long tasks; canonical records remain complete in SQLite.
+    while(size()>12_000){
+      if(state.observations.length>2)state.observations.pop();
+      else if(state.claims.length>1)state.claims.pop();
+      else if(state.actions.length)state.actions.pop();
+      else if(state.hints.length)state.hints.pop();
+      else if(state.constraints.length)state.constraints.pop();
+      else if(state.checkpoint?.questions.length)state.checkpoint.questions.pop();
+      else if(state.criteria.length>1)state.criteria.pop();
+      else break;
+    }
+    state.truncated={...state.truncated,claims:t.claims.length-state.claims.length,observations:t.observations.length-state.observations.length,criteria:t.criteria.length-state.criteria.length,
+      constraints:t.constraints.length-state.constraints.length,actions:t.actions.length-state.actions.length,hints:t.hints.length-state.hints.length,
+      questions:(t.checkpoint?.questions.length??0)-(state.checkpoint?.questions.length??0),text:textTruncated};
+    state.truncated.bytes=size();
+    return state;
   }
   continuation(taskId:string,session:Session):string|undefined{
     const task=this.store.get(taskId);try{this.own(task,session);}catch{return;}

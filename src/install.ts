@@ -1,13 +1,24 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, readdirSync, readlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { userHome, workspace } from './paths.js';
 import { CairnError, type Host } from './core/types.js';
+import { VERSION } from './version.js';
 
 export type Target=Exclude<Host,'mcp'>;
 type Change={file:string;kind:'json'|'toml'|'array';keys?:string[];before?:unknown;value:unknown};
-type Receipt={target:Target;version:string;installedAt:string;plugin:string;changes:Change[];ownedPaths?:string[]};
+type Receipt={target:Target;version:string;installedAt:string;plugin:string;changes:Change[];ownedPaths?:string[];ownedContent?:Record<string,string>};
+const shellQuote=(value:string)=>`'${value.replaceAll("'","'\\''")}'`;
+const codexRegistration=/^\s*\[\s*mcp_servers\s*\.\s*(?:cairn|"cairn"|'cairn')\s*\]\s*(?:#.*)?$/m;
+function fingerprint(path:string):string|undefined{
+ if(!existsSync(path))return;
+ const hash=createHash('sha256');
+ const visit=(dir:string)=>{for(const entry of readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){const file=join(dir,entry.name);hash.update(JSON.stringify([file.slice(path.length),entry.isDirectory()?'dir':entry.isSymbolicLink()?'link':'file']));if(entry.isDirectory())visit(file);else hash.update(entry.isSymbolicLink()?readlinkSync(file):readFileSync(file));}};
+ visit(path);return hash.digest('hex');
+}
+function expectedContent(receipt:Receipt,path:string){return receipt.ownedContent?.[path]??fingerprint(join(receipt.plugin,'skills/cairn'));}
 const readJson=(file:string):any=>existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{};
 function write(file:string,value:string){mkdirSync(dirname(file),{recursive:true});const temp=`${file}.cairn-${process.pid}`;writeFileSync(temp,value,{mode:0o600});renameSync(temp,file);}
 function set(object:any,keys:string[],value:unknown){let o=object;for(const key of keys.slice(0,-1))o=o[key]??={};const last=keys.at(-1)!;if(value===undefined)delete o[last];else o[last]=value;}
@@ -26,6 +37,7 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
  const planJson=(file:string,keys:string[],value:unknown)=>{
   const data=readJson(file),old=get(data,keys),owned=previous?.changes.find(c=>c.file===file&&JSON.stringify(c.keys)===JSON.stringify(keys));
   if(old!==undefined&&!owned&&JSON.stringify(old)!==JSON.stringify(value))throw new CairnError('install_conflict',`Existing registration at ${file}: ${keys.join('.')}`);
+  if(owned&&JSON.stringify(old)!==JSON.stringify(owned.value)&&JSON.stringify(old)!==JSON.stringify(value))throw new CairnError('install_conflict',`Cairn registration was edited at ${file}: ${keys.join('.')}; keep or resolve the edit before updating`);
   changes.push({file,kind:'json',keys,before:owned?owned.before:old,value});
  };
  if(target==='pi'){
@@ -39,7 +51,10 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
   planJson(file,['enabledPlugins','cairn@cairn-local'],true);
  }else{
   const file=join(loc.base,'.codex','config.toml'),current=existsSync(file)?readFileSync(file,'utf8'):'';
-  if(!previous&&/\[mcp_servers\.(?:cairn|"cairn")\]/.test(current))throw new CairnError('install_conflict','Codex already has a cairn MCP registration outside this installer');
+  const previousBlock=previous?.changes.find(c=>c.kind==='toml'&&c.file===file);
+  if(previousBlock&&!current.includes(previousBlock.value as string))throw new CairnError('install_conflict','The managed Codex MCP registration was edited; keep or resolve the edit before updating');
+  const unmanaged=previousBlock?current.replace(previousBlock.value as string,''):current;
+  if(codexRegistration.test(unmanaged)||unmanaged.includes('# BEGIN CAIRN MANAGED'))throw new CairnError('install_conflict','Codex already has a cairn MCP registration outside this installer');
   // Project-scoped direct registration needs no user-level plugin-cache activation.
   // The same directory remains a valid native marketplace plugin for distribution.
   const block=`# BEGIN CAIRN MANAGED\n[mcp_servers.cairn]\ncommand = ${JSON.stringify(process.execPath)}\nargs = [${[join(loc.plugin,'runtime/cairn.mjs'),'mcp','--host','codex'].map(s=>JSON.stringify(s)).join(', ')}]\n# END CAIRN MANAGED`;
@@ -48,15 +63,24 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
   const template=readJson(join(source,'hooks/hooks.json'));
   for(const event of Object.keys(template.hooks)){
    const entries=get(hooks,['hooks',event]);if(entries!==undefined&&!Array.isArray(entries))throw new CairnError('invalid_config',`Codex hooks.${event} must be an array`);
-   changes.push({file:hookFile,kind:'array',keys:['hooks',event],value:{hooks:[{type:'command',command:`${JSON.stringify(process.execPath)} ${JSON.stringify(join(loc.plugin,'scripts/hook.mjs'))}`,timeout:['Interrupt','SessionEnd'].includes(event)?3:5}]}});
+   const owned=previous?.changes.find(c=>c.file===hookFile&&JSON.stringify(c.keys)===JSON.stringify(['hooks',event]));
+   if(owned&&!(entries??[]).some((value:unknown)=>JSON.stringify(value)===JSON.stringify(owned.value)))throw new CairnError('install_conflict',`Cairn hooks.${event} was edited or removed; keep or resolve the edit before updating`);
+   changes.push({file:hookFile,kind:'array',keys:['hooks',event],value:{hooks:[{type:'command',command:`${shellQuote(process.execPath)} ${shellQuote(join(loc.plugin,'scripts/hook.mjs'))}`,timeout:['Interrupt','SessionEnd'].includes(event)?3:5}]}});
   }
   const skill=join(loc.base,'.agents/skills/cairn');
   if(existsSync(skill)&&!previous?.ownedPaths?.includes(skill))throw new CairnError('install_conflict','An existing cairn skill is not owned by this installer');
+  if(existsSync(skill)&&previous&&fingerprint(skill)!==expectedContent(previous,skill))throw new CairnError('install_conflict',`The installed Cairn skill was edited at ${skill}; keep or resolve the edit before updating`);
   ownedPaths.push(skill);
  }
  // Preflight completes before any configuration or plugin files are modified.
  mkdirSync(loc.dir,{recursive:true});
  const staging=join(loc.dir,`plugin-${process.pid}`);rmSync(staging,{recursive:true,force:true});cpSync(source,staging,{recursive:true});
+ if(target!=='pi'){
+  const mcpFile=join(staging,'.mcp.json'),mcp=readJson(mcpFile);mcp.mcpServers.cairn.command=process.execPath;write(mcpFile,JSON.stringify(mcp,null,2)+'\n');
+  const hookFile=join(staging,'hooks/hooks.json'),hookConfig=readJson(hookFile);
+  for(const entries of Object.values(hookConfig.hooks) as any[])for(const entry of entries)for(const hook of entry.hooks??[])if(hook.type==='command')hook.command=`${shellQuote(process.execPath)} ${shellQuote(join(loc.plugin,'scripts/hook.mjs'))}`;
+  write(hookFile,JSON.stringify(hookConfig,null,2)+'\n');
+ }
  rmSync(loc.plugin,{recursive:true,force:true});renameSync(staging,loc.plugin);
  for(const path of ownedPaths){rmSync(path,{recursive:true,force:true});cpSync(join(loc.plugin,'skills/cairn'),path,{recursive:true});}
  if(target==='codex')write(join(loc.dir,'.agents/plugins/marketplace.json'),JSON.stringify({name:'cairn-local',plugins:[{name:'cairn',source:{source:'local',path:'./plugin'},policy:{installation:'AVAILABLE',authentication:'ON_INSTALL'},category:'Productivity'}]},null,2));
@@ -64,7 +88,8 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
  for(const c of changes){
   if(c.kind==='toml'){
    const original=existsSync(c.file)?readFileSync(c.file,'utf8'):'';
-   write(c.file,`${original.replace(/\n?# BEGIN CAIRN MANAGED\n[\s\S]*?# END CAIRN MANAGED\n?/g,'').trimEnd()}\n\n${c.value}\n`);
+   const prior=previous?.changes.find(p=>p.kind==='toml'&&p.file===c.file);
+   write(c.file,`${(prior?original.replace(prior.value as string,''):original).trimEnd()}\n\n${c.value}\n`);
   }else{
    const data=readJson(c.file);
    if(c.kind==='array'){
@@ -74,7 +99,7 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
    write(c.file,JSON.stringify(data,null,2)+'\n');
   }
  }
- const receipt:Receipt={target,version:'1.0.0',installedAt:new Date().toISOString(),plugin:loc.plugin,changes,ownedPaths};
+ const receipt:Receipt={target,version:VERSION,installedAt:new Date().toISOString(),plugin:loc.plugin,changes,ownedPaths,ownedContent:Object.fromEntries(ownedPaths.map(path=>[path,fingerprint(path)!]))};
  write(loc.receipt,JSON.stringify(receipt,null,2));
  return {target,scope,plugin:loc.plugin,next:target==='codex'?'Restart a trusted project session, then review and trust Cairn hooks with /hooks.':'Start a new CLI session and load Cairn. Existing model and approval settings are preserved.'};
 }
@@ -87,11 +112,17 @@ export function uninstall(target:Target,scope:'project'|'user'='project',root?:s
    const data=readFileSync(c.file,'utf8');if(data.includes(c.value as string))write(c.file,data.replace(c.value as string,''));else retained.push(c.file);
   }else{
    const data=readJson(c.file);
-   if(c.kind==='array'){const keys=c.keys??['packages'];if(!c.before)set(data,keys,(get(data,keys)??[]).filter((p:unknown)=>JSON.stringify(p)!==JSON.stringify(c.value)));}
+   if(c.kind==='array'){
+    const keys=c.keys??['packages'],entries=get(data,keys)??[];
+    if(!Array.isArray(entries)){retained.push(c.file);continue;}
+    if(!entries.some((p:unknown)=>JSON.stringify(p)===JSON.stringify(c.value))&&entries.some((p:unknown)=>JSON.stringify(p).includes(receipt.plugin))){retained.push(c.file);continue;}
+    if(!c.before)set(data,keys,entries.filter((p:unknown)=>JSON.stringify(p)!==JSON.stringify(c.value)));
+   }
    else if(JSON.stringify(get(data,c.keys!))===JSON.stringify(c.value))set(data,c.keys!,c.before);else{retained.push(c.file);continue;}
    write(c.file,JSON.stringify(data,null,2)+'\n');
   }
  }
+ for(const path of receipt.ownedPaths??[])if(existsSync(path)&&fingerprint(path)!==expectedContent(receipt,path))retained.push(path);
  // Keep a modified registration and its executable target usable until explicitly resolved.
  if(!retained.length){rmSync(loc.dir,{recursive:true,force:true});for(const path of receipt.ownedPaths??[])rmSync(path,{recursive:true,force:true});}
  return {removed:!retained.length,retained,taskData:'preserved'};
