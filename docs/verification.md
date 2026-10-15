@@ -1,6 +1,6 @@
 # Verification record
 
-Cairn 4.3 — verified on 2026-10-15 (Asia/Shanghai).
+Cairn 4.4 — verified on 2026-10-15 (Asia/Shanghai).
 
 ## Current scope
 
@@ -10,7 +10,7 @@ The domain-specific competition profile and its resources were removed from the 
 
 ## Automated verification
 
-- **189 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
+- **195 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
 - A practical public-interface test created a real local faulty implementation, reproduced its incorrect output through a separate Node process, saved findings, paused, restored from another host, fixed the file and ran actual regression inputs. The final report completed from its goal coverage and references, with no tool-call records.
 - Interface tests verify that removed profile/budget/report fields are rejected, fresh databases contain no match-state table, and captured findings can complete without an external platform reference.
 - Core checks cover contradictory/unsupported findings, scope coverage, reference membership, paging and bounded context, cancellation, interruption, cross-host takeover and stale-owner rejection.
@@ -31,6 +31,11 @@ The domain-specific competition profile and its resources were removed from the 
 
 ## Replay verification
 
+- Version 4.4 replaces fixed-delay checkpoint stepping with a continuous recorded-time timeline. The original real Codex fixture spans 298,100 ms, with five retained states at 0 / 15,809 / 115,822 / 191,332 / 298,100 ms. It still has five events/frames and no curated tool records; no intermediate operations or timestamps are invented.
+- Deterministic clock tests cover unequal save intervals, state-at-or-before seeks, actual speed multipliers, delayed refreshes, changing speed without jumping, pause/buffering/resume, end clamping, equal timestamps, clock regressions/invalid times and empty/single-instant histories.
+- ego-browser verified the full five-state run at 60×, a continuously advancing playhead, proportional markers and arbitrary seeks (01:00 = both agents executing; 02:00 = child returned with main work continuing). A measured 652.6 ms at 10× advanced 6,522 ms. Pausing an in-flight read stayed paused; an older delayed seek could not overwrite a newer one. Completion remained historical and live return restored export. Desktop and 390px geometry checks showed no horizontal overflow; no page JavaScript error was observed.
+- The screenshot API still timed out on capture; no new 4.4 pixel screenshot is claimed. UI verification uses browser interactions and rendered DOM geometry.
+
 - Version 4.3 labels every replay frame as a stage checkpoint, with save time, elapsed save interval, changed-node links and recorded actor states. The original five snapshots in the real Codex fixture remain five snapshots; no tool log or synthetic intermediate operation is added.
 - Semantic-delta tests verify batch updates, a helper returning while another remains running, main-agent review and continued execution, dictionary/relation reordering, revision/timestamp-only saves, independent basis changes, removed nodes, actor reassignment, first/unknown baselines, and aggregate deltas across missing history. HTTP tests confirm that direct/backward seeks always compare to the preceding saved task frame and never mutate task state or events.
 - Role-lane tests verify ownership, bounds and non-overlap in both layouts. Review nodes derive from saved branch status and group with the source branch's transition. Optional matched native starts/returns can advance a pending branch without changing tool-record policy; acknowledging the start retains its execution identity, and pause/resume does not infer continued liveness.
@@ -45,6 +50,8 @@ The domain-specific competition profile and its resources were removed from the 
 - Desktop and 390px browser checks retained the blue-and-white graph and usable replay controls without horizontal overflow. These fixtures exercise UI behavior; they do not claim a new external-model investigation.
 
 ## Installed workflow checks
+
+- The global 4.4 command and the existing managed Multica integration were updated in place with the same MCP/skill IDs and shared database preference. Doctor confirmed the bindings and accurately reported MCP-only lifecycle capabilities. The real Codex sample dashboard was restarted at its original port 50814 using the installed runtime. A read-only integrity comparison confirmed unchanged task SHA-256, five events/frames and zero calls/observations.
 
 - The 4.3 global command and managed Multica runtime were updated in place. A source-independent installed MCP/CLI protocol check used explicitly labelled synthetic native lifecycle events to verify pending-to-running projection, pause/resume remaining blocked, returned-result review and completed acceptance. It confirmed zero tool records and no child response sentinel in the persisted task. The real Codex sample dashboard was restarted on its original URL with the installed runtime.
 

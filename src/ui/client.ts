@@ -3,6 +3,7 @@ import type { Observation } from '../core/types.js';
 import { projectGraph, layoutGraph, graphNodeSize, graphPalette, graphKindLabels } from './graph.js';
 import type { GraphNode } from './graph.js';
 import { compareCheckpoint, checkpointActors, type CheckpointDelta } from './replay.js';
+import { ReplayClock, replayTimeline, replayIndexAt, type ReplayTimeline } from './replay-clock.js';
 
 type PositionedNode = GraphNode & { x: number; y: number };
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -30,7 +31,7 @@ function graphLines(value: string, maxWidth = 15.2): string[] {
 }
 const kinds: Record<string, string> = {
   'task.created': '创建目标', 'task.resumed': '恢复 / 接管任务', 'task.suspended': '暂停任务', 'task.completed': '完成任务',
-  'task.checkpoint': '保存检查点', 'task.finished': '更新完成状态',
+  'task.checkpoint': '保存阶段进展', 'task.finished': '更新完成状态',
   'tool.started': '开始工具调用', 'observation.captured': '记录观测', 'claim.revised': '更新假设与结论',
   'criterion.updated': '更新完成条件', 'action.updated': '更新行动', 'hint.added': '收到人工提示',
   'report.saved': '保存报告', 'continuation.suggested': '检查未完成事项',
@@ -48,6 +49,7 @@ let replayActive = false, replayPlaying = false, replayFrames: TimelineEvent[] =
 let replayTimer: ReturnType<typeof setTimeout> | undefined, replayGeneration = 0, replayMissing = 0, replayChanged = false;
 let replayDelta: CheckpointDelta | undefined;
 let replayFollow = true;
+let replayAxis: ReplayTimeline = replayTimeline([]), replayClock = new ReplayClock(0), replayLoading = false;
 try { selectedTask = decodeURIComponent(location.hash.slice(1)); } catch { /* invalid fragments return to the task overview */ }
 overviewMode=!selectedTask;
 
@@ -114,13 +116,43 @@ async function refresh() {
 }
 function stopReplayPlayback() {
   replayPlaying = false;
+  replayClock.pause();
   if (replayTimer !== undefined) clearTimeout(replayTimer);
   replayTimer = undefined;
 }
 function resetReplay() {
   stopReplayPlayback(); replayGeneration++; replayActive = false; replayFrames = []; replayIndex = -1;
   replayMissing = 0; replayChanged = false; renderReplay();
-  replayDelta = undefined;
+  replayDelta = undefined; replayLoading = false;
+  replayAxis = replayTimeline([]); replayClock = new ReplayClock(0);
+}
+function renderReplayTime() {
+  const position = replayClock.position, event = replayFrames[replayIndex];
+  text('replay-position', `${formatDuration(position)} / ${formatDuration(replayAxis.durationMs)}`);
+  text('replay-time', replayFrames.length ? new Date(replayAxis.startMs + position).toLocaleString('zh-CN', { hour12: false }) : '');
+  text('replay-elapsed', replayLoading ? '正在读取此时状态…' : event ? `画面依据 ${formatTime(event.at)} 的记录 · ${replayIndex + 1}/${replayFrames.length}` : '正在读取历史…');
+  const seek = byId<HTMLInputElement>('replay-seek');
+  seek.max = String(replayAxis.durationMs); seek.value = String(position);
+  seek.setAttribute('aria-valuetext', `${formatDuration(position)}，共 ${formatDuration(replayAxis.durationMs)}`);
+  seek.style.setProperty('--replay-progress', `${replayAxis.durationMs ? position / replayAxis.durationMs * 100 : 0}%`);
+  text('replay-play', replayPlaying ? '暂停' : position >= replayAxis.durationMs && replayIndex >= 0 ? '重播' : '播放');
+  byId<HTMLButtonElement>('replay-prev').disabled = replayIndex < 0 || position === 0;
+}
+function renderReplayMarkers() {
+  const markers = byId('replay-markers'); markers.replaceChildren();
+  const groups = new Map<number, number[]>();
+  replayAxis.offsets.forEach((offset, index) => {
+    const indices = groups.get(offset) ?? []; indices.push(index); groups.set(offset, indices);
+  });
+  for (const [offset, indices] of groups) {
+    const event = replayFrames[indices.at(-1)!]!, marker = create('button', 'replay-marker');
+    marker.dataset.replayOffset = String(offset); marker.style.left = `${replayAxis.durationMs ? offset / replayAxis.durationMs * 100 : 0}%`;
+    const label = `${formatDuration(offset)} · ${formatTime(event.at)} · ${event.title}${indices.length > 1 ? `（同一时刻 ${indices.length} 条保存记录）` : ''}`;
+    marker.title = label; marker.setAttribute('aria-label', label);
+    marker.onclick = () => { void seekReplayTime(offset); }; markers.append(marker);
+  }
+  text('replay-range-start', replayFrames.length ? formatTime(new Date(replayAxis.startMs).toISOString()) : '');
+  text('replay-range-end', replayFrames.length ? formatTime(new Date(replayAxis.startMs + replayAxis.durationMs).toISOString()) : '');
 }
 function renderReplay() {
   document.body.classList.toggle('replay-mode', replayActive);
@@ -133,20 +165,21 @@ function renderReplay() {
   }
   if (!replayActive) return;
   const event = replayFrames[replayIndex], ready = !!event;
-  text('replay-position', ready ? `${replayIndex + 1} / ${replayFrames.length} 个阶段检查点` : '正在读取检查点…');
-  text('replay-time', event ? `保存于 ${new Date(event.at).toLocaleString('zh-CN', { hour12: false })}` : '');
-  const elapsed=replayDelta?.elapsedMs;
-  text('replay-elapsed',elapsed===undefined?'':`距上次保存 ${formatDuration(elapsed)}`);
+  renderReplayTime();
+  document.querySelectorAll<HTMLElement>('[data-replay-offset]').forEach(marker => {
+    const offset = Number(marker.dataset.replayOffset);
+    marker.classList.toggle('passed', offset <= replayClock.position);
+    marker.setAttribute('aria-current', offset === replayAxis.offsets[replayIndex] ? 'step' : 'false');
+  });
   text('replay-event', event ? `${event.title}${event.summary ? ` · ${short(event.summary,100)}` : ''}` : '');
   text('replay-summary',event?.summary??'');
-  text('replay-play', replayPlaying ? '暂停' : replayIndex === replayFrames.length - 1 && ready ? '重播' : '播放');
-  byId<HTMLButtonElement>('replay-prev').disabled = !ready || replayIndex === 0;
+  byId<HTMLButtonElement>('replay-prev').disabled = !ready || replayClock.position === 0;
   byId<HTMLButtonElement>('replay-next').disabled = !ready || replayIndex === replayFrames.length - 1;
-  byId<HTMLButtonElement>('replay-play').disabled = !ready || replayFrames.length < 2;
-  byId<HTMLButtonElement>('replay-restart').disabled = !ready;
-  const seek = byId<HTMLInputElement>('replay-seek'); seek.disabled = !ready; seek.max = String(Math.max(0, replayFrames.length - 1)); seek.value = String(Math.max(0, replayIndex));
-  seek.setAttribute('aria-valuetext', event ? `第 ${replayIndex + 1} 个阶段检查点，${event.title}` : '正在读取');
-  const notices = ['每帧是阶段检查点，可合并保存多个变化；保存时间不表示操作同时发生。'];
+  byId<HTMLButtonElement>('replay-play').disabled = !replayFrames.length || replayAxis.durationMs === 0;
+  byId<HTMLButtonElement>('replay-restart').disabled = !replayFrames.length;
+  const seek = byId<HTMLInputElement>('replay-seek'); seek.disabled = !replayFrames.length || replayAxis.durationMs === 0;
+  const notices = ['按真实记录间隔连续播放；两次记录之间沿用最近已知状态。同次保存的多个变化不表示同时执行。'];
+  if (replayAxis.adjusted) notices.push(`有 ${replayAxis.adjusted} 条时间缺失或倒退的记录，按保存顺序合并到相邻时刻。`);
   if (replayMissing) notices.push(`旧任务有 ${replayMissing} 条记录未保存对应状态，仅回放可还原的起点、最新状态及升级后记录。`);
   if (replayChanged) notices.push('实时任务有新记录，当前回放保持不变；返回实时可查看最新状态。');
   text('replay-notice', notices.join(' ')); byId('replay-notice').hidden = false;
@@ -160,11 +193,11 @@ function renderReplay() {
     if(state.subagent.returned)sub.push(`已返回待汇总 ${state.subagent.returned}`);
     if(state.subagent.reviewed)sub.push(`已返回并复核 ${state.subagent.reviewed}`);
     if(state.subagent.pending)sub.push(`待启动 ${state.subagent.pending}`);
-    actors.append(create('span','actor-caption','当前检查点记录'),create('span','actor-summary main',`主 Agent · ${main.join(' / ')||'阶段推进'}`),create('span','actor-summary subagent',`子 Agent · ${sub.join(' / ')||'无执行中分支'}`));
+    actors.append(create('span','actor-caption','此时已知状态'),create('span','actor-summary main',`主 Agent · ${main.join(' / ')||'阶段推进'}`),create('span','actor-summary subagent',`子 Agent · ${sub.join(' / ')||'无执行中分支'}`));
   }
   const changes=byId('replay-changes');changes.replaceChildren();
   const delta=replayDelta;
-  const caption=!ready?'读取保存状态后显示变化':delta?.baseline==='initial'?'初始检查点 · 已建立的目标与分支':delta?.baseline==='gap'?`累计变化 · 跨过 ${delta.missing} 条缺失状态`:delta?.baseline==='unknown'?'缺少前一状态，暂不推断节点变化':delta?.highlighted.length?`本次变化 · 高亮 ${delta.highlighted.length} 个节点`:'本次只更新阶段摘要、报告或检查结果，图中节点无变化';
+  const caption=!ready?'读取保存状态后显示变化':delta?.baseline==='initial'?'起始状态 · 已建立的目标与分支':delta?.baseline==='gap'?`最近记录的累计变化 · 跨过 ${delta.missing} 条缺失状态`:delta?.baseline==='unknown'?'缺少前一状态，暂不推断节点变化':delta?.highlighted.length?`最近变化 · 高亮 ${delta.highlighted.length} 个节点`:'最近记录仅更新摘要、报告或检查结果，图中节点无变化';
   text('replay-change-heading',caption);
   for(const change of delta?.changes??[]){
     const role=change.actor==='main'?'主 Agent':change.actor==='subagent'?'子 Agent':'目标与依据';
@@ -175,29 +208,43 @@ function renderReplay() {
   }
 }
 function scheduleReplay() {
-  if (!replayPlaying) return;
-  if (replayIndex >= replayFrames.length - 1) { stopReplayPlayback(); renderReplay(); return; }
-  replayTimer = setTimeout(() => { void seekReplay(replayIndex + 1, true); }, Number(byId<HTMLSelectElement>('replay-speed').value));
+  if (!replayPlaying || replayLoading) return;
+  if (replayClock.position >= replayAxis.durationMs) { stopReplayPlayback(); renderReplay(); return; }
+  const next = replayAxis.offsets[replayIndex + 1] ?? replayAxis.durationMs;
+  replayTimer = setTimeout(() => {
+    replayTimer = undefined;
+    if (!replayPlaying || !replayActive) return;
+    if (replayClock.position >= next && replayIndex < replayFrames.length - 1) {
+      // Buffer at a real transition while reading its immutable state. No fake
+      // operation duration is inserted, and a slow response cannot skip a return.
+      void seekReplayTime(next, true);
+    } else { renderReplayTime(); tick(); scheduleReplay(); }
+  }, Math.min(50, Math.max(1, (next - replayClock.position) / replayClock.rate)));
 }
-async function seekReplay(index: number, playing = false) {
+async function seekReplayTime(position: number, playing = false) {
   stopReplayPlayback();
-  const frame = replayFrames[index]; if (!frame || !replayActive) return;
-  // Preserve the playback intent while a frame is loading. A pause click must
-  // cancel that request's continuation, rather than accidentally start a timer.
-  replayPlaying = playing; text('replay-play', playing ? '暂停' : '播放');
+  replayClock.seek(position);
+  const index = replayIndexAt(replayAxis, replayClock.position), frame = replayFrames[index];
+  if (!frame || !replayActive) return;
+  replayPlaying = playing;
   const generation = ++replayGeneration, taskId = selectedTask;
+  if (index === replayIndex && !replayLoading) {
+    if (playing) replayClock.play(); renderReplay(); tick(); scheduleReplay(); return;
+  }
+  replayLoading = true; renderReplay();
   try {
     const saved = await request<ReplayState>(`/api/tasks/${encodeURIComponent(taskId)}/replay/${frame.seq}`);
     if (!replayActive || generation !== replayGeneration || selectedTask !== taskId) return;
-    current = saved.task; timeline = saved.events; replayIndex = index; replayPlaying = playing;
+    current = saved.task; timeline = saved.events; replayIndex = index; replayLoading = false;
+    if (replayPlaying) replayClock.play();
     replayDelta=saved.checkpoint??compareCheckpoint(saved.task,undefined,{baseline:'unknown'});
     const primary=replayDelta.changes.find(change=>change.kind==='branch'&&change.change!=='removed');
     detailGeneration++; selectedNode = primary?.relatedIds[0]??primary?.nodeId??(current.status==='completed'?'goal':'origin'); renderCurrent(); showError(); scheduleReplay();
-  } catch (error) { if (generation === replayGeneration) { stopReplayPlayback(); renderReplay(); showError(error); } }
+  } catch (error) { if (generation === replayGeneration) { replayLoading = false; stopReplayPlayback(); renderReplay(); showError(error); } }
 }
 async function startReplay() {
   if (!current || replayActive) return;
-  replayActive = true; replayFrames = []; replayIndex = -1; replayChanged = false; replayFollow=true;
+  replayActive = true; replayFrames = []; replayIndex = -1; replayChanged = false; replayFollow=true; replayLoading = true;
   const generation = ++replayGeneration, taskId = selectedTask; renderReplay();
   try {
     let after = 0, head: number | undefined;
@@ -208,8 +255,10 @@ async function startReplay() {
       if (page.next === null) break; after = page.next;
     } while (true);
     if (!replayFrames.length) throw new Error('此任务暂无可回放的状态');
+    replayAxis = replayTimeline(replayFrames); replayClock = new ReplayClock(replayAxis.durationMs);
+    replayClock.setRate(Number(byId<HTMLSelectElement>('replay-speed').value)); renderReplayMarkers();
     needsFit = true; viewportCustomized = false;
-    await seekReplay(0, true);
+    await seekReplayTime(0, true);
   } catch (error) { if (generation === replayGeneration) { resetReplay(); showError(error); void refresh(); } }
 }
 function renderCurrent() {
@@ -225,7 +274,7 @@ function renderCurrent() {
 }
 function tick() {
   if (!current) return;
-  const deadline = current.budget.deadline, now = replayActive ? Date.parse(current.updatedAt) : Date.now();
+  const deadline = current.budget.deadline, now = replayActive ? replayAxis.startMs + replayClock.position : Date.now();
   byId('clock-stat').hidden = !deadline || current.status === 'completed';
   text('clock-label', '提醒剩余时间');
   const clock = byId('clock'); clock.classList.toggle('expired', !!deadline && Date.parse(deadline) <= now);
@@ -261,7 +310,7 @@ function renderGraph() {
   }
   for (const node of nodes.values()) {
     const actor=node.actor==='main'?'主 Agent':node.actor==='subagent'?'子 Agent':'';
-    const palette = graphPalette[node.status], group = svg('g', { class: `node status-${node.status}${selectedNode === node.id ? ' selected' : ''}${changed.has(node.id)?' checkpoint-changed':changed.size?' checkpoint-unchanged':''}`, transform: `translate(${node.x},${node.y})`, role: 'button', tabindex: '0', 'aria-label': `${actor?actor+'，':''}${graphKindLabels[node.kind]}：${node.label}，${node.state}${changed.has(node.id)?'，本检查点变化':''}`, 'data-node-id': node.id, 'data-node-kind': node.kind, 'data-node-status': node.status,'data-node-actor':node.actor??'shared','data-checkpoint-changed':String(changed.has(node.id)) });
+    const palette = graphPalette[node.status], group = svg('g', { class: `node status-${node.status}${selectedNode === node.id ? ' selected' : ''}${changed.has(node.id)?' checkpoint-changed':changed.size?' checkpoint-unchanged':''}`, transform: `translate(${node.x},${node.y})`, role: 'button', tabindex: '0', 'aria-label': `${actor?actor+'，':''}${graphKindLabels[node.kind]}：${node.label}，${node.state}${changed.has(node.id)?'，最近记录的变化':''}`, 'data-node-id': node.id, 'data-node-kind': node.kind, 'data-node-status': node.status,'data-node-actor':node.actor??'shared','data-checkpoint-changed':String(changed.has(node.id)) });
     if(changed.has(node.id))group.append(svg('rect',{x:-4,y:-4,width:width+8,height:height+8,rx:14,class:'change-outline',fill:'none',stroke:'#2563eb'}));
     group.append(svg('rect', { width, height, rx: 11, fill: palette.fill, stroke: palette.stroke,class:'node-body' }));
     const role=actor?(node.actor==='subagent'&&['basis','claim'].includes(node.kind)?'子 Agent 分支':actor)+' · ':'';
@@ -282,7 +331,7 @@ function renderGraph() {
   }
   if (!nodes.has(selectedNode)) selectedNode = 'origin';
   if (needsFit && activeView === 'graph') { needsFit = false; fit(); } else applyTransform();
-  if(replayActive&&replayFollow&&!viewportCustomized&&activeView==='graph')followCheckpoint();
+  if(replayActive&&replayFollow&&!viewportCustomized&&activeView==='graph')followReplayActivity();
 }
 function inspect(id: string) { selectedNode = id;switchInspector('details'); document.querySelectorAll<SVGElement>('.node').forEach(node => node.classList.toggle('selected', node.dataset.nodeId === id)); void renderDetails(); }
 function focusNodes(ids:string[]){
@@ -291,7 +340,7 @@ function focusNodes(ids:string[]){
   transform.scale=Math.max(.08,Math.min(1.1,(rect.width-70)/(right-left),(rect.height-70)/(bottom-top)));
   transform.x=rect.width/2-(left+right)/2*transform.scale;transform.y=rect.height/2-(top+bottom)/2*transform.scale;viewportCustomized=true;applyTransform();
 }
-function followCheckpoint(){
+function followReplayActivity(){
   const flow=[...nodes.values()].filter(node=>node.kind==='branch'||node.kind==='review');
   focusNodes(flow.length?flow.map(node=>node.id):replayDelta?.highlighted??[]);viewportCustomized=false;
 }
@@ -335,7 +384,7 @@ async function renderDetails() {
   const task = current; if (!task) return;
   const generation = ++detailGeneration, panel = byId('details'); panel.replaceChildren();
   const delta=replayActive?replayDelta?.changes.find(change=>change.nodeId===selectedNode||change.relatedIds.includes(selectedNode)):undefined;
-  if(delta)panel.append(create('div','checkpoint-detail',`本阶段检查点 · ${delta.label}${delta.before?`\n${delta.before} → ${delta.after??'已移除'}`:''}`));
+  if(delta)panel.append(create('div','checkpoint-detail',`最近记录 · ${delta.label}${delta.before?`\n${delta.before} → ${delta.after??'已移除'}`:''}`));
   const reviewing=selectedNode.startsWith('review:');
   if(selectedNode.startsWith('branch:')||reviewing){
     const branch=task.branches.find(item=>item.key===selectedNode.slice(7));
@@ -344,7 +393,7 @@ async function renderDetails() {
       metadata(panel,'负责人',reviewing?'主 Agent':branch.executor==='subagent'?`子 Agent · ${branch.executorLabel}`:branch.executorLabel);metadata(panel,'分支标识',branch.key);
       if(reviewing)metadata(panel,'结果返回自',`子 Agent · ${branch.executorLabel}`);
       if(branch.agentId)metadata(panel,'宿主 Agent ID',branch.agentId);
-      metadata(panel,'状态来源',reviewing?'阶段检查点中的分支复核状态':branch.activitySource==='host'?'主 Agent 状态与宿主生命周期':'主 Agent 报告');
+      metadata(panel,'状态来源',reviewing?'保存记录中的分支复核状态':branch.activitySource==='host'?'主 Agent 状态与宿主生命周期':'主 Agent 报告');
       if(branch.activitySource==='host')metadata(panel,'最近宿主事件',branch.activityStatus==='returned'?'执行已结束':'开始执行');
       metadata(panel,'负责人代次',branch.epoch);metadata(panel,'最近更新',formatTime(branch.updatedAt));
       if(branch.question){heading(panel,'排查问题');panel.append(create('div','detail-text',branch.question));}
@@ -365,7 +414,7 @@ async function renderDetails() {
   if (node.kind === 'origin' || node.kind === 'goal') {
     if(task.checkpoint){
       heading(panel,'最新进展');panel.append(create('div','detail-text',task.checkpoint.summary));
-      metadata(panel,'检查点时间',formatTime(task.checkpoint.at));
+      metadata(panel,'记录时间',formatTime(task.checkpoint.at));
       if(task.checkpoint.questions.length){heading(panel,'未解决问题');for(const question of task.checkpoint.questions)panel.append(create('div','detail-text',`· ${question}`));}
       if(task.checkpoint.next&&task.status!=='completed'){heading(panel,'下一步');panel.append(create('div','detail-text',task.checkpoint.next));}
     }
@@ -468,7 +517,7 @@ function renderEvents() {
 }
 function renderReport() {
   const task = current!, panel = byId('report-panel'); panel.replaceChildren(create('h2', 'panel-title', '任务结果与依据'));
-  if (!task.report) { panel.append(create('p', 'note', '尚未保存报告。Agent 记录检查点或完成任务时，会按结论及其证据生成报告引用。')); return; }
+  if (!task.report) { panel.append(create('p', 'note', '尚未保存报告。Agent 保存进展或完成任务时，会按结论及其证据生成报告引用。')); return; }
   if(task.reportCheck&&!task.reportCheck.ok)panel.append(create('div','notice',`报告仍需补齐：${task.reportCheck.issues.join('；')}`));
   const section = (title: string, value: string | undefined) => { if (!value) return; const block = create('section', 'report-section'); block.append(create('h3', '', title), create('p', '', value)); panel.append(block); };
   section('结果总结', task.report.summary);
@@ -501,25 +550,30 @@ function renderSidebar(){
 document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => { button.onclick = () => switchView(button.dataset.view!); });
 byId<HTMLInputElement>('search').oninput = renderTasks; byId<HTMLSelectElement>('filter').onchange = renderTasks;
 byId('show-goal').onclick = () => {replayFollow=false;inspect('goal');focusNodes(['goal']);};
-byId('focus-change').onclick=()=>{replayFollow=true;followCheckpoint();};
+byId('focus-change').onclick=()=>{replayFollow=true;followReplayActivity();};
 byId('replay-start').onclick = () => { void startReplay(); };
 byId('replay-live').onclick = () => { resetReplay(); void refresh(); };
-byId('replay-prev').onclick = () => { void seekReplay(replayIndex - 1); };
-byId('replay-next').onclick = () => { void seekReplay(replayIndex + 1); };
-byId('replay-restart').onclick = () => { void seekReplay(0, true); };
+byId('replay-prev').onclick = () => { void seekReplayTime(replayAxis.offsets.findLast(offset => offset < replayClock.position) ?? 0); };
+byId('replay-next').onclick = () => { void seekReplayTime(replayAxis.offsets.find(offset => offset > replayClock.position) ?? replayAxis.durationMs); };
+byId('replay-restart').onclick = () => { void seekReplayTime(0, true); };
 byId('replay-play').onclick = () => {
-  if (replayPlaying) { replayGeneration++; stopReplayPlayback(); renderReplay(); }
-  else if (replayIndex >= replayFrames.length - 1) void seekReplay(0, true);
-  else { replayPlaying = true; renderReplay(); scheduleReplay(); }
+  if (replayPlaying) { stopReplayPlayback(); renderReplay(); }
+  else if (replayClock.position >= replayAxis.durationMs) void seekReplayTime(0, true);
+  else if (!replayLoading && replayIndexAt(replayAxis, replayClock.position) !== replayIndex) void seekReplayTime(replayClock.position, true);
+  else { replayPlaying = true; if (!replayLoading) replayClock.play(); renderReplay(); scheduleReplay(); }
 };
-byId<HTMLInputElement>('replay-seek').oninput = () => { void seekReplay(Number(byId<HTMLInputElement>('replay-seek').value)); };
-byId<HTMLSelectElement>('replay-speed').onchange = () => { if (replayPlaying) { replayGeneration++; stopReplayPlayback(); replayPlaying = true; scheduleReplay(); } };
+byId<HTMLInputElement>('replay-seek').oninput = () => { void seekReplayTime(Number(byId<HTMLInputElement>('replay-seek').value)); };
+byId<HTMLSelectElement>('replay-speed').onchange = () => {
+  replayClock.setRate(Number(byId<HTMLSelectElement>('replay-speed').value));
+  if (replayTimer !== undefined) clearTimeout(replayTimer);
+  replayTimer = undefined; renderReplayTime(); scheduleReplay();
+};
 byId('snapshot').onclick=()=>{if(current)location.href=`/api/tasks/${encodeURIComponent(current.id)}/export?format=html`;};
 byId('back-to-list').onclick=()=>{resetReplay();overviewMode=true;selectedTask='';current=undefined;detailGeneration++;history.replaceState(null,'',location.pathname);applyMode();void refresh();};
 byId<HTMLSelectElement>('layout').onchange=()=>{layout=byId<HTMLSelectElement>('layout').value === 'vertical' ? 'vertical' : 'horizontal';needsFit=true;renderGraph();};
 document.querySelectorAll<HTMLButtonElement>('[data-inspector]').forEach(button=>{button.onclick=()=>switchInspector(button.dataset.inspector!);});
 byId('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await byId('graph-wrap').requestFullscreen();}catch(error){showError(error);}};
-document.addEventListener('fullscreenchange',()=>{const button=byId('fullscreen');button.setAttribute('aria-label',document.fullscreenElement?'退出全屏':'全屏画布');requestAnimationFrame(()=>replayActive&&replayFollow?followCheckpoint():fit());});
+document.addEventListener('fullscreenchange',()=>{const button=byId('fullscreen');button.setAttribute('aria-label',document.fullscreenElement?'退出全屏':'全屏画布');requestAnimationFrame(()=>replayActive&&replayFollow?followReplayActivity():fit());});
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.fullscreenElement)void document.exitFullscreen().catch(showError);});
 const resizer=byId('panel-resizer'),board=document.querySelector<HTMLElement>('.board')!;
 const resizePanel=(width:number)=>{const value=Math.max(270,Math.min(width,Math.min(700,board.clientWidth*.6)));board.style.setProperty('--inspector-width',`${value}px`);resizer.setAttribute('aria-valuenow',String(Math.round(value)));};
@@ -528,7 +582,7 @@ resizer.onpointermove=event=>{if(resizer.hasPointerCapture(event.pointerId))resi
 resizer.onpointerup=event=>{if(resizer.hasPointerCapture(event.pointerId))resizer.releasePointerCapture(event.pointerId);};
 resizer.onkeydown=event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();resizePanel(document.querySelector<HTMLElement>('.inspector')!.getBoundingClientRect().width+(event.key==='ArrowLeft'?20:-20));}};
 byId('download').onclick = () => { if (current) location.href = `/api/tasks/${encodeURIComponent(current.id)}/export?format=markdown`; };
-new ResizeObserver(() => { if (current && activeView === 'graph') { if(replayActive&&replayFollow)followCheckpoint();else fit(); } }).observe(graph);
+new ResizeObserver(() => { if (current && activeView === 'graph') { if(replayActive&&replayFollow)followReplayActivity();else fit(); } }).observe(graph);
 const stream = new EventSource('/api/stream');
 stream.addEventListener('ready', () => { byId('connection').classList.remove('offline'); byId('connection').lastElementChild!.textContent = '实时同步'; void refresh(); });
 stream.addEventListener('change', () => { if (replayActive) replayChanged = true; void refresh(); });

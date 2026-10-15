@@ -1,4 +1,4 @@
-# Cairn 4.3 plugin architecture
+# Cairn 4.4 plugin architecture
 
 Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
 
@@ -88,13 +88,13 @@ Official references: [Codex subagents](https://learn.chatgpt.com/docs/agent-conf
 
 Existing TypeScript SQLite tasks and reports remain available with their original mode. Older Python formats have no automatic migration. Replacing the public workflow does not erase task history.
 
-## Checkpoint replay semantics
+## Recorded-time replay semantics
 
 The replay endpoint projects the requested state and its immediately preceding available visible state in the same task. The response includes a semantic checkpoint delta: changes, highlighted node IDs, prior sequence/time, elapsed save interval and gap disclosure. It does not compare against the browser's last visited frame, so direct/backward seeks have the same result. Missing intermediate snapshots produce an explicitly aggregate delta; unavailable baselines produce no inferred highlights.
 
 Graph comparisons exclude storage revisions, timestamps and geometry, and canonicalize dictionary/relation order. Origin/goal signatures contain only meaningful visible state. Branch transitions group the derived review node with its source branch, rather than presenting one returned result as two operations. Removed information is listed without drawing a current ghost node. Actor lanes and review/return links derive from saved branch assignment and acceptance; they do not add domain events, tool telemetry, private reasoning or measured execution spans.
 
-The replay UI labels each frame as a stage checkpoint, shows save time and recorded parallel states, and keeps state colors while outlining changed nodes. Its default camera focuses branch execution and review; fit and source links expose the full graph. A checkpoint may batch updates, and the displayed save interval is not an operation duration or evidence of simultaneous execution. Live updates remain isolated until the user returns live.
+The replay UI uses a continuous time axis derived from recorded timestamps, with 1×/5×/10×/30×/60× actual time multipliers, a millisecond seek range, elapsed/total duration and proportional record markers. A monotonic clock anchors playback, so delayed timer ticks do not change the rate. Between records it holds the last known state; loading buffers at the next transition. Pause intent survives in-flight reads, and newer seeks invalidate stale responses. Equal-time records share an instant and display the latest ledger state; invalid/regressing timestamps are clamped in ledger order and disclosed. No operation duration or concurrency is inferred from a batched save. State colors, recent-change outlines, actor lanes and review nodes remain visible. Its default camera focuses branch execution and review; fit and source links expose the full graph. Live updates remain isolated until the user returns live.
 
 ## Native adapters
 
