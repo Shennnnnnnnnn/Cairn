@@ -54,10 +54,32 @@ export async function startUi(engine: Engine, options: UiOptions = {}) {
         const seq = sequence(); clients.set(response, seq); send(response, 'ready', seq);
         response.on('close', () => clients.delete(response)); return;
       }
-      const match = /^\/api\/tasks\/([^/]+)(?:\/(observations|events|export)(?:\/([^/]+))?)?$/.exec(url.pathname);
+      const match = /^\/api\/tasks\/([^/]+)(?:\/(observations|events|export|replay)(?:\/([^/]+))?)?$/.exec(url.pathname);
       if (!match) { json(response, { error: 'Not found' }, 404); return; }
       const taskId = decodeURIComponent(match[1]!), task = engine.store.get(taskId);
       if (!match[2]) { json(response, projectTask(engine, task)); return; }
+      if (match[2] === 'replay') {
+        const cursor = (value: string | null, fallback = 0) => {
+          const number = value === null ? fallback : Number(value);
+          if (!Number.isSafeInteger(number) || number < 0) throw new CairnError('invalid_input', 'Invalid replay cursor');
+          return number;
+        };
+        const curated = task.evidenceMode === 'curated';
+        const visible = curated ? "AND e.kind NOT IN ('tool.started','observation.captured')" : '';
+        if (match[3]) {
+          const seq = cursor(match[3]), saved = engine.store.historical(taskId, seq);
+          // A switch to curated mode must not reopen old captured records.
+          if (curated) saved.task.evidenceMode = 'curated';
+          const rows = engine.store.db.prepare(`SELECT e.seq,e.kind,e.at,e.payload FROM events e WHERE e.task_id=? AND e.seq<=? ${visible} ORDER BY e.seq DESC LIMIT 100`).all(taskId, seq).reverse();
+          json(response, { task: projectTask(engine, saved.task, saved.at), seq, events: rows.map(row => projectEvent({ seq: Number(row.seq), kind: row.kind as string, at: row.at as string, payload: JSON.parse(row.payload as string) })) }); return;
+        }
+        const after = cursor(url.searchParams.get('after'));
+        const head = cursor(url.searchParams.get('head'), Number(engine.store.db.prepare('SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE task_id=?').get(taskId)!.seq));
+        const counts = engine.store.db.prepare(`SELECT COUNT(*) AS events,COUNT(h.event_seq) AS frames FROM events e LEFT JOIN task_history h ON h.event_seq=e.seq WHERE e.task_id=? AND e.seq<=? ${visible}`).get(taskId, head)!;
+        const rows = engine.store.db.prepare(`SELECT e.seq,e.kind,e.at,e.payload FROM events e JOIN task_history h ON h.event_seq=e.seq WHERE e.task_id=? AND e.seq>? AND e.seq<=? ${visible} ORDER BY e.seq LIMIT 101`).all(taskId, after, head);
+        const frames = rows.slice(0,100).map(row => projectEvent({ seq: Number(row.seq), kind: row.kind as string, at: row.at as string, payload: JSON.parse(row.payload as string) }));
+        json(response, { frames, total: Number(counts.frames), missing: Number(counts.events)-Number(counts.frames), head, next: rows.length > 100 ? frames.at(-1)!.seq : null }); return;
+      }
       if (match[2] === 'observations') {
         if (task.evidenceMode === 'curated') throw new CairnError('not_found', 'This task does not expose raw tool records');
         const observation = task.observations.find(o => o.id === decodeURIComponent(match[3] ?? ''));

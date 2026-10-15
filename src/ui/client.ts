@@ -1,4 +1,4 @@
-import type { TaskView, TaskSummary, TimelineEvent } from './view.js';
+import type { TaskView, TaskSummary, TimelineEvent, ReplayPage, ReplayState } from './view.js';
 import type { Observation } from '../core/types.js';
 import { projectGraph, layoutGraph, graphNodeSize, graphPalette, graphKindLabels } from './graph.js';
 import type { GraphNode } from './graph.js';
@@ -43,6 +43,8 @@ let refreshBusy = false, refreshAgain = false, detailGeneration = 0;
 let graphSize = { width: 1180, height: 260 }, transform = { x: 15, y: 15, scale: .7 }, needsFit = true;
 let viewportCustomized=false;
 const rawCache = new Map<string, Observation>();
+let replayActive = false, replayPlaying = false, replayFrames: TimelineEvent[] = [], replayIndex = -1;
+let replayTimer: ReturnType<typeof setTimeout> | undefined, replayGeneration = 0, replayMissing = 0, replayChanged = false;
 try { selectedTask = decodeURIComponent(location.hash.slice(1)); } catch { /* invalid fragments return to the task overview */ }
 overviewMode=!selectedTask;
 
@@ -79,6 +81,7 @@ function applyMode(){
   byId('overview').hidden=!overviewMode||!tasks.length;byId('empty').hidden=!overviewMode||!!tasks.length;byId('task-view').hidden=overviewMode;
 }
 function selectTask(id: string) {
+  resetReplay();
   overviewMode=false;applyMode();
   if (selectedTask !== id) { selectedTask = id; selectedNode = 'origin'; needsFit = true; current = undefined; rawCache.clear(); }
   history.replaceState(null, '', `#${encodeURIComponent(id)}`); renderTasks(); void refresh();
@@ -90,20 +93,91 @@ async function refresh() {
     do {
       refreshAgain = false;
       const list = await request<{ tasks: TaskSummary[] }>('/api/tasks'); tasks = list.tasks;
-      if (!overviewMode&&!tasks.some(t => t.id === selectedTask)) { selectedTask = ''; overviewMode=true;selectedNode = 'origin'; needsFit = true; }
+      if (!overviewMode&&!tasks.some(t => t.id === selectedTask)) { resetReplay(); selectedTask = ''; overviewMode=true;selectedNode = 'origin'; needsFit = true; }
       renderTasks();
       applyMode();
       if (overviewMode) { current = undefined; showError(); continue; }
+      if (replayActive) { renderReplay(); continue; }
       const requestedId = selectedTask;
       const [task, events] = await Promise.all([
         request<TaskView>(`/api/tasks/${encodeURIComponent(requestedId)}`),
         request<{ events: TimelineEvent[] }>(`/api/tasks/${encodeURIComponent(requestedId)}/events`),
       ]);
-      if (requestedId !== selectedTask) { refreshAgain = true; continue; }
+      if (requestedId !== selectedTask || replayActive) { refreshAgain = true; continue; }
       current = task; timeline = events.events; renderCurrent(); showError();
     } while (refreshAgain);
   } catch (error) { showError(error); }
   finally { refreshBusy = false; }
+}
+function stopReplayPlayback() {
+  replayPlaying = false;
+  if (replayTimer !== undefined) clearTimeout(replayTimer);
+  replayTimer = undefined;
+}
+function resetReplay() {
+  stopReplayPlayback(); replayGeneration++; replayActive = false; replayFrames = []; replayIndex = -1;
+  replayMissing = 0; replayChanged = false; renderReplay();
+}
+function renderReplay() {
+  document.body.classList.toggle('replay-mode', replayActive);
+  byId('replay-bar').hidden = !replayActive;
+  byId<HTMLButtonElement>('replay-start').disabled = replayActive;
+  for (const id of ['snapshot', 'download']) {
+    byId<HTMLButtonElement>(id).disabled = replayActive;
+    byId(id).title = replayActive ? '返回实时后导出最新任务状态' : '';
+  }
+  if (!replayActive) return;
+  const event = replayFrames[replayIndex], ready = !!event;
+  text('replay-position', ready ? `${replayIndex + 1} / ${replayFrames.length} 条记录` : '正在读取历史…');
+  text('replay-time', event ? new Date(event.at).toLocaleString('zh-CN', { hour12: false }) : '');
+  text('replay-event', event ? `${event.title}${event.summary ? ` · ${event.summary}` : ''}` : '');
+  text('replay-play', replayPlaying ? '暂停' : replayIndex === replayFrames.length - 1 && ready ? '重播' : '播放');
+  byId<HTMLButtonElement>('replay-prev').disabled = !ready || replayIndex === 0;
+  byId<HTMLButtonElement>('replay-next').disabled = !ready || replayIndex === replayFrames.length - 1;
+  byId<HTMLButtonElement>('replay-play').disabled = !ready || replayFrames.length < 2;
+  byId<HTMLButtonElement>('replay-restart').disabled = !ready;
+  const seek = byId<HTMLInputElement>('replay-seek'); seek.disabled = !ready; seek.max = String(Math.max(0, replayFrames.length - 1)); seek.value = String(Math.max(0, replayIndex));
+  seek.setAttribute('aria-valuetext', event ? `第 ${replayIndex + 1} 条，${event.title}` : '正在读取');
+  const notices = ['仅查看已保存的目标、阶段和依据；不会重新执行工具。'];
+  if (replayMissing) notices.push(`旧任务有 ${replayMissing} 条记录未保存对应状态，仅回放可还原的起点、最新状态及升级后记录。`);
+  if (replayChanged) notices.push('实时任务有新记录，当前回放保持不变；返回实时可查看最新状态。');
+  text('replay-notice', notices.join(' ')); byId('replay-notice').hidden = false;
+}
+function scheduleReplay() {
+  if (!replayPlaying) return;
+  if (replayIndex >= replayFrames.length - 1) { stopReplayPlayback(); renderReplay(); return; }
+  replayTimer = setTimeout(() => { void seekReplay(replayIndex + 1, true); }, Number(byId<HTMLSelectElement>('replay-speed').value));
+}
+async function seekReplay(index: number, playing = false) {
+  stopReplayPlayback();
+  const frame = replayFrames[index]; if (!frame || !replayActive) return;
+  // Preserve the playback intent while a frame is loading. A pause click must
+  // cancel that request's continuation, rather than accidentally start a timer.
+  replayPlaying = playing; text('replay-play', playing ? '暂停' : '播放');
+  const generation = ++replayGeneration, taskId = selectedTask;
+  try {
+    const saved = await request<ReplayState>(`/api/tasks/${encodeURIComponent(taskId)}/replay/${frame.seq}`);
+    if (!replayActive || generation !== replayGeneration || selectedTask !== taskId) return;
+    current = saved.task; timeline = saved.events; replayIndex = index; replayPlaying = playing;
+    detailGeneration++; selectedNode = 'origin'; renderCurrent(); showError(); scheduleReplay();
+  } catch (error) { if (generation === replayGeneration) { stopReplayPlayback(); renderReplay(); showError(error); } }
+}
+async function startReplay() {
+  if (!current || replayActive) return;
+  replayActive = true; replayFrames = []; replayIndex = -1; replayChanged = false;
+  const generation = ++replayGeneration, taskId = selectedTask; renderReplay();
+  try {
+    let after = 0, head: number | undefined;
+    do {
+      const page = await request<ReplayPage>(`/api/tasks/${encodeURIComponent(taskId)}/replay?after=${after}${head === undefined ? '' : `&head=${head}`}`);
+      if (!replayActive || generation !== replayGeneration || selectedTask !== taskId) return;
+      replayFrames.push(...page.frames); replayMissing = page.missing; head = page.head;
+      if (page.next === null) break; after = page.next;
+    } while (true);
+    if (!replayFrames.length) throw new Error('此任务暂无可回放的状态');
+    needsFit = true; viewportCustomized = false;
+    await seekReplay(0, true);
+  } catch (error) { if (generation === replayGeneration) { resetReplay(); showError(error); void refresh(); } }
 }
 function renderCurrent() {
   const task = current!;
@@ -112,11 +186,11 @@ function renderCurrent() {
   text('owner', `${task.owner.host} · ${task.owner.epoch > 1 ? `接管 ${task.owner.epoch - 1} 次` : '主会话'}`);
   text('created', `创建于 ${new Date(task.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}`);
   text('updated', `最近更新 ${formatTime(task.updatedAt)}`);
-  tick(); renderGraph(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); void renderDetails();
+  tick(); renderGraph(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); renderReplay(); void renderDetails();
 }
 function tick() {
   if (!current) return;
-  const deadline = current.budget.deadline, now = Date.now();
+  const deadline = current.budget.deadline, now = replayActive ? Date.parse(current.updatedAt) : Date.now();
   byId('clock-stat').hidden = !deadline || current.status === 'completed';
   text('clock-label', '提醒剩余时间');
   const clock = byId('clock'); clock.classList.toggle('expired', !!deadline && Date.parse(deadline) <= now);
@@ -339,8 +413,20 @@ function renderSidebar(){
 document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => { button.onclick = () => switchView(button.dataset.view!); });
 byId<HTMLInputElement>('search').oninput = renderTasks; byId<HTMLSelectElement>('filter').onchange = renderTasks;
 byId('show-goal').onclick = () => inspect('goal');
+byId('replay-start').onclick = () => { void startReplay(); };
+byId('replay-live').onclick = () => { resetReplay(); void refresh(); };
+byId('replay-prev').onclick = () => { void seekReplay(replayIndex - 1); };
+byId('replay-next').onclick = () => { void seekReplay(replayIndex + 1); };
+byId('replay-restart').onclick = () => { void seekReplay(0, true); };
+byId('replay-play').onclick = () => {
+  if (replayPlaying) { replayGeneration++; stopReplayPlayback(); renderReplay(); }
+  else if (replayIndex >= replayFrames.length - 1) void seekReplay(0, true);
+  else { replayPlaying = true; renderReplay(); scheduleReplay(); }
+};
+byId<HTMLInputElement>('replay-seek').oninput = () => { void seekReplay(Number(byId<HTMLInputElement>('replay-seek').value)); };
+byId<HTMLSelectElement>('replay-speed').onchange = () => { if (replayPlaying) { replayGeneration++; stopReplayPlayback(); replayPlaying = true; scheduleReplay(); } };
 byId('snapshot').onclick=()=>{if(current)location.href=`/api/tasks/${encodeURIComponent(current.id)}/export?format=html`;};
-byId('back-to-list').onclick=()=>{overviewMode=true;selectedTask='';current=undefined;detailGeneration++;history.replaceState(null,'',location.pathname);applyMode();void refresh();};
+byId('back-to-list').onclick=()=>{resetReplay();overviewMode=true;selectedTask='';current=undefined;detailGeneration++;history.replaceState(null,'',location.pathname);applyMode();void refresh();};
 byId<HTMLSelectElement>('layout').onchange=()=>{layout=byId<HTMLSelectElement>('layout').value === 'vertical' ? 'vertical' : 'horizontal';needsFit=true;renderGraph();};
 document.querySelectorAll<HTMLButtonElement>('[data-inspector]').forEach(button=>{button.onclick=()=>switchInspector(button.dataset.inspector!);});
 byId('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await byId('graph-wrap').requestFullscreen();}catch(error){showError(error);}};
@@ -356,8 +442,8 @@ byId('download').onclick = () => { if (current) location.href = `/api/tasks/${en
 new ResizeObserver(() => { if (current && activeView === 'graph') fit(); }).observe(graph);
 const stream = new EventSource('/api/stream');
 stream.addEventListener('ready', () => { byId('connection').classList.remove('offline'); byId('connection').lastElementChild!.textContent = '实时同步'; void refresh(); });
-stream.addEventListener('change', () => { void refresh(); });
+stream.addEventListener('change', () => { if (replayActive) replayChanged = true; void refresh(); });
 stream.onerror = () => { byId('connection').classList.add('offline'); byId('connection').lastElementChild!.textContent = '正在重连'; };
-window.addEventListener('pagehide', () => stream.close());
+window.addEventListener('pagehide', () => { stopReplayPlayback(); stream.close(); });
 setInterval(tick, 1000);
 void refresh();

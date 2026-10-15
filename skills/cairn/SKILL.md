@@ -41,7 +41,7 @@ Resume returns bounded goal/progress/findings/questions/source pointers. Check t
 
 ## Delegation and optional capture
 
-Use subagents for independent work when useful. A child context is not automatically an independent native CLI session or the owner of this goal. Keep the main agent responsible for the root goal; merge child results into its findings. A new native session still uses explicit resume/takeover. Do not create a mandatory coordinator/worker loop to refresh context.
+Cairn does not spawn sessions or calculate a session count. Default to the current main session. Consider host-native subagents when concrete questions can be investigated independently and their expected value exceeds the coordination cost; choose the number from those independent branches, available host capacity and user constraints. Keep dependent steps in the main session. Give each helper a specific scope and request findings with supporting references. Use subagents for independent work when useful. A child context is not automatically an independent native CLI session or the owner of this goal. Keep the main agent responsible for the root goal; merge child results into its findings. A new native session still uses explicit resume/takeover. Do not create a mandatory coordinator/worker loop to refresh context.
 
 Only when the user requests automatic evidence capture, start with `evidence_mode: "captured"`. This mode stores native tool results where hooks cover them and supports configured `cairn_tool_*` gateways, E# references and optional enforced call limits. A supported captured finding requires eligible original observations; curated basis alone cannot bypass these checks.
 

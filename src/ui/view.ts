@@ -42,11 +42,11 @@ function projectWork(task: Task, updatedAt: string): { items: WorkItem[]; source
     ? { ...item, status: task.status === 'suspended' ? 'blocked' : 'pending', statusLabel: task.status === 'suspended' ? '已暂停 · 等待恢复' : '阶段未单独确认' }
     : item) };
 }
-export function projectTask(engine: Engine, task: Task): TaskView {
+export function projectTask(engine: Engine, task: Task, historicalAt?: string): TaskView {
   const check = engine.evaluate(task), reportCheck = task.report ? engine.evaluateReport(task, task.report) : undefined;
   const progress = { satisfied: task.criteria.length - check.unmet.length, total: task.criteria.length };
-  const latest = engine.store.db.prepare('SELECT at FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1').get(task.id);
-  const updatedAt = latest?.at as string ?? task.checkpoint?.at ?? task.createdAt;
+  const latest = historicalAt ? undefined : engine.store.db.prepare('SELECT at FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1').get(task.id);
+  const updatedAt = historicalAt ?? latest?.at as string ?? task.checkpoint?.at ?? task.createdAt;
   const work = projectWork(task, updatedAt);
   // Historical criteria use current validated coverage, never the presence of a link alone.
   for (const item of work.items.filter(i => i.source === 'criterion')) {
@@ -66,7 +66,7 @@ export function projectTask(engine: Engine, task: Task): TaskView {
   let phase = { key: 'investigating', label: workCounts.running ? 'Agent 报告执行中' : '目标推进中' };
   if (task.status === 'completed') phase = { key: 'completed', label: '已完成' };
   else if (task.status === 'suspended') phase = { key: 'suspended', label: '已暂停' };
-  else if (task.budget.deadline && Date.parse(task.budget.deadline) <= engine.now().getTime()) phase = { key: 'expired', label: '提醒时间已到' };
+  else if (task.budget.deadline && Date.parse(task.budget.deadline) <= (historicalAt ? Date.parse(historicalAt) : engine.now().getTime())) phase = { key: 'expired', label: '提醒时间已到' };
   else if (task.report && check.ok) phase = { key: 'reporting', label: reportCheck?.ok ? '报告待完成' : '报告待补齐' };
   else if (check.ok) phase = { key: 'verifying', label: '条件已满足' };
   else if (!task.observations.length && !metrics.calls && !task.checkpoint && !work.items.some(i => i.source !== 'criterion')) phase = { key: 'starting', label: '目标已建立' };
@@ -84,6 +84,8 @@ export function summaries(engine: Engine): TaskSummary[] {
 }
 
 export type TimelineEvent = { seq: number; kind: string; at: string; subject: string; observationId?: string; title: string; category: 'milestone' | 'evidence' | 'advanced'; status?: string; summary: string; detail?: string };
+export interface ReplayPage { frames: TimelineEvent[]; total: number; missing: number; head: number; next: number | null }
+export interface ReplayState { task: TaskView; events: TimelineEvent[]; seq: number }
 const titles: Record<string, string> = {
   'task.created': '开始目标', 'task.resumed': '接管并恢复', 'task.suspended': '暂停任务', 'task.completed': '已完成', 'task.checkpoint': '保存阶段进展',
   'tool.started': '开始历史工具调用', 'observation.captured': '保存原始观测', 'claim.revised': '更新结论', 'criterion.updated': '更新目标条件', 'action.updated': '更新行动进展',

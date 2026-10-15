@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 **Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-Cairn 4.0 gives the model five operations: **start, resume, read, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then saves meaningful progress, conclusions, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
+Cairn 4.1 gives the model five operations: **start, resume, read, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then saves meaningful progress, conclusions, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn keeps the goal and its progress in SQLite, with an optional blue-and-white dashboard. No upstream gateway or tool whitelist is required for an ordinary task.
 
@@ -133,6 +133,10 @@ cairn ui --forget  # clear the saved dashboard and exit
 UI database precedence is `--db` → `CAIRN_DB` → saved dashboard → current workspace. The setting is UI-specific; MCP, hooks and task commands keep their existing parameter/environment selection. Preferences live in `.cairn/ui.json` under the user home, or under `CAIRN_CONFIG_HOME` when set.
 
 Open the printed loopback URL. Without `--port`, Cairn tries `8000` and chooses a free port if occupied; explicit ports remain strict. The **relationship graph is the main view**; there is no separate progress board. It connects the starting context, recorded work, evidence, conclusions, completion criteria and goal. Teal marks the start, rose marks goals, indigo marks completed work/results, amber marks running work, and pale dashed nodes mark pending work. Labels distinguish role and status; goal nodes retain their role color when satisfied. Select a node for its details. Zoom, pan, fit, fullscreen and vertical/horizontal layouts remain available. The timeline highlights milestones with expandable details; captured tool events can be filtered separately.
+
+Select **▷ 回放** in a task to replay its saved graph, findings, details and timeline. Play/pause, step backward/forward, seek, restart and choose 0.5×/1×/2× speed. **返回实时** returns to the latest state. Playback never executes tools or changes the goal; it stays historical when it reaches the end. Export is available after returning to live mode.
+
+From 4.1, each committed event retains its domain state, including finding revisions and ownership changes, without duplicating raw tool inputs/results. Older databases have only verifiable creation/current-head baselines and subsequent frames; missing intermediate history is disclosed. Curated tasks still store no tool-call log.
 
 ![Blue-and-white relationship graph with synthetic demonstration data](docs/images/dashboard-graph.png)
 

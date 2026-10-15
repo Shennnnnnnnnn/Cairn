@@ -13,8 +13,22 @@ export class Store {
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, state TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL REFERENCES tasks(id), kind TEXT NOT NULL, payload TEXT NOT NULL, at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS events_task_seq ON events(task_id,seq);
+      CREATE TABLE IF NOT EXISTS task_history(event_seq INTEGER PRIMARY KEY REFERENCES events(seq), state TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(host TEXT NOT NULL, id TEXT NOT NULL, cwd TEXT NOT NULL, task_id TEXT, epoch INTEGER, capabilities TEXT NOT NULL DEFAULT '{}', seen TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(host,id));
       CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+    // Older databases did not retain intermediate states. Preserve only states we
+    // actually know: the creation payload and the current head. Never infer old
+    // conclusions from today's values or replay side effects to fill the gaps.
+    this.transaction(() => {
+      const missing = this.db.prepare(`SELECT e.seq,e.payload,t.state,e.kind FROM events e JOIN tasks t ON t.id=e.task_id
+        WHERE NOT EXISTS(SELECT 1 FROM task_history h WHERE h.event_seq=e.seq)
+        AND (e.kind='task.created' OR e.seq=(SELECT MAX(seq) FROM events WHERE task_id=t.id))`).all();
+      for (const row of missing) {
+        const task: Task = JSON.parse(row.kind === 'task.created' ? row.payload as string : row.state as string);
+        this.db.prepare('INSERT INTO task_history VALUES (?,?)').run(Number(row.seq), historyState(task));
+      }
+    });
   }
   close() { this.db.close(); }
   transaction<T>(fn: () => T): T {
@@ -33,8 +47,20 @@ export class Store {
     return rows[0]?JSON.parse(rows[0].state as string):undefined;
   }
   save(task: Task, kind: string, payload: unknown, at: string) {
-    this.db.prepare('INSERT INTO tasks VALUES (?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state').run(task.id, JSON.stringify(task));
-    this.db.prepare('INSERT INTO events(task_id,kind,payload,at) VALUES (?,?,?,?)').run(task.id, kind, JSON.stringify(payload), at);
+    // A savepoint is atomic both inside an Engine transaction and for direct
+    // Store callers. State, event and its historical frame can never diverge.
+    this.db.exec('SAVEPOINT cairn_save');
+    try {
+      this.db.prepare('INSERT INTO tasks VALUES (?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state').run(task.id, JSON.stringify(task));
+      const event = this.db.prepare('INSERT INTO events(task_id,kind,payload,at) VALUES (?,?,?,?)').run(task.id, kind, JSON.stringify(payload), at);
+      this.db.prepare('INSERT INTO task_history VALUES (?,?)').run(event.lastInsertRowid, historyState(task));
+      this.db.exec('RELEASE cairn_save');
+    } catch (error) { this.db.exec('ROLLBACK TO cairn_save; RELEASE cairn_save'); throw error; }
+  }
+  historical(taskId: string, seq: number): { task: Task; at: string } {
+    const row = this.db.prepare('SELECT h.state,e.at FROM task_history h JOIN events e ON e.seq=h.event_seq WHERE e.task_id=? AND e.seq=?').get(taskId, seq);
+    if (!row) throw new CairnError('not_found', 'No saved historical state for this task and event');
+    return { task: JSON.parse(row.state as string), at: row.at as string };
   }
   list(): Pick<Task, 'id' | 'goal' | 'status' | 'revision' | 'owner'>[] {
     return this.db.prepare('SELECT state FROM tasks ORDER BY rowid DESC').all().map(row => {
@@ -61,4 +87,9 @@ export class Store {
   events(taskId: string, after = 0) {
     return this.db.prepare('SELECT * FROM events WHERE task_id=? AND seq>? ORDER BY seq').all(taskId, after).map(r => ({ seq:r.seq as number,taskId:r.task_id as string,kind:r.kind as string,at:r.at as string,payload: JSON.parse(r.payload as string) }));
   }
+}
+
+/** Replay keeps domain state, without duplicating large/private raw tool IO. */
+function historyState(task: Task): string {
+  return JSON.stringify({ ...task, observations: task.observations.map(({ input: _input, output: _output, ...observation }) => ({ ...observation, input: null, output: null })) });
 }
