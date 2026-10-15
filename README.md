@@ -122,7 +122,17 @@ cairn ui
 cairn ui --port 8001 --db .cairn/state.db
 ```
 
-Open the printed loopback URL, default `http://127.0.0.1:8000`. The **relationship graph is the main view**; there is no separate progress board. It connects the starting context, recorded work, evidence, conclusions, completion criteria and goal. Teal marks the start, rose marks goals, indigo marks completed work/results, amber marks running work, and pale dashed nodes mark pending work. Labels distinguish role and status; goal nodes retain their role color when satisfied. Select a node for its details. Zoom, pan, fit, fullscreen and vertical/horizontal layouts remain available. The timeline highlights milestones with expandable details; captured tool events can be filtered separately.
+For a fixed database, such as a Multica runtime, remember it once. Later `cairn ui` works from any directory:
+
+```sh
+cairn ui --db /path/to/multica/state.db --remember
+cairn ui
+cairn ui --forget  # clear the saved dashboard and exit
+```
+
+UI database precedence is `--db` → `CAIRN_DB` → saved dashboard → current workspace. The setting is UI-specific; MCP, hooks and task commands keep their existing parameter/environment selection. Preferences live in `.cairn/ui.json` under the user home, or under `CAIRN_CONFIG_HOME` when set.
+
+Open the printed loopback URL. Without `--port`, Cairn tries `8000` and chooses a free port if occupied; explicit ports remain strict. The **relationship graph is the main view**; there is no separate progress board. It connects the starting context, recorded work, evidence, conclusions, completion criteria and goal. Teal marks the start, rose marks goals, indigo marks completed work/results, amber marks running work, and pale dashed nodes mark pending work. Labels distinguish role and status; goal nodes retain their role color when satisfied. Select a node for its details. Zoom, pan, fit, fullscreen and vertical/horizontal layouts remain available. The timeline highlights milestones with expandable details; captured tool events can be filtered separately.
 
 ![Blue-and-white relationship graph with synthetic demonstration data](docs/images/dashboard-graph.png)
 

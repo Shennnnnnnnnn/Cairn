@@ -2,6 +2,15 @@
 
 Record date: 2026-10-15 (Asia/Shanghai). Results below identify the evidence mode and distinguish automated integration checks from real model executions.
 
+## Cairn 3.0.2 shorter dashboard command
+
+Verified locally on 2026-10-15 (Asia/Shanghai).
+
+- **137 automated tests passed on Node 26.3.0**, including typecheck and bundle build. The seven new preference/CLI tests also passed on Node 24.19.0.
+- Real CLI subprocess tests verified that a successful `cairn ui --db FILE --remember` saves the database and a later plain `cairn ui` from another directory serves that same task data. Explicit `--db` and `CAIRN_DB` override the preference. `cairn task list` still selects its workspace database. `--forget` clears the UI preference and exits; subsequent UI startup uses the workspace database again.
+- With port 8000 occupied, a plain UI command selected a free loopback port. An explicit occupied port failed and did not replace saved settings. Test subprocesses and temporary configuration were isolated and cleaned up.
+- Unit checks covered private, atomic preference writes, cross-directory absolute paths, malformed settings with a recovery instruction, and clearing missing settings. UI layout and domain semantics were unchanged; the graph/browser verification below remains applicable.
+
 ## Cairn 3.0.1 relationship graph as the main view
 
 Verified locally on 2026-10-15 (Asia/Shanghai).

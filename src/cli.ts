@@ -16,6 +16,7 @@ import { ToolRuntime } from './tools.js';
 import { gatewaySchema, Gateway } from './gateway.js';
 import { markdown, html } from './export.js';
 import { startUi } from './ui/server.js';
+import { uiDatabase, rememberUiDatabase, forgetUiDatabase } from './ui/preferences.js';
 import { VERSION } from './version.js';
 import { prepareDemo, runDemo } from './demo.js';
 import { startDemoTools } from './demo-tools.js';
@@ -67,10 +68,12 @@ async function demonstration(v:{root?:string;port?:string;delay?:string;prepare?
 export async function main(argv=process.argv.slice(2)){
  const command=argv[0]??'help';
  if(['--version','-v','version'].includes(command)){process.stdout.write(`${VERSION}\n`);return;}
- const {values:v,positionals}=parseArgs({args:argv.slice(1),allowPositionals:true,options:{target:{type:'string'},scope:{type:'string'},root:{type:'string'},host:{type:'string'},port:{type:'string'},prepare:{type:'boolean'},'no-ui':{type:'boolean'},delay:{type:'string'},'session-id':{type:'string'},db:{type:'string'},file:{type:'string'},input:{type:'string'},'task-id':{type:'string'},format:{type:'string'},out:{type:'string'},'takeover':{type:'boolean'},'json':{type:'boolean'}}});
+ const {values:v,positionals}=parseArgs({args:argv.slice(1),allowPositionals:true,options:{target:{type:'string'},scope:{type:'string'},root:{type:'string'},host:{type:'string'},port:{type:'string'},remember:{type:'boolean'},forget:{type:'boolean'},prepare:{type:'boolean'},'no-ui':{type:'boolean'},delay:{type:'string'},'session-id':{type:'string'},db:{type:'string'},file:{type:'string'},input:{type:'string'},'task-id':{type:'string'},format:{type:'string'},out:{type:'string'},'takeover':{type:'boolean'},'json':{type:'boolean'}}});
+ if((v.remember||v.forget)&&command!=='ui')throw new CairnError('invalid_input','--remember and --forget are only available for cairn ui');
+ if(v.remember&&v.forget)throw new CairnError('invalid_input','Use either --remember or --forget');
  const output=(value:unknown)=>process.stdout.write(JSON.stringify(value??{ok:true},null,2)+'\n');
  if(command==='help'||command==='--help'){
-  process.stdout.write(`Cairn ${VERSION} — goals and evidence for Pi, Claude Code and Codex\n\nNode >=24 required. Install globally from the repository with npm run install:global.\n\n  cairn --version\n  cairn demo [--port 8000] [--delay 1500] [--no-ui] [--json]\n  cairn demo --prepare [--target pi|claude|codex] [--root NEW_DIR]\n  cairn install|update|uninstall --target pi|claude|codex [--scope project|user] [--root DIR]\n  cairn doctor [--target pi|claude|codex] [--scope project|user] [--root DIR]\n  cairn ui [--port 8000] [--db FILE]\n  cairn mcp --host pi|claude|codex|mcp [--session-id ID] [--db FILE]\n  cairn hook --host claude|codex     # native hook JSON on stdin\n  cairn configure --file whitelist.json\n  cairn task list|show|resume|suspend|hint [ID] --host HOST --session-id ID [--takeover]\n  cairn call TOOL --input args.json --host HOST --session-id ID\n  cairn confirm TASK_ID            # human team confirmation after platform receipt\n  cairn export TASK_ID [--format json|markdown|html] [--out FILE]\n\nTask database defaults to <workspace>/.cairn/state.db. CAIRN_DB overrides it.\nDemo always creates a separate workspace/database and uses labelled simulated data.\n`);return;
+  process.stdout.write(`Cairn ${VERSION} — goals and evidence for Pi, Claude Code and Codex\n\nNode >=24 required. Install globally from the repository with npm run install:global.\n\n  cairn --version\n  cairn demo [--port 8000] [--delay 1500] [--no-ui] [--json]\n  cairn demo --prepare [--target pi|claude|codex] [--root NEW_DIR]\n  cairn install|update|uninstall --target pi|claude|codex [--scope project|user] [--root DIR]\n  cairn doctor [--target pi|claude|codex] [--scope project|user] [--root DIR]\n  cairn ui                         # open the remembered dashboard or current workspace\n  cairn ui --db FILE --remember    # remember a dashboard database once\n  cairn ui --forget                # clear the remembered database and exit\n  cairn ui [--port 8000] [--db FILE]\n  cairn mcp --host pi|claude|codex|mcp [--session-id ID] [--db FILE]\n  cairn hook --host claude|codex     # native hook JSON on stdin\n  cairn configure --file whitelist.json\n  cairn task list|show|resume|suspend|hint [ID] --host HOST --session-id ID [--takeover]\n  cairn call TOOL --input args.json --host HOST --session-id ID\n  cairn confirm TASK_ID            # human team confirmation after platform receipt\n  cairn export TASK_ID [--format json|markdown|html] [--out FILE]\n\nTask database defaults to <workspace>/.cairn/state.db. CAIRN_DB overrides it.\nUI database: --db > CAIRN_DB > remembered dashboard > workspace database.\nWithout --port, UI tries 8000 and selects a free port if occupied.\nDemo always creates a separate workspace/database and uses labelled simulated data.\n`);return;
  }
  if(command==='demo'){await demonstration(v);return;}
  if(command==='demo-tools'){
@@ -88,19 +91,32 @@ export async function main(argv=process.argv.slice(2)){
   const target=v.target as Target,scope=(v.scope??'project') as 'project'|'user';
   output(command==='uninstall'?uninstall(target,scope,v.root):install(target,scope,v.root));return;
  }
+ if(command==='ui'&&v.forget){
+  if(v.db||v.port||v.host||v.root)throw new CairnError('invalid_input','--forget clears the remembered dashboard and exits; do not combine it with startup options');
+  forgetUiDatabase();process.stdout.write('已清除默认看板。下次 cairn ui 将读取当前工作区数据库。\n');return;
+ }
  let hookEvent:any;
  if(command==='hook')hookEvent=JSON.parse(readFileSync(0,'utf8'));
  const host=(command==='ui'?'mcp':v.host??process.env.CAIRN_HOST??'mcp') as Host;
  if(!['pi','claude','codex','mcp'].includes(host))throw new CairnError('invalid_input','Invalid host');
  const cwd=hookEvent?.cwd??v.root??process.cwd();
- const store=new Store(v.db?resolve(v.db):database(cwd)),engine=new Engine(store);
+ const selectedDatabase=command==='ui'?uiDatabase(cwd,v.db):v.db?resolve(v.db):database(cwd);
+ const store=new Store(selectedDatabase),engine=new Engine(store);
  const session:Session={host,cwd,sessionId:v['session-id']??''};
  try{
   if(command==='ui'){
-   const dashboard=await startUi(engine,{host:v.host??'127.0.0.1',port:v.port===undefined?8000:Number(v.port)});
-   process.stdout.write(`Cairn 实时进度看板：${dashboard.url}\n打开浏览器查看；CLI 中的新进展会自动同步。按 Ctrl+C 关闭看板。\n`);
+   let dashboard:Awaited<ReturnType<typeof startUi>>|undefined,usedFreePort=false;
+   try{
+    try{dashboard=await startUi(engine,{host:v.host??'127.0.0.1',port:v.port===undefined?8000:Number(v.port)});}
+    catch(error){
+     if(v.port!==undefined||(error as NodeJS.ErrnoException).code!=='EADDRINUSE')throw error;
+     dashboard=await startUi(engine,{host:v.host??'127.0.0.1',port:0});usedFreePort=true;
+    }
+    if(v.remember)rememberUiDatabase(selectedDatabase);
+   }catch(error){await dashboard?.close();store.close();throw error;}
+   process.stdout.write(`${usedFreePort?'默认端口 8000 已被占用，已自动选择可用端口。\n':''}Cairn 关系图看板：${dashboard.url}\n数据库：${selectedDatabase}\n${v.remember?'已记住此看板，以后直接运行 cairn ui。\n':''}打开浏览器查看；CLI 中的新进展会自动同步。按 Ctrl+C 关闭看板。\n`);
    let closing=false;
-   const close=()=>{if(closing)return;closing=true;void dashboard.close().finally(()=>{store.close();process.exit(0);});};
+   const close=()=>{if(closing)return;closing=true;void dashboard!.close().finally(()=>{store.close();process.exit(0);});};
    process.once('SIGTERM',close);process.once('SIGINT',close);return;
   }
   if(command==='mcp'){
