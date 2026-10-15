@@ -69,15 +69,15 @@ test('typed tools retain original parameters and concurrent catalog loads do not
  const {store,engine,runtime}=fixture();t.after(async()=>{await runtime.close();store.close();});
  store.setConfig('gateway',gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/upstream.mjs')]}},tools:[{name:'read',server:'fixture',upstream:'read',resultRefPath:'result_ref'}]}));
  const catalogs=await Promise.all([runtime.list(),runtime.list(),runtime.list()]);
- for(const catalog of catalogs){assert.equal(catalog.length,6);assert.equal(new Set(catalog.map(t=>t.name)).size,6);const schema=catalog.at(-1)!.inputSchema;assert.ok(!('tool' in (schema.properties as any??{})));}
+ for(const catalog of catalogs){assert.equal(catalog.length,7);assert.equal(new Set(catalog.map(t=>t.name)).size,7);const schema=catalog.at(-1)!.inputSchema;assert.ok(!('tool' in (schema.properties as any??{})));}
  const start=await runtime.invoke('cairn_start',{goal:'Read the configured fixture',evidence_mode:'captured'}) as any;
  const result=await runtime.invoke('cairn_tool_read',{}) as any;assert.equal(result.evidence.ref,'E1');assert.equal(result.evidence.resultRef,'ref-read');assert.equal(engine.store.get(start.taskId).observations.length,1);
 });
 
-test('unavailable optional upstream keeps the five management tools and reports degraded capability',async(t)=>{
+test('unavailable optional upstream keeps the six management tools and reports degraded capability',async(t)=>{
  const {store,runtime}=fixture();t.after(async()=>{await runtime.close();store.close();});
  store.setConfig('gateway',gatewaySchema.parse({servers:{missing:{command:'/nonexistent/cairn-fixture'}},tools:[{name:'read',server:'missing',upstream:'read'}]}));
- const catalog=await runtime.list();assert.equal(catalog.length,5);assert.equal(runtime.catalogStatus.ok,false);
+ const catalog=await runtime.list();assert.equal(catalog.length,6);assert.equal(runtime.catalogStatus.ok,false);
  const state=await runtime.invoke('cairn_read',{view:'tasks'}) as any;assert.equal(state.upstream.ok,false);
 });
 

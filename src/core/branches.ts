@@ -1,8 +1,13 @@
 import { CairnError, type Task, type Branch, type BranchInput } from './types.js';
 
-export const branchLabels = { pending: '待排查', running: '执行中', awaiting_review: '待主 Agent 汇总', completed: '已完成', blocked: '受阻', cancelled: '已取消' };
-export function branchRun(task: Task, branch: Branch) {
+export const branchLabels = { pending: '待排查', running: '执行中', awaiting_review: '待主 Agent 汇总', reviewing: '主 Agent 正在复核', completed: '已完成', blocked: '受阻', cancelled: '已取消' };
+export function branchRun(task: Pick<Task,'agentRuns'|'owner'>, branch: Branch) {
   return branch.executor === 'subagent' && branch.agentId ? task.agentRuns?.find(run => run.agentId === branch.agentId && run.epoch === branch.epoch && run.attempt === branch.attempt && run.host === task.owner.host) : undefined;
+}
+/** Native executions are real even when no semantic branch has been associated. */
+export function unboundAgentRuns(task:Pick<Task,'agentRuns'|'owner'|'branches'>) {
+  const linked=new Set((task.branches??[]).map(branch=>branchRun(task,branch)).filter(Boolean));
+  return (task.agentRuns??[]).filter(run=>!linked.has(run));
 }
 export function branchStatus(task: Task, branch: Branch): Branch['status'] {
   if (['completed', 'cancelled'].includes(branch.status)) return branch.status;
@@ -34,7 +39,7 @@ export function updateBranches(task: Task, inputs: BranchInput[], at: string): b
       delete value.agentId;
     }
     if (['completed', 'cancelled'].includes(value.status) && !value.summary?.trim()) throw new CairnError('invalid_branch', 'A completed/cancelled branch needs a summary of its result or stopping reason');
-    if (value.status === 'completed' && branchRun(task, value)?.status === 'running') throw new CairnError('active_delegate', 'The host still reports this child running; wait or stop it before accepting completion');
+    if (['reviewing','completed'].includes(value.status) && branchRun(task, value)?.status === 'running') throw new CairnError('active_delegate', 'The host still reports this child running; wait or stop it before reviewing or accepting completion');
     if (JSON.stringify(value) === JSON.stringify(old)) continue;
     value.updatedAt = at;
     if (index < 0) next.push(value); else next[index] = value;
@@ -58,7 +63,7 @@ export function updateBranches(task: Task, inputs: BranchInput[], at: string): b
 }
 
 export function pauseBranches(task: Task, at: string, summary: string) {
-  for (const branch of task.branches ?? []) if (branch.status === 'running'||branch.status==='pending'&&branchRun(task,branch)?.status==='running') {
+  for (const branch of task.branches ?? []) if (['running','reviewing'].includes(branch.status)||branch.status==='pending'&&branchRun(task,branch)?.status==='running') {
     branch.status = 'blocked'; branch.summary = summary; branch.updatedAt = at;
   }
 }

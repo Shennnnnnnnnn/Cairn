@@ -1,8 +1,8 @@
-# Cairn 4.4 plugin architecture
+# Cairn 4.5 plugin architecture
 
 Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
 
-## Model interface: five operations
+## Model interface: six operations
 
 `ToolRuntime` supplies the same domain interface to Pi native tools and stdio MCP:
 
@@ -11,7 +11,8 @@ Cairn preserves goals, curated evidence and recoverable progress inside existing
 | `cairn_start` | Create a goal, criteria, initial constraints and optional progress; general tasks default to curated evidence |
 | `cairn_resume` | Bind an existing task; require explicit takeover to change owners |
 | `cairn_read` | Read bounded context, findings/references, optional captured observations, full details, history or tasks |
-| `cairn_checkpoint` | Atomically save findings, progress, coverage, questions and next action |
+| `cairn_update` | Immediately save one branch/progress/finding change, with a compact idempotent receipt |
+| `cairn_checkpoint` | Save recovery summary, questions and next action |
 | `cairn_finish` | Save milestone content and validate completion, or suspend with gaps |
 
 The model does not separately maintain claim IDs, criterion links and report citations. A small task uses start → host tools → finish. Longer tasks add checkpoints at useful milestones. Initial tool guidance is goal/constraint input, rather than a framework-specific tool registry requirement.
@@ -72,7 +73,7 @@ The shared skill and tool/context descriptions ask the current model to decide w
 
 `Branch` persists a stable key, parent, question, executor/assignee, optional real agent ID, status, result/stopping summary, epoch and execution attempt. Checkpoints update branches atomically with findings and progress; each may point to a branch key. Parent cycles, foreign references and duplicate active agent bindings are rejected. Completed/cancelled branches require a summary. Pending, running, blocked or unreviewed branches keep completion incomplete, as do known current-epoch native helpers still running. Suspension can be saved immediately.
 
-Codex/Claude bundles register SubagentStart/SubagentStop. The adapter records minimal lifecycle metadata only for explicitly bound IDs in the active goal and owner epoch, and never stores child transcripts or tool IO. Unknown/internal IDs and unmatched or stale events do not create branches. Child-specific tool/Stop events cannot suspend the parent. Native return is projected as awaiting_review rather than accepted completion. When a helper is assigned new work, its attempt separates prior returned state from the new execution. Hooks can miss a start that precedes ID registration; Pi and generic MCP use explicit reporting. No lifecycle source is claimed when no matching event exists. Doctor reports the installed path and observed events.
+Codex/Claude bundles register SubagentStart/SubagentStop. New starts under an enabled, active parent goal immediately save minimal execution metadata and historical state without branch registration or agent reporting. Returns route to the observed run's original goal/owner epoch. Unassociated executions appear independently in the graph; an exact native ID can later associate them with semantic branches. Unknown stops and stale owner events cannot infer a new goal. Child-specific tool/Stop hooks cannot suspend the parent. A native return ends execution and does not accept findings; main-agent review remains a separate semantic transition. Pi and generic MCP explicitly report uncovered states. Doctor reports installed and actually observed coverage.
 
 The graph projects saved branch membership and nesting, not inferred causal dependencies. It shows assignee and state and links reviewed findings/evidence to their branch. Replay uses the persisted states, including lifecycle changes. Unbranched existing tasks keep their earlier topology.
 
@@ -110,7 +111,7 @@ User interruption takes priority. Stop hints are bounded and do not replace core
 
 ## Optional typed upstream gateway
 
-The five management tools work without an upstream configuration. An optional gateway can expose configured MCP tools with their original input schemas, using stdio or Streamable HTTP. Tool selection and permissions remain with the host.
+The six management tools work without an upstream configuration. An optional gateway can expose configured MCP tools with their original input schemas, using stdio or Streamable HTTP. Tool selection and permissions remain with the host.
 
 Generic mappings identify the server, upstream tool, optional result-reference path and arbitrary string-valued scope paths. Cairn does not inject business reports into tool arguments or orchestrate external acceptance. Original arguments pass through unchanged.
 
@@ -127,3 +128,13 @@ The relationship graph is the default main view; there is no separate progress b
 The graph displays stored, reported state, not live process liveness. `active` does not mean a process is running. Paused/stale work is not shown as executing; missing telemetry does not mean idle. Goal coverage comes from core validation and may decrease after revised findings. Raw observations are labelled as original evidence where present; curated conclusions display basis/references and agent provenance. The timeline emphasizes human-readable milestone summaries and expandable detail, with captured evidence events filterable separately. Phase labels describe persisted state, not a fixed execution pipeline.
 
 The server has no browser mutation endpoints. Host/origin checks, no CORS permission and nonce CSP protect local data from cross-site access. Closing the UI does not stop the host. Bootstrap remains a direct useful first attempt in the ongoing host session, without a second model runtime.
+
+## Immediate semantic updates and native execution records
+
+`cairn_update` accepts exactly one branch, progress item or stable-key finding. It validates ownership and state, atomically appends an event and immutable history state, and returns a compact receipt. Unchanged retries append nothing. A delegated branch enters reviewing before the main agent examines its result; acceptance is a separate completed update. Checkpoint remains a recovery summary/import interface, not the ordinary transition reporting cadence.
+
+Native SubagentStart associates a new execution with the active parent goal and owner at arrival, immediately saving agent.started plus its historical state, even without a semantic branch. SubagentStop routes to that exact previously observed execution/goal, including when the parent has paused and started another goal. Repeated starts/returns and stale owner epochs do not create new activity. Unknown stops cannot infer a goal. Native parent-session end or interruption automatically suspends unfinished work once; child-session end cannot suspend its parent. An already observed ID cannot attach to a fresh goal after ownership changes. Minimal IDs/type/status/timestamps are retained; tool calls, raw results, child messages and transcripts are not.
+
+An unassociated run is shown as a native execution node connected to the parent context, never an invented investigation branch. Native execution counters are separate from semantic branch counters. Exact native ID association can merge it into a branch; routing aliases, matching names and counts are not treated as proof. Binding changes commit at association time and do not rewrite past frames. The main agent reports semantic states such as review start, accepted findings, blocked hypotheses and goal coverage. MCP-only hosts report uncovered states explicitly. Host execution lifecycle and semantic acceptance are deliberately independent.
+
+The native event contract was checked against [official Codex hooks documentation](https://learn.chatgpt.com/docs/hooks). Host/plugin hooks still require their native trust flow in normal use. The isolated automated Codex exercise enables only reviewed Cairn hooks; it preserves the model workspace sandbox.

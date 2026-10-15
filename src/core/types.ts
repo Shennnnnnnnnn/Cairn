@@ -10,7 +10,7 @@ export interface ProgressInput {
   branch?: string;
 }
 export interface ProgressItem extends ProgressInput { source: 'agent' | 'host'; updatedAt: string }
-export type BranchStatus = 'pending' | 'running' | 'awaiting_review' | 'completed' | 'blocked' | 'cancelled';
+export type BranchStatus = 'pending' | 'running' | 'awaiting_review' | 'reviewing' | 'completed' | 'blocked' | 'cancelled';
 export interface BranchInput {
   key: string; title: string; status: BranchStatus; executor?: 'main' | 'subagent';
   parent?: string | null; question?: string; rationale?: string; assignee?: string;
@@ -62,6 +62,12 @@ export interface CheckpointInput {
   report?: { summary?: string };
 }
 export interface Checkpoint { summary: string; questions: string[]; next?: string; at: string }
+/** One semantic change, reported when it happens, without tool telemetry. */
+export interface StateUpdateInput {
+  branch?: Omit<BranchInput, 'title'> & { title?: string };
+  progress?: Omit<ProgressInput, 'title'> & { title?: string };
+  finding?: NonNullable<CheckpointInput['findings']>[number] & { key: string };
+}
 export type FinishInput = Partial<CheckpointInput> & { outcome: 'completed' | 'suspended' };
 export interface Task {
   id: string; origin: string; goal: string; constraints: string[]; criteria: Criterion[];

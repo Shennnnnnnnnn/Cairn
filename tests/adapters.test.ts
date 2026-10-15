@@ -86,7 +86,7 @@ for(const host of ['pi','claude','codex'] as Host[])test(`${host}: native eviden
 test('Pi tool registration follows actual contexts, compaction and session replacement',async()=>{
  const root=mkdtempSync(join(tmpdir(),'cairn-pi-adapter-')),handlers=new Map<string,any>(),tools=new Map<string,any>(),messages:any[]=[];
  const pi={on:(name:string,handler:any)=>handlers.set(name,handler),registerTool:(tool:any)=>tools.set(tool.name,tool),registerCommand:()=>{},sendMessage:(message:any,options:any)=>messages.push({message,options})};
- piExtension(pi);assert.equal(tools.size,5);for(const tool of tools.values())assert.equal(tool.parameters.properties?.session_id,undefined);
+ piExtension(pi);assert.equal(tools.size,6);for(const tool of tools.values())assert.equal(tool.parameters.properties?.session_id,undefined);
  const context=(id:string)=>({cwd:root,sessionManager:{getSessionId:()=>id},ui:{notify:()=>{}}}),first=context('first'),second=context('second');
  const emit=(name:string,ctx:any,extra:any={})=>handlers.get(name)({type:name,...extra},ctx),call=(name:string,input:any,ctx:any)=>tools.get(name).execute('cairn-call',input,undefined,undefined,ctx);
  try{

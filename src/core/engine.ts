@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Store } from './store.js';
-import { CairnError, type Session, type Scope, type Task, type Observation, type Claim, type Report, type Check, type Budget, type CheckpointInput, type FinishInput, type EvidenceMode, type ProgressInput, type ProgressItem, type BranchInput } from './types.js';
-import { updateBranches, pauseBranches, branchStatus, branchRun } from './branches.js';
+import { CairnError, type Session, type Scope, type Task, type Observation, type Claim, type Report, type Check, type Budget, type CheckpointInput, type FinishInput, type EvidenceMode, type ProgressInput, type ProgressItem, type BranchInput, type StateUpdateInput } from './types.js';
+import { updateBranches, pauseBranches, branchStatus, branchRun, unboundAgentRuns } from './branches.js';
 
 const id = (prefix: string) => `${prefix}_${randomUUID()}`;
 export const covers = (actual: Scope, required: Scope) => Object.entries(required).every(([k,v]) => actual[k as keyof Scope] === v);
@@ -134,8 +134,8 @@ export class Engine {
       this.store.save(task, 'task.resumed', {session,takeover}, this.at()); this.store.bind(session,task); return task;
     });
   }
-  suspend(taskId: string, session: Session) {
-    return this.edit(taskId,session,'task.suspended',{},task=>{task.status='suspended';task.interrupted=true;this.pauseProgress(task);});
+  suspend(taskId: string, session: Session, source:'agent'|'host'='agent') {
+    return this.edit(taskId,session,'task.suspended',{source},task=>{task.status='suspended';task.interrupted=true;this.pauseProgress(task);});
   }
   hint(taskId: string, session: Session, text: string, author: string) {
     return this.edit(taskId,session,'hint.added',{text,author},task=>{const hint={id:id('hint'),text,author};task.hints.push(hint);return hint;});
@@ -149,19 +149,30 @@ export class Engine {
       if(task.owner.host!==session.host||task.owner.sessionId!==session.sessionId||task.owner.cwd!==session.cwd)throw new CairnError('stale_owner','The child event belongs to a previous owner');
       if(task.status==='completed'||task.status==='suspended'&&event==='started')return;
       requireText(agentId,'agent id');
-      // Bind only IDs the owner explicitly attached to this goal/epoch. Unknown
-      // starts may be internal host agents or late events from another goal.
+      // A native start belongs to the active parent's task at arrival. It is
+      // saved immediately, even before any semantic branch has a matching ID.
       const branch=task.branches?.find(branch=>branch.executor==='subagent'&&branch.agentId===agentId&&branch.epoch===task.owner.epoch);
       const outstanding=task.agentRuns?.filter(run=>run.agentId===agentId&&run.epoch===task.owner.epoch&&run.host===session.host&&run.status==='running').at(-1);
-      if(!branch&&!(event==='returned'&&outstanding))return;
-      const attempt=branch?.attempt??outstanding!.attempt;
+      if(!branch&&event==='returned'&&!outstanding)return;
+      const attempt=branch?.attempt??outstanding?.attempt??1;
       const old=task.agentRuns?.find(run=>run.agentId===agentId&&run.epoch===task.owner.epoch&&run.attempt===attempt&&run.host===session.host);
       // Duplicate events and late starts never regress a returned execution.
       if(old&&(old.status==='returned'||event==='started'))return;
       const run={...old,agentId,host:session.host,epoch:task.owner.epoch,attempt,...(agentType?{type:agentType}:{}),status:event==='started'?'running' as const:'returned' as const,...(event==='started'?{startedAt:this.at()}:{returnedAt:this.at()})};
       task.agentRuns??=[];if(old)task.agentRuns[task.agentRuns.indexOf(old)]=run;else task.agentRuns.push(run);
-      task.revision++;this.store.save(task,`agent.${event}`,{agentId,type:agentType,status:run.status,epoch:run.epoch},this.at());
+      task.revision++;this.store.save(task,`agent.${event}`,{agentId,type:agentType,status:run.status,epoch:run.epoch,source:'host'},this.at());
     });
+  }
+  private branchesOn(task:Task,inputs:BranchInput[]):boolean {
+    const unbound=unboundAgentRuns(task);
+    let changed=updateBranches(task,inputs,this.at());
+    for(const branch of task.branches??[])if(branch.executor==='subagent'&&branch.epoch===task.owner.epoch&&branch.agentId&&!branchRun(task,branch)){
+      const run=unbound.find(run=>run.agentId===branch.agentId&&run.epoch===task.owner.epoch&&run.host===task.owner.host);
+      if(!run)continue;
+      run.attempt=branch.attempt;changed=true;
+      if(['reviewing','completed'].includes(branch.status)&&run.status==='running')throw new CairnError('active_delegate','The host still reports this child running; wait before reviewing or accepting completion');
+    }
+    return changed;
   }
   claim(taskId: string, session: Session, input: Omit<Claim,'id'|'revision'|'scope'> & {id?:string;scope?:Scope}) {
     return this.edit(taskId,session,'claim.revised',input,task=>{
@@ -226,7 +237,7 @@ export class Engine {
     if(input.next!==undefined&&typeof input.next!=='string')throw new CairnError('invalid_input','Next action must be a string');
     if(input.findings!==undefined&&!Array.isArray(input.findings))throw new CairnError('invalid_input','Findings must be an array');
     const previous=proofState(task),keys=new Set<string>(),isCurated=curated(task);
-    const branchesChanged=input.branches===undefined?false:updateBranches(task,input.branches,this.at());
+    const branchesChanged=input.branches===undefined?false:this.branchesOn(task,input.branches);
     for(const finding of input.findings??[]){
       if(typeof finding.text!=='string')throw new CairnError('invalid_input','Finding text is required');
       requireText(finding.text,'finding');
@@ -319,6 +330,36 @@ export class Engine {
         task.revision++;this.store.save(task,'task.checkpoint',{input,owner:task.owner,revision:task.revision},this.at());
       }
       return {...this.context(taskId),validation:boundedCheck(this.evaluateReport(task,task.report!))};
+    });
+  }
+  update(taskId:string,session:Session,input:StateUpdateInput) {
+    return this.store.transaction(()=>{
+      const task=this.store.get(taskId);this.own(task,session);
+      if(task.status!=='active')throw new CairnError('inactive_task',`Task is ${task.status}`);
+      const keys=Object.keys(input);
+      if(keys.length!==1||!['branch','progress','finding'].includes(keys[0]!))throw new CairnError('invalid_input','Report exactly one branch, progress item or finding per update');
+      const patch:CheckpointInput={summary:task.checkpoint?.summary??task.goal};
+      let kind:string,subject:string;
+      if(input.branch){
+        const value=input.branch,old=task.branches?.find(branch=>branch.key===value.key);
+        const title=value.title??old?.title;
+        if(!title)throw new CairnError('invalid_branch','A new branch needs a title');
+        const executor=value.executor??old?.executor??'main';
+        if(executor==='subagent'&&value.status==='completed'&&old&&branchStatus(task,old)!=='reviewing'&&old.status!=='completed')throw new CairnError('review_required','Record reviewing when the main agent starts reviewing; complete only after review');
+        patch.branches=[{...value,title}];kind='branch.updated';subject=value.key;
+      }else if(input.progress){
+        const value=input.progress,title=value.title??task.progress?.find(item=>item.key===value.key&&item.source==='agent')?.title;
+        if(!title)throw new CairnError('invalid_input','A new progress item needs a title');
+        patch.progress=[{...value,title}];kind='progress.updated';subject=value.key;
+      }else if(input.finding){
+        requireText(input.finding.key,'finding key');patch.findings=[input.finding];kind='finding.updated';subject=input.finding.key;
+      }else throw new CairnError('invalid_input','State update must not be empty');
+      const changed=this.checkpointOn(task,patch);
+      if(changed){task.revision++;this.store.save(task,kind,{input,subject,source:'agent',revision:task.revision},this.at());}
+      const latest=this.store.db.prepare('SELECT seq,kind,at FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1').get(taskId);
+      const branch=input.branch?task.branches?.find(branch=>branch.key===input.branch!.key):undefined;
+      return {taskId,revision:task.revision,changed,receipt:latest,...(branch?{branch:{key:branch.key,status:branchStatus(task,branch),source:branchRun(task,branch)?'host':'agent'},
+        ...(branch.executor==='subagent'&&branch.agentId&&!branchRun(task,branch)?{guidance:'No native lifecycle matched this branch ID. Native executions are saved and displayed independently; their IDs may differ from host routing addresses. Exact binding is optional. Report semantic changes, not duplicate lifecycle events.'}:{})}:{})};
     });
   }
   finish(taskId:string,session:Session,input:FinishInput){

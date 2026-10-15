@@ -43,7 +43,7 @@ export default function cairn(pi:any){
   catalogIdentity=identity;
   if(!instance.catalogStatus.ok)ctx.ui.notify(`Cairn upstream tools unavailable: ${instance.catalogStatus.error}. Goal, evidence and recovery tools remain available.`,'warning');
  };
- // Register the five local tools without opening databases or upstream processes.
+ // Register the six local tools without opening databases or upstream processes.
  for(const tool of coreCatalog())register(tool);
  pi.on('session_start',async(event:any,ctx:any)=>{dispatch(event,ctx);await refresh(ctx,true);});
  pi.on('tool_call',(event:any,ctx:any)=>{const result=dispatch(event,ctx);if(result.deny)return {block:true,reason:result.deny};});
@@ -58,7 +58,7 @@ export default function cairn(pi:any){
   const key=JSON.stringify([database(ctx.cwd),s.sessionId,s.cwd]),revision=JSON.stringify([task?.id,task?.revision,task?.status,task?.owner.epoch]);
   if(injectedContext.get(key)===revision)return;
   injectedContext.set(key,revision);
-  const guidance=!task?'Cairn is available when useful. Start a goal with cairn_start; native session identity is automatic. General goals save your curated findings, references and progress at checkpoints without recording native tools. Omit session_id.':task.status==='completed'?'The previous goal is completed; cairn_start creates a new goal.':!owns?`This task belongs to another session. Explicitly cairn_resume task_id=${task.id} with takeover=true before changing it.`:task.status==='suspended'?`This task is suspended; explicitly cairn_resume task_id=${task.id} before continuing.`:'Continue from the saved checkpoint. Use cairn_read for evidence details when needed.';
+  const guidance=!task?'Cairn is available when useful. Start a goal with cairn_start; native session identity is automatic. General goals save your curated findings, references and each semantic state change immediately with cairn_update without recording native tools. Omit session_id.':task.status==='completed'?'The previous goal is completed; cairn_start creates a new goal.':!owns?`This task belongs to another session. Explicitly cairn_resume task_id=${task.id} with takeover=true before changing it.`:task.status==='suspended'?`This task is suspended; explicitly cairn_resume task_id=${task.id} before continuing.`:'Continue from the saved checkpoint. Use cairn_read for evidence details when needed.';
   return {message:{customType:'cairn-context',content:task?`${guidance}\n${JSON.stringify(e.context(task.id))}`:guidance,display:false}};
  });
  pi.on('session_before_compact',(event:any,ctx:any)=>{dispatch(event,ctx);});

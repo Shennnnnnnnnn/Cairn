@@ -10,7 +10,7 @@ import {Engine} from '../src/core/engine.js';
 import {ToolRuntime,coreCatalog} from '../src/tools.js';
 import {gatewaySchema} from '../src/gateway.js';
 
-test('an actual local defect can be reproduced, paused, fixed and verified through the five-tool workflow',async()=>{
+test('an actual local defect can be reproduced, paused, fixed and verified through the six-tool workflow',async()=>{
  const root=mkdtempSync(join(tmpdir(),'cairn-practical-')),source=join(root,'price.mjs'),verification=join(root,'verification.md');
  writeFileSync(source,'export const yuan = cents => cents;\n');
  const calculate=()=>{const result=spawnSync(process.execPath,['--input-type=module','-e',`import {yuan} from ${JSON.stringify(pathToFileURL(source).href)}; console.log(JSON.stringify([1640,0,125].map(yuan)));`],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);return JSON.parse(result.stdout) as number[];};

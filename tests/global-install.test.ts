@@ -172,7 +172,7 @@ test('packed global install works offline away from the checkout and supplies al
       const client = new Client({ name: 'global-install-test', version: '1' });
       try {
         await client.connect(new StdioClientTransport({ command: process.execPath, args: [runtime, 'mcp', '--host', host, '--root', workspace, '--session-id', `packed-${host}`, '--db', join(workspace, `.cairn/${host}.db`)], env, stderr: 'pipe' }), { timeout: 10000 });
-        assert.equal((await client.listTools()).tools.length, 5);
+        assert.equal((await client.listTools()).tools.length, 6);
       } finally { await client.close(); }
     };
     await probeMcp(command, 'mcp');

@@ -10,20 +10,13 @@
 
 ## 登记与执行
 
-以下 JSON 是模型调用 `cairn_checkpoint` 的参数。创建目标后，将高价值方向一次保存；仅主会话负责当前阶段，准备委派的方向保持 pending：
+以下 JSON 是一次 `cairn_update` 调用，为一个独立方向保存 pending。其他方向各自创建；助手数量仍由主 Agent 决定。
 
 ```json
-{
-  "summary": "日志与近期变更可以独立核对，主会话先做复现。",
-  "branches": [
-    {"key":"logs","title":"核对超时日志","question":"超时集中在哪个环节？","rationale":"日志可独立核对，与变更检查互补。","executor":"subagent","assignee":"日志助手","status":"pending"},
-    {"key":"changes","title":"核对近期变更","executor":"subagent","assignee":"变更助手","status":"pending"},
-    {"key":"repro","title":"主会话复现问题","executor":"main","status":"running"}
-  ]
-}
+{"branch":{"key":"logs","title":"核对超时日志","question":"超时集中在哪个环节？","rationale":"日志可独立核对，与变更检查互补。","executor":"subagent","assignee":"日志助手","status":"pending"}}
 ```
 
-随后实际使用宿主提供的委派能力，自主决定启动哪些方向，不能只登记分支就宣称助手已启动。成功启动后保存对应 running 分支；若宿主给出了真实 Agent ID，可填 `agentId`。没有 ID 时省略，界面显示“主 Agent 报告”，不要猜测或使用示例 ID。若委派不可用或失败，改由主会话执行或保存 blocked 原因。
+随后实际使用宿主提供的委派能力，自主决定启动哪些方向，不能只登记分支就宣称助手已启动。成功启动后立即用 `cairn_update` 保存对应 running 分支并绑定真实 ID；若宿主给出了真实 Agent ID，可填 `agentId`。宿主路由地址与 hook 身份可能不同；无需让助手转述 ID。原生会话生命周期先独立即时保存并显示，确切身份已知时才可关联分支，路由地址可放 assignee。不能把 /root/logs 直接当成 UUID。没有 ID 时省略，界面显示“主 Agent 报告”，不要猜测或使用示例 ID。若委派不可用或失败，改由主会话执行或保存 blocked 原因。
 
 字段约定：
 
@@ -40,22 +33,54 @@
 
 ## 返回、审阅和收尾
 
-收到助手结果后先标为 awaiting_review。原生停止事件匹配到已绑定 ID 时，也只表示执行结束，不代表目标条件满足。主 Agent 核对来源与矛盾后，记录 finding 的 `branch`，保留 basis 和 references，再将分支完成：
+收到助手结果后立即标为 awaiting_review；原生事件已经标记时无需重复。开始读取与复核结果之前，单独保存 reviewing；复核完成后再单独保存 completed。不要等另一助手返回或阶段总结。原生停止事件匹配到已绑定 ID 时，也只表示执行结束，不代表目标条件满足。主 Agent 核对来源与矛盾后，记录 finding 的 `branch`，保留 basis 和 references，再将分支完成：
+
+使用 `cairn_update` 单独保存已核对的 finding：
 
 ```json
-{
-  "summary": "已复核日志助手提供的样本，继续核对配置方向。",
-  "branches": [{"key":"logs","title":"核对超时日志","status":"completed","summary":"主会话复核了超时样本及对应文件，确认等待集中在上游请求。"}],
-  "findings": [{"key":"upstream-wait","branch":"logs","text":"样本中的超时集中在上游请求等待。","basis":"主会话读取了助手引用的日志，时间戳与超时字段一致；结论仅覆盖这些样本。","references":["logs/timeout-samples.json"],"covers":["c1"]}]
-}
+{"finding":{"key":"upstream-wait","branch":"logs","text":"样本中的超时集中在上游请求等待。","basis":"主会话读取了助手引用的日志，时间戳与超时字段一致；结论仅覆盖这些样本。","references":["logs/timeout-samples.json"],"covers":["c1"]}}
+```
+
+再单独保存业务分支验收：
+
+```json
+{"branch":{"key":"logs","status":"completed","summary":"已核对日志依据与结论。"}}
 ```
 
 请以实际文件、结果和完成条件替换示例。分支完成不会自动生成一个“已支持”结论，助手数也不会提高目标完成度。证据不足时保留 proposed／inconclusive；不再需要的方向保存 cancelled 和理由。已知仍在运行的助手需要宿主停止或返回后才能完成主目标。用户中断可以立即保存 suspended，不必等所有助手返回；真实助手的中止由宿主负责。
 
 ## 不同宿主
 
-- **Codex／Claude Code 原生适配**：安装 SubagentStart／SubagentStop hooks。只有目标负责人、工作区、执行代次和显式绑定 ID 匹配时才记录生命周期；未知／内部 Agent、迟到的旧目标事件不会创建分支。启动事件可能早于 ID 登记；没有匹配事件时保留主 Agent 报告。无需采集工具名、参数、返回或子会话全文。
-- **Pi**：用当前环境实际提供的委派扩展；Cairn 不假设存在特定第三方工具或事件。分支状态通过 checkpoint 同步，没有委派能力时由主会话执行。
-- **仅 MCP／Multica**：主 Agent 使用运行时可用的委派工具，并显式保存分支及结果。安装 Cairn 不会给运行时增加原本没有的子 Agent 能力，也不自动安装原生 hooks。
+- **Codex／Claude Code 原生适配**：安装 SubagentStart／SubagentStop hooks。新子会话在已启用的当前目标中立即自动保存生命周期；返回定位到原目标、负责人和代次，未知结束或迟到旧负责人事件不能推断一个新目标。未关联会话只作为实际执行节点显示，不创建语义排查方向。启动事件可能早于 ID 登记；已启用目标的最小生命周期信息会立即保存事件和快照，不依赖 Agent 上报或 ID 登记；图中先作为宿主执行会话显示，确切 ID 绑定后才合并到业务分支。不会依靠名称或数量猜测对应关系。没有匹配事件时由主 Agent 即时上报。无需采集工具名、参数、返回或子会话全文。
+- **Pi**：用当前环境实际提供的委派扩展；Cairn 不假设存在特定第三方工具或事件。分支状态通过 cairn_update 即时同步，没有委派能力时由主会话执行。
+- **仅 MCP／Multica**：主 Agent 使用运行时可用的委派工具，并用 cairn_update 即时保存每项分支变化及结果。安装 Cairn 不会给运行时增加原本没有的子 Agent 能力，也不自动安装原生 hooks。
 
 恢复时先阅读已保存分支、结果与未解决问题，再决定继续、重新委派或取消。子 Agent 不会因为有新上下文就成为目标负责人。界面回放的是这些已保存记录，不重启助手，也不重新执行工具。
+
+## 即时上报的最小序列
+
+每项在实际发生时分别调用 `cairn_update`，不要把下面四步放到一个批量总结中：
+
+```json
+{"branch":{"key":"logs","status":"running","agentId":"实际宿主返回的ID"}}
+```
+
+原生事件未覆盖返回时：
+
+```json
+{"branch":{"key":"logs","status":"awaiting_review"}}
+```
+
+开始检查助手结果之前：
+
+```json
+{"branch":{"key":"logs","status":"reviewing"}}
+```
+
+检查后，逐项保存 finding，再接受分支：
+
+```json
+{"branch":{"key":"logs","status":"completed","summary":"已核对实际样本、来源和结论的适用范围。"}}
+```
+
+已有分支省略 title 即可。每次返回 changed、revision 和事件回执；重复相同内容不新增记录。上述状态说明不会记录模型内部思考或任何工具调用。

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
 import { Engine } from './core/engine.js';
 import { Gateway } from './gateway.js';
-import { CairnError, type Session, type CheckpointInput } from './core/types.js';
+import { CairnError, type Session, type CheckpointInput, type StateUpdateInput } from './core/types.js';
 import { branchStatus, branchRun } from './core/branches.js';
 
 const text = z.string().trim().min(1);
@@ -16,7 +16,7 @@ const finding = z.object({
   branch:text.max(200).optional(),
 }).strict();
 const progress=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','completed','blocked','cancelled']),detail:text.max(4000).optional(),branch:text.max(200).optional()}).strict();
-const branch=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','awaiting_review','completed','blocked','cancelled']),executor:z.enum(['main','subagent']).optional(),parent:text.max(200).nullable().optional(),question:text.max(4000).optional(),rationale:text.max(4000).optional(),assignee:text.max(200).optional(),agentId:text.max(500).nullable().optional(),summary:text.max(8000).optional()}).strict();
+const branch=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','awaiting_review','reviewing','completed','blocked','cancelled']),executor:z.enum(['main','subagent']).optional(),parent:text.max(200).nullable().optional(),question:text.max(4000).optional(),rationale:text.max(4000).optional(),assignee:text.max(200).optional(),agentId:text.max(500).nullable().optional(),summary:text.max(8000).optional()}).strict();
 const draft = z.object({
   summary:text.max(16000).optional(),
 }).strict();
@@ -36,6 +36,7 @@ const schemas = {
   }).strict(),
   cairn_resume:z.object({session_id:text.optional(),task_id:text,takeover:z.boolean().default(false)}).strict(),
   cairn_read:z.object({view:z.enum(['context','details','evidence','history','tasks','branches']).default('context'),task_id:text.optional(),ref:text.optional(),offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(32768).optional(),revision:z.number().int().nonnegative().optional()}).strict(),
+  cairn_update:z.object({branch:branch.partial({title:true}).optional(),progress:progress.partial({title:true}).optional(),finding:finding.extend({key:text.max(200)}).optional()}).strict().refine(value=>Object.keys(value).length===1,'Report exactly one branch, progress item or finding'),
   cairn_checkpoint:z.object(checkpointFields).strict(),
   cairn_finish:z.object({...checkpointFields,summary:checkpointFields.summary.optional(),outcome:z.enum(['completed','suspended']).default('completed')}).strict(),
 };
@@ -43,13 +44,15 @@ const descriptions:Record<keyof typeof schemas,string> = {
   cairn_start:'Autonomously assess independent investigation branches and choose the useful number of host-native subagents under host/user limits, including zero. Optional branches {key,title,status,executor,parent,question,rationale,assignee,agentId,summary} track the decision and work. Cairn does not spawn them. Start a persistent goal. General tasks default to curated evidence: use any host tools freely; Cairn records no calls/results and imposes no call/concurrency quota. Preserve initial tool guidance in constraints. Optional progress items describe meaningful work. Completion depends on goal criteria and findings with basis/file/URL references. Deadline is advisory here. Explicit evidence_mode=captured enables optional automatic capture. Generic cairn mcp and Pi bind session identity automatically: omit session_id. Native Claude/Codex adapters supply the real startup-hook session_id once.',
   cairn_resume:'Restore a saved goal and bind this connection. Supply task_id; generic cairn mcp and Pi omit session_id because it is already bound. Native Claude/Codex adapters supply the real startup-hook session_id once. Moving to a different owner requires explicit takeover=true. Returns bounded recovery context.',
   cairn_read:'Use view=branches for paginated branch states and reviewed findings; ref selects a branch key. Read bounded context, task details, curated findings by key/id, optional captured evidence by E1/result_ref, paginated history, or saved tasks. Defaults to bound task. Large records use character offsets; indexes/history use record offsets. Supply revision when continuing details pages to detect changes.',
-  cairn_checkpoint:'Update branches by key; link findings/progress with branch. Use pending before launch, running after actual launch, awaiting_review when returned, completed after main-agent review, blocked or cancelled when stopped. Completed/cancelled branches need a result/stopping summary. agentId is optional and must be a real host ID when supplied. Never set host lifecycle metadata. Save meaningful progress and findings together. In default curated mode, findings use basis (what supports the conclusion) and references (file paths/URLs); nothing is automatically verified or captured. covers associates supported findings with c1 etc. Optional progress items update work status by readable key. Captured mode also supports actual E1/result_ref links. Preserve unresolved questions and update only at milestones; no tool-by-tool bookkeeping or private reasoning.',
+  cairn_update:'Immediately persist ONE semantic change when it occurs: branch {key,status,title?}, progress {key,status,title?}, or finding {key,text,status?,basis?,references?,covers?,branch?}. Title is required only for new branch/progress. Report each start, return, reviewing, completion, block, cancellation and finding revision without waiting for a milestone or batching independent transitions. Native hooks automatically save child execution start/return independently of branch registration; no agent lifecycle reporting or ID relay is required. Semantic branch association is optional and needs an exact native ID, not a routing address. Report only semantic changes or lifecycle gaps when hooks are unavailable. For delegated work use awaiting_review after return, reviewing BEFORE the main agent examines the result, completed AFTER review with summary. Main branches use running/completed. Compact receipt confirms persistence; an identical retry adds no event. No tool calls, arguments, results or private reasoning are recorded.',
+  cairn_checkpoint:'Save a recovery summary, unresolved questions and next action. Use cairn_update immediately for each branch/progress/finding change; do not defer or batch state transitions until this summary. Existing bulk fields remain available for an atomic initial import or handoff. Curated findings use basis and file/URL references; covers links supported findings to criteria. Captured mode supports actual E1/result_ref links. Never supply host lifecycle metadata or tool telemetry.',
   cairn_finish:'Before completion, review or cancel unresolved branches and settle known running child agents; suspension always remains possible. Finish in one call with summary and evidence-backed findings, or suspend with unresolved questions. References and goal coverage are validated, with report citations generated automatically. Failed checks keep the task active and return gaps. Retrying a completed finish without new content returns its status.',
 };
 export interface ToolDefinition { name:string; description:string; inputSchema:Record<string,unknown>; readOnly?:boolean }
 export function coreCatalog():ToolDefinition[] {
   return Object.entries(schemas).map(([name,schema]) => {
     const inputSchema=z.toJSONSchema(schema,{io:'input'}) as Record<string,unknown>;delete inputSchema.$schema;
+    if(name==='cairn_update')inputSchema.oneOf=['branch','progress','finding'].map(key=>({required:[key]}));
     return {name,description:descriptions[name as keyof typeof schemas],inputSchema,readOnly:name==='cairn_read'};
   });
 }
@@ -128,6 +131,7 @@ export class ToolRuntime {
       }
       if(name==='cairn_read')return this.read(parsed);
       const {task,session}=this.current();
+      if(name==='cairn_update')return this.engine.update(task.id,session,parsed as StateUpdateInput);
       if(name==='cairn_checkpoint')return this.engine.checkpoint(task.id,session,parsed as CheckpointInput);
       return this.engine.finish(task.id,session,parsed);
     }

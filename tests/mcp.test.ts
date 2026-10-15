@@ -11,7 +11,7 @@ import {Gateway,gatewaySchema} from '../src/gateway.js';
 import type {Session} from '../src/core/types.js';
 import {handleNative} from '../src/adapters/hooks.js';
 const config=gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/upstream.mjs')]}},tools:['read','slow'].map(name=>({name,server:'fixture',upstream:name,resultRefPath:'result_ref',scopePaths:{workspaceId:'workspace_id',environment:'environment',issueId:'issue_id'}}))});
-test('five-tool MCP lifecycle binds once, captures native evidence, and restores across CLIs',async()=>{
+test('six-tool MCP lifecycle binds once, captures native evidence, and restores across CLIs',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'cairn-mcp-')),db=join(dir,'state.db');
  const local=new Store(db),engine=new Engine(local),session:Session={host:'claude',sessionId:'session1',cwd:'/workspace'};
  handleNative(engine,'claude',{type:'SessionStart',sessionId:session.sessionId,cwd:session.cwd});
@@ -20,7 +20,7 @@ test('five-tool MCP lifecycle binds once, captures native evidence, and restores
  const call=async(name:string,args:any)=>{const result=await client.callTool({name,arguments:args});assert.ok(!result.isError,JSON.stringify(result));return (result.structuredContent as any).result;};
  try{
   const tools=(await client.listTools()).tools;
-  assert.deepEqual(tools.map(t=>t.name),['cairn_start','cairn_resume','cairn_read','cairn_checkpoint','cairn_finish']);
+  assert.deepEqual(tools.map(t=>t.name),['cairn_start','cairn_resume','cairn_read','cairn_update','cairn_checkpoint','cairn_finish']);
   assert.ok(tools.every(tool=>tool.annotations?.destructiveHint===false&&tool.annotations?.openWorldHint===false));
   assert.ok(!(tools.find(t=>t.name==='cairn_finish')!.inputSchema.properties as any).session_id);
   const context=await call('cairn_start',{session_id:session.sessionId,goal:'Verify native marker',evidence_mode:'captured'}),taskId=context.taskId;

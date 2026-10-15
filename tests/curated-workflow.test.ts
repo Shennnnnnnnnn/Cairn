@@ -11,12 +11,12 @@ type Finished=ReturnType<Engine['finish']>;
 const firstSession:Session={host:'codex',sessionId:'curated-workflow-first',cwd:'/workspace'};
 const secondSession:Session={host:'claude',sessionId:'curated-workflow-second',cwd:'/workspace'};
 
-test('five public tools support a free-tool curated investigation, pause, explicit cross-host recovery and safe report export',async(t)=>{
+test('six public tools support a free-tool curated investigation, pause, explicit cross-host recovery and safe report export',async(t)=>{
   const store=new Store(':memory:'),engine=new Engine(store);
   const first=new ToolRuntime(engine,firstSession),second=new ToolRuntime(engine,secondSession);
   t.after(async()=>{await first.close();await second.close();store.close();});
   const catalog=await first.list();
-  assert.deepEqual(catalog.map(tool=>tool.name).sort(),['cairn_checkpoint','cairn_finish','cairn_read','cairn_resume','cairn_start']);
+  assert.deepEqual(catalog.map(tool=>tool.name).sort(),['cairn_checkpoint','cairn_finish','cairn_read','cairn_resume','cairn_start','cairn_update']);
   assert.equal(store.config('gateway'),undefined,'ordinary work requires no configured tool whitelist or proxy');
   const guidance='Choose shell, file reading, browser or other available host tools yourself. Preserve only useful findings and source references.';
   const started=await first.invoke('cairn_start',{

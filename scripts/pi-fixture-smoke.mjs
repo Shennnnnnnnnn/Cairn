@@ -22,7 +22,7 @@ writeFileSync(join(root,'evidence.txt'),'cairn-smoke-verified\n');
 
 let phase='create',step=0,sessionId=randomUUID(),requestCount=0,activeChild;
 const failures=[],operations=[];
-const coreNames=['cairn_start','cairn_resume','cairn_read','cairn_checkpoint','cairn_finish'];
+const coreNames=['cairn_start','cairn_resume','cairn_read','cairn_update','cairn_checkpoint','cairn_finish'];
 function savedTask(){
  if(!existsSync(db))return;
  const sql=new DatabaseSync(db);

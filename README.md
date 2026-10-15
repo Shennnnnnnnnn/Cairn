@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 **Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-Cairn 4.4 gives the model five operations: **start, resume, read, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then saves meaningful progress, conclusions, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
+Cairn 4.5 provides **start, resume, read, update, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then immediately saves each meaningful state change, conclusion, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn keeps the goal and its progress in SQLite, with an optional blue-and-white dashboard. No upstream gateway or tool whitelist is required for an ordinary task.
 
@@ -80,7 +80,7 @@ The agent reads `package.json` with its preferred host tool. Cairn creates no ra
 
 A new supported finding covers the sole criterion automatically. Multiple criteria use `covers: ["c1", "c2"]`. Missing supported findings or coverage keep the task active with `phase: "incomplete"`. The program checks the recorded structure and coverage; it does **not** open a file/link to verify its contents or establish causal truth.
 
-Longer work uses `cairn_checkpoint` at milestones. Include stable finding `key` values, `basis`, `references`, unresolved `questions`, a `next` action and optional progress:
+Use `cairn_update` immediately for each branch, progress or finding change. `cairn_checkpoint` saves recovery summaries and open questions. Include stable finding `key` values, `basis`, `references`, unresolved `questions`, a `next` action and optional progress:
 
 ```json
 {
@@ -101,7 +101,8 @@ Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelle
 | `cairn_start` | Start a goal, criteria, initial constraints and optional progress |
 | `cairn_resume` | Restore and bind a task; explicitly take over another session's work |
 | `cairn_read` | Read context, curated findings/references, task details or paginated history |
-| `cairn_checkpoint` | Save findings, progress, criterion coverage and open questions together |
+| `cairn_update` | Immediately save one branch, progress item or finding; return a compact, idempotent receipt |
+| `cairn_checkpoint` | Save a recovery summary, open questions and next action |
 | `cairn_finish` | Save and validate completion, or suspend incomplete work |
 
 The [Chinese goal workflow guide](docs/goal-workflow.zh-CN.md) provides a complete example without tool configuration or call records.
@@ -119,7 +120,7 @@ General curated tasks have **no default call or concurrency quota**. Omit `budge
 
 The main agent chooses whether and how many host-native helpers are useful from the goal, independent questions, current evidence, coordination cost and host/user limits. No fixed helper count is required; a host without delegation can investigate the same branches in its main session. Cairn does not launch a worker pool.
 
-Persist `branches` through start/checkpoint/finish and link findings or progress with `branch`. The graph shows branch nesting, assignees, pending/running/awaiting-review/completed/blocked/cancelled states and their replay history. A returned helper still needs main-agent review. Close or cancel outstanding branches before goal completion; suspension remains available immediately.
+Create branches and immediately persist each transition with `cairn_update` and link findings or progress with `branch`. The graph shows branch nesting, assignees, pending/running/awaiting-review/reviewing/completed/blocked/cancelled states and their replay history. A returned helper still needs main-agent review. Save reviewing before examining its result, and completed after acceptance. Native child start/return events are saved automatically, without agent reporting or branch-ID registration. Unassociated native executions appear as separate execution nodes; they do not invent investigation questions. Exact native identity can optionally associate execution with a branch; routing names are not guessed to be native IDs. Close or cancel outstanding branches before goal completion; suspension remains available immediately.
 
 Codex/Claude native packages register SubagentStart/SubagentStop hooks for explicitly bound IDs in the current task and epoch. Missing or unmatched events, Pi and MCP-only/Multica workflows retain labelled main-agent reports. No child transcript or tool IO is recorded in curated mode. See the [delegation guide](skills/cairn/references/delegation.md).
 
@@ -152,7 +153,7 @@ From 4.1, each committed event retains its domain state, including finding revis
 
 ![Blue-and-white relationship graph with synthetic demonstration data](docs/images/dashboard-graph.png)
 
-The dashboard displays the most recently committed progress. An `active` task or a zero tool count does not prove that a process is currently alive. Curated tasks deliberately have no tool-call telemetry and use explicit checkpoint progress. Native plan results without a reliable original task association are skipped, so a delayed event cannot change another goal.
+The dashboard displays the most recently committed progress. An `active` task or a zero tool count does not prove that a process is currently alive. Curated tasks deliberately have no tool-call telemetry and use immediate semantic updates. Native plan results without a reliable original task association are skipped, so a delayed event cannot change another goal.
 
 The dashboard is read-only and loopback-only. Closing it does not stop the agent. Use the same database/workspace as the host. Goal coverage can decrease if a supporting conclusion is revised or refuted.
 
@@ -192,10 +193,10 @@ User interruption is authoritative, suspended work has no continuation prompts, 
 
 | Host | Integration | Progress and recovery |
 | --- | --- | --- |
-| Pi | Self-contained native package, extension and skill | Native identity; changed checkpoints and compaction restore context; explicit checkpoint progress |
-| Claude Code | Local marketplace plugin with skills, hooks and stdio MCP | Startup ID binds the first start/resume; explicit checkpoint progress |
-| Codex | Project/user hooks, MCP and skill; a marketplace package is also built | Same identity binding; explicit checkpoint progress; optional captured plan-event mapping with a valid task/epoch association |
-| Multica | Managed MCP and shared skill on its local runtime | Automatic MCP identity; explicit checkpoint/resume/finish; shared dashboard database |
+| Pi | Self-contained native package, extension and skill | Native identity; changed checkpoints and compaction restore context; immediate semantic updates |
+| Claude Code | Local marketplace plugin with skills, hooks and stdio MCP | Startup ID binds the first start/resume; immediate semantic updates |
+| Codex | Project/user hooks, MCP and skill; a marketplace package is also built | Same identity binding; immediate semantic updates; optional captured plan-event mapping with a valid task/epoch association |
+| Multica | Managed MCP and shared skill on its local runtime | Automatic MCP identity; immediate update/resume/finish; shared dashboard database |
 
 Packages under `dist/plugins/{pi,claude,codex}` include their runtime. Codex project installation uses scoped hooks/MCP/skill registration rather than automatic global plugin-cache activation.
 
@@ -229,7 +230,7 @@ npm run install:global -- --target multica --agent "Troubleshooting Assistant" -
 
 Omit `--target` to update only the global command. See the [Chinese Multica guide](docs/multica.zh-CN.md) for ownership, recovery and capability limits.
 
-MCP alone is sufficient for explicit curated checkpoints and recovery. Native lifecycle/context restoration depends on actual host integration. Curated goals do not automatically mirror native plans, and Claude/Pi have no guaranteed native-plan mapping in Cairn. Captured Codex plan events require a previously reserved call for the current task and epoch; hosted paths may bypass local hooks.
+MCP alone is sufficient for explicit curated state updates and recovery. Native lifecycle/context restoration depends on actual host integration. Curated goals do not automatically mirror native plans, and Claude/Pi have no guaranteed native-plan mapping in Cairn. Captured Codex plan events require a previously reserved call for the current task and epoch; hosted paths may bypass local hooks.
 
 `doctor` separates declared capabilities from observed lifecycle events and checks installation, version, MCP and configured upstream availability. Missing capture hooks do not prevent a curated task; missing restoration events require explicit read/resume.
 
@@ -309,3 +310,5 @@ node scripts/claude-fixture-smoke.mjs
 Cairn preserves goals, evidence, human context and recovery state across supported CLI hosts so agents can continue verifiable work.
 
 Licensed under [AGPL-3.0](LICENSE).
+
+See the [Chinese immediate-state and native lifecycle example](docs/examples/immediate-state.zh-CN.md) for a real Codex run with continuous recorded-time replay.

@@ -9,7 +9,7 @@ export function observedCapabilities(seen:Record<string,string>):Capabilities{
 }
 /** Only our actual host namespace is exempt from capture and strict native-tool gating. */
 export function isCairnTool(host:Host,name:string){
- const local=/^cairn_(?:start|resume|read|checkpoint|finish|tool_[A-Za-z0-9_-]+)$/;
+ const local=/^cairn_(?:start|resume|read|update|checkpoint|finish|tool_[A-Za-z0-9_-]+)$/;
  if(host==='pi')return local.test(name);
  const prefix=host==='claude'?/^mcp__(?:plugin_cairn_cairn|cairn)__/:/^mcp__cairn__/;
  return prefix.test(name)&&local.test(name.replace(prefix,''));
@@ -59,8 +59,12 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
  if(lifecycle){
   if(!event.agentId)return {};
   if(event.type==='SubagentStart')engine.store.register(session,undefined,`child:${event.agentId}`,engine.at());
-  try{const bound=engine.store.taskForAgent(session,event.agentId);if(bound)engine.recordAgentLifecycle(bound.id,session,event.agentId,event.type==='SubagentStart'?'started':'returned',event.agentType);}catch{return {};}
-  return event.type==='SubagentStart'&&currentTask?.status==='active'?{context:'The Cairn parent goal remains owned by the main agent. Investigate only the delegated question and return findings, basis and file/link references. Do not resume/take over or finish the parent goal. The main agent reviews and records your result.'}:{};
+  try{
+   const bound=engine.store.taskForAgent(session,event.agentId);
+   const target=bound??(event.type==='SubagentStart'&&currentTask?.status==='active'&&!seen[`child:${event.agentId}`]?currentTask:undefined);
+   if(target)engine.recordAgentLifecycle(target.id,session,event.agentId,event.type==='SubagentStart'?'started':'returned',event.agentType);
+  }catch{return {};}
+  return event.type==='SubagentStart'&&currentTask?.status==='active'?{context:'Cairn automatically records this native execution lifecycle. No lifecycle/ID reporting is required from you. The parent goal remains owned by the main agent. Investigate only the delegated question and return findings, basis and file/link references. Do not resume/take over or finish the parent goal. The main agent records reviewing before inspecting your result and completed after review.'}:{};
  }
  const task=event.type.startsWith('PostToolUse')&&nativeCallId?engine.store.taskForCall(nativeCallId)??currentTask:currentTask;
  const marker=host==='pi'?'Cairn tools are bound to this native Pi session. Omit session_id; do not invent one.':`Cairn host=${host} session_id=${session.sessionId}. Supply this real session_id only on the first cairn_start or cairn_resume of this MCP connection; subsequent calls are already bound. Never guess a session id.`;
@@ -72,7 +76,7 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
   return {context:`${marker}\n${binding}\n${JSON.stringify(engine.context(task.id))}`};
  }
  if(!task)return {};
- if(event.type==='Interrupt'||event.type==='Settled'&&event.aborted){try{engine.suspend(task.id,session);}catch{}return {};}
+ if(event.type==='Interrupt'||event.type==='SessionEnd'||event.type==='Settled'&&event.aborted){try{engine.suspend(task.id,session,'host');}catch{}return {};}
  if(event.type==='PostCompact'||event.type==='PreCompact'||event.type==='RestoreContext')return {context:JSON.stringify(engine.context(task.id))};
  if(event.type==='Stop')return event.aborted||event.stopHookActive?{}:{continue:engine.continuation(task.id,session)};
  if(!event.tool)return {};

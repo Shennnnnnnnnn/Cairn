@@ -4,7 +4,7 @@
 
 **为 Pi、Claude Code、Codex 保留目标、证据链和可恢复的进度。**
 
-Cairn 4.4 将模型操作收敛为五个工具：**开始、恢复、读取、阶段记录、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，只在有价值的阶段保存进度、结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
+Cairn 4.5 提供六个工具：**开始、恢复、读取、即时更新、恢复摘要、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，每次有意义的状态变化立即保存，保留结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
 
 模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存目标记录，并提供蓝白进度看板。普通任务无需配置工具白名单或 MCP 上游。
 
@@ -46,7 +46,7 @@ cairn ui
 
 直接把目标和工具使用说明交给 Agent：
 
-> 使用 Cairn 排查这个接口为什么超时。可用日志和指标工具的说明如下，请自行选择最有价值的查询。形成阶段结论时保存依据、文件或链接引用，以及正在执行、已完成和阻塞的工作。完成条件是说明影响面、原因和解决建议；证据不足就保存缺口并暂停。不需要保存工具调用记录。
+> 使用 Cairn 排查这个接口为什么超时。可用日志和指标工具的说明如下，请自行选择最有价值的查询。状态或结论变化时立即保存依据、文件或链接引用，以及正在执行、已完成和阻塞的工作。完成条件是说明影响面、原因和解决建议；证据不足就保存缺口并暂停。不需要保存工具调用记录。
 
 工具说明属于初始任务输入，可放入 `goal`／`constraints`；框架不预先写死 AI 必须调用哪些工具。工具能否执行仍遵守宿主自身的授权和权限。
 
@@ -112,7 +112,7 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 
 ### 长任务：保存依据和可见的执行进度
 
-形成阶段结论、改变方向或需要交接时，用 `cairn_checkpoint` 保存同样的 finding 内容，再带上 `questions`、`next` 和可选执行项：
+每项分支、执行项或结论变化时，用 `cairn_update` 即时保存（下面给出示例）。`cairn_checkpoint` 用于恢复摘要和交接，可带上 `questions`、`next` 和可选执行项：
 
 ```json
 {
@@ -134,13 +134,33 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 
 阶段记录的 `summary` 描述当前进展，不覆盖已有最终报告摘要；结束时明确传入 `summary` 或 `report.summary` 设置最终报告。简单任务可直接 finish，无需先 checkpoint。无新增内容地重试已完成的 finish，会返回已有状态。
 
-| 五个固定工具 | 用途 |
+| 工具 | 用途 |
 | --- | --- |
 | `cairn_start` | 创建目标、完成条件、初始约束和可选进度 |
 | `cairn_resume` | 恢复或显式接管任务，绑定当前连接 |
 | `cairn_read` | 读取摘要、整理依据与引用、完整任务或分页历史 |
-| `cairn_checkpoint` | 一次保存结论、进度、目标覆盖、问题和下一步 |
+| `cairn_update` | 即时保存一个分支、执行项或结论，返回简短、可重试的保存回执 |
+| `cairn_checkpoint` | 保存恢复摘要、未解决问题和下一步 |
 | `cairn_finish` | 一次保存并验收完成，或保存缺口后暂停 |
+
+### 即时状态更新
+
+每次调用只报告一个发生变化的对象；已有分支／执行项可省略 title。相同内容重试返回已保存状态与当前回执，不新增记录。
+
+```json
+{"branch":{"key":"logs","title":"核对日志","executor":"subagent","status":"pending"}}
+```
+
+业务分支实际开始推进时：
+
+```json
+{"branch":{"key":"logs","status":"running"}}
+```
+
+助手结果返回后，尚未验收的分支设为 awaiting_review；**开始检查之前**单独保存 reviewing，验收后再单独保存 completed 和结果说明。新增或修订结论使用 `{"finding":{"key":"稳定标识","text":"结论","basis":"依据","references":["文件或链接"]}}`；执行项使用 progress。不要等阶段总结再补录这些转换。
+
+**原生生命周期无需 Agent 上报。** Codex／Claude 的可用 hooks 会直接保存子会话 start/return 事件及快照。即使尚未绑定业务分支，图中也会显示“宿主执行会话”，标明原生来源。它不是额外排查方向，执行返回也不等于接受结论。主会话结束或被中断时，未完成目标也会自动保存为暂停，等待显式恢复。Agent 只负责业务语义；MCP-only／Multica 等缺少原生事件时才补报未覆盖的执行状态。宿主路由名与原生 ID 可能不同，不能猜测对应关系。
+
 
 ## 预算如何配置
 
@@ -163,9 +183,9 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 
 > 使用 Cairn 排查【问题】。请根据目标和现场情况，自主判断哪些方向值得并行、是否需要子 Agent 以及数量。把排查问题、负责人、状态及依据关联到关系图。助手返回后由你核对并汇总；新证据出现时调整分支，停止无价值的方向。完成条件是【可核对条件】。默认不记录工具调用。
 
-模型用已有五个工具的 `branches` 保存分支，用 finding／progress 的 `branch` 标明归属。关系图支持分支展开、负责人、待排查／执行中／待汇总／已完成／受阻／取消，以及这些状态的历史回放。助手返回只会进入待汇总；主 Agent 审阅后才能关闭分支，目标完成仍取决于完成条件和依据。
+模型用 `cairn_update` 即时保存每项分支变化，用 finding／progress 的 `branch` 标明归属。关系图支持分支展开、负责人、待排查／执行中／待汇总／正在复核／已完成／受阻／取消，以及这些状态的历史回放。助手返回只会进入待汇总；主 Agent 审阅后才能关闭分支，目标完成仍取决于完成条件和依据。
 
-Codex／Claude 原生适配加入子 Agent 生命周期 hooks，匹配到当前任务与代次中已登记的真实 Agent ID 时辅助确认状态；未匹配、Pi 扩展或仅 MCP／Multica 接入时，显示“主 Agent 报告”。安装 Cairn 本身不会为宿主增加不存在的委派工具。详见[自主委派说明](skills/cairn/references/delegation.md)。
+Codex／Claude 原生适配通过生命周期 hooks 即时保存子会话开始与返回，无需 Agent 上报或先登记业务分支；未关联会话独立显示，只有确切原生 ID 才可关联分支。Pi 或仅 MCP／Multica 缺少原生事件时，业务状态使用即时上报并显示“主 Agent 报告”。安装 Cairn 本身不会为宿主增加不存在的委派工具。详见[自主委派说明](skills/cairn/references/delegation.md)。
 
 ![4.2 界面验收记录：待汇总、执行中、已完成及嵌套分支（合成数据）](docs/images/dashboard-branches.png)
 
@@ -205,7 +225,7 @@ cairn ui --forget
 
 ![蓝白关系图：起点、目标、执行中与已完成节点（合成界面演示数据）](docs/images/dashboard-graph.png)
 
-看板展示的是**最近记录的执行状态**。`active` 只表示目标仍可继续，不能证明 Agent 进程实时存活；普通模式也不会用“零次工具调用”推断没有在执行。三种 CLI 的 curated 任务均由 Agent 用 checkpoint 的统一 `progress` 保存并恢复工作状态。
+看板展示的是**最近记录的执行状态**。`active` 只表示目标仍可继续，不能证明 Agent 进程实时存活；普通模式也不会用“零次工具调用”推断没有在执行。三种 CLI 的业务语义状态均可通过 cairn_update 即时保存；原生子会话生命周期由可用的 hooks 自动保存，不需要 Agent 转述。
 
 没有可靠原任务关联的宿主计划事件会跳过，避免迟到结果写进另一个目标。仅 captured Codex 在已有调用保留正确任务／执行代次关联时，才可映射成功的 `update_plan` 结果；Claude／Pi 不保证同步内部计划。普通模式不为此新增工具关联记录。
 
@@ -251,10 +271,10 @@ cairn export TASK_ID --format html --out evidence.html
 
 | 宿主 | 安装形态 | 进度与恢复 |
 | --- | --- | --- |
-| Pi | 自包含原生 package、扩展和共享 skill | 自动绑定原生会话；状态变更／压缩后恢复摘要；checkpoint 保存进度 |
-| Claude Code | 本地 marketplace 插件，含 skills、hooks、stdio MCP | 首次 start／resume 使用启动 hook 的真实 ID；checkpoint 保存进度 |
-| Codex | 项目／用户 hooks、MCP、skill；同时构建 marketplace 包 | 同样绑定身份；checkpoint 保存进度；captured 计划事件需可靠任务／代次关联 |
-| Multica | 本机运行时上的受管 MCP 与共享 skill | 自动连接身份；显式 checkpoint／恢复／完成；与看板同库 |
+| Pi | 自包含原生 package、扩展和共享 skill | 自动绑定原生会话；状态变更／压缩后恢复摘要；update 即时保存业务状态 |
+| Claude Code | 本地 marketplace 插件，含 skills、hooks、stdio MCP | 首次 start／resume 使用启动 hook 的真实 ID；update 即时保存业务状态 |
+| Codex | 项目／用户 hooks、MCP、skill；同时构建 marketplace 包 | 同样绑定身份；update 即时保存业务状态；captured 计划事件需可靠任务／代次关联 |
+| Multica | 本机运行时上的受管 MCP 与共享 skill | 自动连接身份；即时 update／恢复／完成；与看板同库 |
 
 构建产物位于 `dist/plugins/{pi,claude,codex}`，每包包含自己的运行时。Codex 项目级安装使用原生配置登记，不依赖全局插件缓存自动激活。
 
@@ -311,7 +331,7 @@ codex
 >
 > 完成条件：复现原错误；根据实际文件和运行结果定位原因；修复后原启动路径可用，相关回归检查通过。自主选择工具，不保存逐次调用记录。阶段变化时更新关系图，保存结论、依据和文件引用。最终说明实际改动、执行过的验证及结果、剩余限制。
 
-AI 会创建目标，使用宿主工具完成排查、修改和验证，在关键节点保存 checkpoint。关系图展示起点、执行阶段、依据、结论和目标；点击节点可核对引用。`cairn_finish` 在完成条件和依据关联校验通过后完成任务。
+AI 会创建目标，使用宿主工具完成排查、修改和验证，在状态变化时立即 update，在交接或压缩前保存恢复摘要。关系图展示起点、执行阶段、依据、结论和目标；点击节点可核对引用。`cairn_finish` 在完成条件和依据关联校验通过后完成任务。
 
 ### 中断后继续
 
@@ -375,3 +395,5 @@ node scripts/claude-fixture-smoke.mjs
 Cairn 将目标、证据、人工提示和恢复状态保存在通用 CLI 工作流中，帮助 AI 持续完成可验证的实际任务。
 
 项目采用 [AGPL-3.0](LICENSE) 许可证。
+
+新版完整演示见[即时状态与原生生命周期实跑](docs/examples/immediate-state.zh-CN.md)：实际修复离线报价串价，并按自然时间回放自动生命周期、业务复核和完成。

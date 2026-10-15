@@ -20,6 +20,7 @@ function signature(node: GraphNode) {
     case 'goal':return [node.label,node.state,d.status,d.check?.ok];
     case 'branch':return [node.label,node.status,d.executor,d.assignee,d.agentId,d.parent,d.question,d.rationale,d.summary,d.epoch,d.attempt,d.activitySource,d.activityStatus];
     case 'review':return [node.label,node.status,d.summary];
+    case 'agent':return [node.status,d.agentId,d.epoch,d.attempt,d.status,d.type];
     case 'basis':return [d.basis,d.references?.slice().sort(),d.provenance,d.scope,d.branch];
     case 'claim':return [d.text,d.status,d.supports.slice().sort(),d.refutes.slice().sort(),d.scope,d.branch,d.relatedCriteria?.slice().sort()];
     case 'criterion':return [node.label,node.state,d.claimIds.slice().sort()];
@@ -38,6 +39,7 @@ export function branchTransition(node: GraphNode, before?: GraphNode): string {
   if(!before&&status==='pending')return '建立待排查分支';
   if(status==='running'&&before?.data.status!=='running')return before&&before.data.status!=='pending'?'继续执行':'开始执行';
   if(status==='awaiting_review'&&before?.data.status!=='awaiting_review')return node.actor==='subagent'?'返回待汇总':'等待汇总';
+  if(status==='reviewing'&&before?.data.status!=='reviewing')return '主 Agent 开始复核';
   if(status==='completed'&&before?.data.status!=='completed')return node.actor==='subagent'?'主 Agent 复核完成':'主 Agent 执行完成';
   if(status==='cancelled'&&before?.data.status!=='cancelled')return '取消排查';
   if(status==='blocked'&&before?.data.status!=='blocked')return '暂停 / 受阻';
@@ -61,7 +63,7 @@ export function compareCheckpoint(current: TaskView, previous?: TaskView, option
       // single returned result does not become two apparent operations.
       if(node.kind==='review')continue;
       const change=before?'updated':'added';
-      const label=node.kind==='branch'?branchTransition(node,before):node.kind==='goal'&&current.status==='completed'?'主目标验收完成':`${before?'更新':'新增'}${graphKindLabels[node.kind]}`;
+      const label=node.kind==='branch'?branchTransition(node,before):node.kind==='agent'?(node.data.status==='returned'?'宿主自动记录子 Agent 返回':'宿主自动记录子 Agent 启动'):node.kind==='goal'&&current.status==='completed'?'主目标验收完成':`${before?'更新':'新增'}${graphKindLabels[node.kind]}`;
       const reviewId=node.kind==='branch'?`review:${node.data.key}`:undefined;
       changes.push({nodeId:node.id,relatedIds:reviewId&&present.has(reviewId)?[reviewId]:[],kind:node.kind,...(node.actor?{actor:node.actor}:{}),title:node.label,change,label,...(before?{before:before.state}:{}),after:node.state});
     }
@@ -79,8 +81,10 @@ export function compareCheckpoint(current: TaskView, previous?: TaskView, option
 export function checkpointActors(task: TaskView) {
   const main=task.branches.filter(branch=>branch.executor==='main');
   const children=task.branches.filter(branch=>branch.executor==='subagent');
+  const executions=(task.agentRuns??[]).filter(run=>run.epoch===task.owner.epoch&&run.host===task.owner.host);
   return {
-    main:{running:main.filter(b=>b.status==='running').length,review:children.filter(b=>b.status==='awaiting_review').length,reviewed:children.filter(b=>b.status==='completed').length},
-    subagent:{running:children.filter(b=>b.status==='running').length,returned:children.filter(b=>b.status==='awaiting_review').length,reviewed:children.filter(b=>b.status==='completed').length,pending:children.filter(b=>b.status==='pending').length},
+    main:{running:main.filter(b=>['running','reviewing'].includes(b.status)).length,review:children.filter(b=>b.status==='awaiting_review').length,reviewing:children.filter(b=>b.status==='reviewing').length,reviewed:children.filter(b=>b.status==='completed').length},
+    subagent:{running:children.filter(b=>b.status==='running').length,returned:children.filter(b=>['awaiting_review','reviewing'].includes(b.status)).length,reviewed:children.filter(b=>b.status==='completed').length,pending:children.filter(b=>b.status==='pending').length},
+    native:{running:executions.filter(run=>run.status==='running').length,returned:executions.filter(run=>run.status==='returned').length},
   };
 }

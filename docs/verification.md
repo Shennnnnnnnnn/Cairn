@@ -1,6 +1,6 @@
 # Verification record
 
-Cairn 4.4 — verified on 2026-10-15 (Asia/Shanghai).
+Cairn 4.5 — verified on 2026-10-15 (Asia/Shanghai).
 
 ## Current scope
 
@@ -10,7 +10,7 @@ The domain-specific competition profile and its resources were removed from the 
 
 ## Automated verification
 
-- **195 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
+- **204 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
 - A practical public-interface test created a real local faulty implementation, reproduced its incorrect output through a separate Node process, saved findings, paused, restored from another host, fixed the file and ran actual regression inputs. The final report completed from its goal coverage and references, with no tool-call records.
 - Interface tests verify that removed profile/budget/report fields are rejected, fresh databases contain no match-state table, and captured findings can complete without an external platform reference.
 - Core checks cover contradictory/unsupported findings, scope coverage, reference membership, paging and bounded context, cancellation, interruption, cross-host takeover and stale-owner rejection.
@@ -20,6 +20,11 @@ The domain-specific competition profile and its resources were removed from the 
 - Multica upgrade tests remove only obsolete files whose content matches an owned/published hash, preserve edited files, verify the final remote skill contents, and recover from failures before deletion or after a lost delete response without duplicate registrations.
 
 ## Autonomous branch verification
+
+- Version 4.5 adds one-entity cairn_update persistence with compact receipts, no-op retries, native execution events before semantic branch association, a separate reviewing state, and independently sourced native execution graph nodes. Tests cover ownership and epoch fencing, restart recovery, historical native start/return, exact optional association without backdating, unknown stops, stale former-owner events, rollback on persistence failure, and automatic suspension on native parent-session end while child-session end remains isolated. Existing Pi/Claude/Codex and MCP/installer suites pass with the six-tool catalog.
+- A new real local Codex CLI 0.162.0 / configured gpt-6.1-sol run independently selected one read-only assistant and two semantic branches. Its original regional-price reproduction failed 4/8; after the cache-key repair it passed 0/8, plus 160 order/cache calls including 120 verified real cache hits. A separate terminal reran the original reproduction and model-authored regression successfully.
+- That native-adapter run completed task_1482ee76-2ad5-406f-ab1a-cc967ee02e66 with 40 events/history states over 278,384 ms, and zero calls/observations. Real SubagentStart and SubagentStop directly saved start/return snapshots without an agent reporting lifecycle or relaying an ID. The first diagnostic attempt exposed routing-name/native-ID mismatch; the final design shows unassociated native executions independently rather than guessing a branch mapping. No child transcripts or raw tool IO enter Cairn state. This is a real Codex/native run on synthetic input, not a claim of real-model native validation on Pi or Claude.
+- ego-browser checked the recorded-time graph before native start, during native execution, after direct native return with main work continuing, during main-agent reviewing and after accepted completion. It confirmed separate semantic and execution sources, distinct main/subagent ownership and no page JavaScript error. Existing screenshot capture failure means no new pixel screenshot is claimed.
 
 - Shared core, MCP/Pi schemas, skill and bounded recovery support optional branches, nested membership, main/subagent assignees, real host IDs and findings/progress linked to a branch. Invalid/cyclic parents, foreign branch references, repeated active bindings and premature completion roll back atomically.
 - Pi, Claude and Codex runtime tests execute the same branch/checkpoint/pause/takeover/finish contract. A child returning remains awaiting_review until the main agent reviews its findings. Outstanding branches and known current-epoch running delegates keep completion incomplete; suspension remains immediate.
@@ -50,6 +55,8 @@ The domain-specific competition profile and its resources were removed from the 
 - Desktop and 390px browser checks retained the blue-and-white graph and usable replay controls without horizontal overflow. These fixtures exercise UI behavior; they do not claim a new external-model investigation.
 
 ## Installed workflow checks
+
+- The global 4.5 command and managed Multica MCP/skill were updated in place, preserving IDs and remembered database. Multica accurately remains MCP-only; native automatic lifecycle coverage was verified in the separate Codex exercise, not falsely attributed to Multica. The new sample dashboard uses the installed global command on port 51921.
 
 - The global 4.4 command and the existing managed Multica integration were updated in place with the same MCP/skill IDs and shared database preference. Doctor confirmed the bindings and accurately reported MCP-only lifecycle capabilities. The real Codex sample dashboard was restarted at its original port 50814 using the installed runtime. A read-only integrity comparison confirmed unchanged task SHA-256, five events/frames and zero calls/observations.
 

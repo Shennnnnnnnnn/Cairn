@@ -81,7 +81,7 @@ test('native child hooks capture lifecycle metadata only and never accept the ch
       const task = engine.create(session, { origin: 'test', goal: 'diagnose', criteria: ['done'], evidenceMode: 'curated', branches: initial });
       const event = (type: string, id = 'log-agent') => normalize(host, { hook_event_name: type, session_id: session.sessionId, cwd: session.cwd, agent_id: id, agent_type: 'Explore', last_assistant_message: 'PRIVATE_CHILD_REPORT', tool_name: 'SECRET_CHILD_TOOL', tool_use_id: 'child-call', tool_input: 'SECRET_INPUT', tool_response: 'SECRET_RESULT' });
       const before = store.events(task.id).length;
-      handleNative(engine, host, event('SubagentStart', 'unbound-internal-agent'));
+      handleNative(engine, host, event('SubagentStop', 'unbound-internal-agent'));
       assert.equal(store.events(task.id).length, before);
       const start = event('SubagentStart'), output = hookOutput(start, handleNative(engine, host, start));
       assert.equal(output.hookSpecificOutput?.hookEventName, 'SubagentStart');

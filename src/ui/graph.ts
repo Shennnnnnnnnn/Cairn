@@ -1,6 +1,7 @@
 import type { TaskView } from './view.js';
+import { unboundAgentRuns } from '../core/branches.js';
 
-export type GraphNodeKind = 'origin' | 'goal' | 'branch' | 'review' | 'work' | 'action' | 'observation' | 'basis' | 'claim' | 'criterion';
+export type GraphNodeKind = 'origin' | 'goal' | 'branch' | 'agent' | 'review' | 'work' | 'action' | 'observation' | 'basis' | 'claim' | 'criterion';
 export type GraphState = 'origin' | 'goal' | 'running' | 'review' | 'completed' | 'pending' | 'blocked' | 'refuted' | 'cancelled';
 export type GraphActor = 'main' | 'subagent';
 export type GraphNode = { id: string; kind: GraphNodeKind; label: string; state: string; status: GraphState; rank: number; data: any; actor?: GraphActor };
@@ -19,7 +20,7 @@ export const graphPalette = {
   refuted: { fill: '#fff1f2', stroke: '#fda4af', text: '#be123c', muted: '#e11d48' },
   cancelled: { fill: '#f8fafc', stroke: '#e2e8f0', text: '#94a3b8', muted: '#94a3b8' },
 } satisfies Record<GraphState, { fill: string; stroke: string; text: string; muted: string }>;
-export const graphKindLabels: Record<GraphNodeKind, string> = { origin: '起点', goal: '任务目标', branch: '排查分支', review: '复核汇总', work: '执行阶段', action: '历史行动', observation: '原始观测', basis: 'AI 整理的依据', claim: '假设与结论', criterion: '目标条件' };
+export const graphKindLabels: Record<GraphNodeKind, string> = { origin: '起点', goal: '任务目标', branch: '排查分支', agent: '宿主执行会话', review: '复核汇总', work: '执行阶段', action: '历史行动', observation: '原始观测', basis: 'AI 整理的依据', claim: '假设与结论', criterion: '目标条件' };
 
 /** Project only saved relationships. Plan order does not imply dependency or causality. */
 export function projectGraph(task: TaskView): GraphModel {
@@ -40,14 +41,20 @@ export function projectGraph(task: TaskView): GraphModel {
   const actorFor = (key?:string): GraphActor => key&&branches.get(key)?.executor==='subagent'?'subagent':'main';
   add(0, 'origin', 'origin', task.origin, '起点 · 已知背景', 'origin', task);
   add(evidenceRank+3, 'goal', 'goal', task.goal, task.status === 'completed' ? '✓ 目标已完成' : task.check.ok ? '✓ 条件已满足 · 待完成检查' : task.status === 'suspended' ? '目标尚未完成 · 任务已暂停' : '目标尚未完成', 'goal', task);
+  for(const [index,run]of unboundAgentRuns(task).entries()){
+    const ended=run.status==='returned',stale=run.epoch!==task.owner.epoch||run.host!==task.owner.host;
+    const nodeId=`agent:${run.epoch}:${run.attempt}:${run.agentId}`;
+    add(1,'agent',nodeId,`子 Agent 会话 ${index+1}`,ended?'宿主记录 · 执行已返回':stale?'旧负责人会话 · 状态待核对':'宿主记录 · 执行中',ended?'review':stale?'blocked':'running',run,'subagent');
+    connect('origin',nodeId,'context',ended?'review':stale?'pending':'running');
+  }
   for (const branch of branches.values()) {
-    const status: GraphState = branch.status==='awaiting_review'?'review':branch.status;
-    const state=branch.executor==='subagent'&&branch.status==='awaiting_review'?'已返回 · 待主 Agent 复核':branch.executor==='subagent'&&branch.status==='completed'?'已返回 · 主 Agent 已复核':`${branch.executorLabel} · ${branch.statusLabel}`;
+    const status: GraphState = branch.status==='awaiting_review'||branch.executor==='subagent'&&branch.status==='reviewing'?'review':branch.status==='reviewing'?'running':branch.status;
+    const state=branch.executor==='subagent'&&branch.status==='running'&&branch.activitySource==='agent'?'AI 报告 · 分支排查中':branch.executor==='subagent'&&branch.status==='reviewing'?'已返回 · 主 Agent 复核中':branch.executor==='subagent'&&branch.status==='awaiting_review'?'已返回 · 待主 Agent 复核':branch.executor==='subagent'&&branch.status==='completed'?'已返回 · 主 Agent 已复核':`${branch.executorLabel} · ${branch.statusLabel}`;
     add(depths.get(branch.key)!, 'branch', `branch:${branch.key}`, branch.title, state, status, branch, branch.executor);
     connect(branchOrigin(branch.parent), `branch:${branch.key}`, 'branch', status==='running'?'running':status==='completed'?'completed':'pending');
-    if(branch.executor==='subagent'&&['awaiting_review','completed'].includes(branch.status)){
-      const accepted=branch.status==='completed';
-      add(evidenceRank-1,'review',`review:${branch.key}`,branch.title,accepted?'主 Agent · 复核完成':'主 Agent · 等待复核',accepted?'completed':'review',branch,'main');
+    if(branch.executor==='subagent'&&['awaiting_review','reviewing','completed'].includes(branch.status)){
+      const accepted=branch.status==='completed',reviewing=branch.status==='reviewing';
+      add(evidenceRank-1,'review',`review:${branch.key}`,branch.title,accepted?'主 Agent · 复核完成':reviewing?'主 Agent · 正在复核':'主 Agent · 等待复核',accepted?'completed':reviewing?'running':'review',branch,'main');
       connect(`branch:${branch.key}`,`review:${branch.key}`,'handoff',accepted?'completed':'review');
       for(const claim of task.claims.filter(claim=>claim.branch===branch.key))connect(`review:${branch.key}`,`claim:${claim.id}`,'review',accepted?'completed':'pending');
     }
@@ -115,7 +122,7 @@ export function layoutGraph(model: GraphModel, direction: 'vertical' | 'horizont
     const index=key?roots.indexOf(key):-1;return index<0?roots.length:index;
   };
   if(branches.size)for(const column of ranks)column.sort((a,b)=>lane(a)-lane(b));
-  if(branches.size){
+  if(branches.size||model.nodes.some(node=>node.kind==='agent')){
     const vertical=direction==='vertical',pitch=vertical?255:120,flow=vertical?150:285;
     const actors:GraphActor[]=model.nodes.some(node=>node.actor==='subagent')?['main','subagent']:['main'];
     const spans=new Map(actors.map(actor=>[actor,Math.max(1,...ranks.map(column=>column.filter(node=>node.actor===actor).length))*pitch]));
@@ -134,7 +141,7 @@ export function layoutGraph(model: GraphModel, direction: 'vertical' | 'horizont
     });
     const lastOwned=Math.max(1,...model.nodes.filter(node=>node.actor).map(node=>node.rank));
     const start=20+flow-32,end=20+lastOwned*flow+(vertical?94:225)+18;
-    const lanes:GraphLane[]=actors.map(actor=>({actor,label:actor==='main'?'主 Agent · 推进与复核':'子 Agent · 独立排查',x:vertical?offsets.get(actor)!-8:start,y:vertical?start:offsets.get(actor)!-10,width:vertical?spans.get(actor)!+16:end-start,height:vertical?end-start:spans.get(actor)!+20}));
+    const lanes:GraphLane[]=actors.map(actor=>({actor,label:actor==='main'?'主 Agent · 推进与复核':'子 Agent · 排查与执行',x:vertical?offsets.get(actor)!-8:start,y:vertical?start:offsets.get(actor)!-10,width:vertical?spans.get(actor)!+16:end-start,height:vertical?end-start:spans.get(actor)!+20}));
     return {...model,nodes,width:vertical?cross:rankCount*flow+10,height:vertical?rankCount*flow+10:cross,lanes};
   }
   const count = Math.max(...ranks.map(column => column.length), 2), vertical = direction === 'vertical';

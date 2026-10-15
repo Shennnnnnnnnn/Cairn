@@ -56,7 +56,7 @@ export function projectTask(engine: Engine, task: Task, historicalAt?: string): 
     const status = branchStatus(task, branch), run = branchRun(task, branch);
     return { ...branch, status, recordedStatus: branch.status, statusLabel: branchLabels[status], executorLabel: branch.executor === 'main' ? '主 Agent' : branch.assignee || '子 Agent', activitySource: run ? 'host' : 'agent', activityStatus: run?.status ?? 'unknown' };
   });
-  const branchCounts = { total: branches.length, running: branches.filter(b=>b.status==='running').length, review: branches.filter(b=>b.status==='awaiting_review').length, completed: branches.filter(b=>b.status==='completed').length, waiting: branches.filter(b=>['pending','blocked'].includes(b.status)).length, delegated: branches.filter(b=>b.executor==='subagent'&&b.status!=='cancelled').length };
+  const branchCounts = { total: branches.length, running: branches.filter(b=>['running','reviewing'].includes(b.status)).length, review: branches.filter(b=>['awaiting_review','reviewing'].includes(b.status)).length, completed: branches.filter(b=>b.status==='completed').length, waiting: branches.filter(b=>['pending','blocked'].includes(b.status)).length, delegated: branches.filter(b=>b.executor==='subagent'&&b.status!=='cancelled').length };
   // Historical criteria use current validated coverage, never the presence of a link alone.
   for (const item of work.items.filter(i => i.source === 'criterion')) {
     const met = !check.unmet.includes(item.key.slice('criterion:'.length));
@@ -72,7 +72,8 @@ export function projectTask(engine: Engine, task: Task, historicalAt?: string): 
     inFlight: captured && task.status === 'active' ? Object.values(task.calls).filter(c => c.status === 'running').length : 0,
     calls: captured ? Object.keys(task.calls).length : 0,
   };
-  let phase = { key: 'investigating', label: workCounts.running || branchCounts.running ? 'Agent 报告执行中' : branchCounts.review ? '分支待汇总' : '目标推进中' };
+  const nativeRunning=(task.agentRuns??[]).some(run=>run.epoch===task.owner.epoch&&run.host===task.owner.host&&run.status==='running');
+  let phase = { key: 'investigating', label: nativeRunning?'宿主记录执行中':workCounts.running || branchCounts.running ? 'Agent 报告执行中' : branchCounts.review ? '分支待汇总' : '目标推进中' };
   if (task.status === 'completed') phase = { key: 'completed', label: '已完成' };
   else if (task.status === 'suspended') phase = { key: 'suspended', label: '已暂停' };
   else if (task.budget.deadline && Date.parse(task.budget.deadline) <= (historicalAt ? Date.parse(historicalAt) : engine.now().getTime())) phase = { key: 'expired', label: '提醒时间已到' };
@@ -100,6 +101,7 @@ const titles: Record<string, string> = {
   'tool.started': '开始历史工具调用', 'observation.captured': '保存原始观测', 'claim.revised': '更新结论', 'criterion.updated': '更新目标条件', 'action.updated': '更新行动进展',
   'hint.added': '补充人工提示', 'report.saved': '保存报告', 'continuation.suggested': '提醒未完成事项',
   'agent.started': '助手开始执行', 'agent.returned': '助手执行结束，待汇总',
+  'branch.updated': '分支状态变化', 'progress.updated': '执行状态变化', 'finding.updated': '结论变化',
 };
 /** Timeline projections allow only authored summaries and lifecycle metadata, never raw tool results. */
 export function projectEvent(row: { seq: number; kind: string; at: string; payload: any }): TimelineEvent {
@@ -113,8 +115,17 @@ export function projectEvent(row: { seq: number; kind: string; at: string; paylo
     summary = value(input.summary);
     detail = Array.isArray(payload.validation?.issues) ? payload.validation.issues.filter((s: unknown) => typeof s === 'string').join('\n') : '';
   } else if (row.kind === 'task.resumed') { summary = payload.takeover ? '新会话接管目标，继续已有结论与未解决问题。' : '继续当前会话保存的目标与进展。'; }
+  else if(row.kind==='task.suspended'&&input.source==='host'){summary='宿主会话结束或被中断，已自动保存未完成工作，等待显式恢复。';}
   else if (row.kind === 'tool.started' || row.kind === 'observation.captured') { summary = value(input.tool ?? payload.tool); status = value(payload.status); }
   else if (row.kind === 'agent.started' || row.kind === 'agent.returned') { summary = `${value(payload.type) || '子 Agent'} · ${value(payload.agentId)}`; }
+  else if (['branch.updated','progress.updated','finding.updated'].includes(row.kind)) {
+    const change=input.branch??input.progress??input.finding;
+    if(change){
+      status=value(change.status);summary=value(change.title??change.text??change.key);
+      title=input.branch?`分支 · ${branchLabels[status as keyof typeof branchLabels]??status}`:input.finding?'更新结论与依据':'更新执行状态';
+      detail=value(change.summary??change.detail??change.basis);
+    }
+  }
   else summary = value(input.summary ?? input.text ?? input.goal ?? payload.result?.text ?? payload.summary);
   if (row.kind === 'task.checkpoint' || row.kind === 'task.finished' || row.kind === 'task.checked') {
     const lines = [Array.isArray(input.questions) && input.questions.length ? `未解决问题\n${input.questions.filter((s: unknown) => typeof s === 'string').join('\n')}` : '', value(input.next) ? `下一步\n${input.next}` : '', detail].filter(Boolean);

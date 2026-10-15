@@ -188,12 +188,14 @@ function renderReplay() {
     const state=checkpointActors(current),main=[],sub=[];
     if(state.main.running)main.push(`执行中 ${state.main.running}`);
     if(state.main.review)main.push(`待复核 ${state.main.review}`);
+    if(state.main.reviewing)main.push(`正在复核 ${state.main.reviewing}`);
     if(state.main.reviewed)main.push(`复核完成 ${state.main.reviewed}`);
-    if(state.subagent.running)sub.push(`执行中 ${state.subagent.running}`);
+    if(state.subagent.running)sub.push(`排查中 ${state.subagent.running}`);
     if(state.subagent.returned)sub.push(`已返回待汇总 ${state.subagent.returned}`);
     if(state.subagent.reviewed)sub.push(`已返回并复核 ${state.subagent.reviewed}`);
     if(state.subagent.pending)sub.push(`待启动 ${state.subagent.pending}`);
-    actors.append(create('span','actor-caption','此时已知状态'),create('span','actor-summary main',`主 Agent · ${main.join(' / ')||'阶段推进'}`),create('span','actor-summary subagent',`子 Agent · ${sub.join(' / ')||'无执行中分支'}`));
+    actors.append(create('span','actor-caption','此时已知状态'),create('span','actor-summary main',`主 Agent · ${main.join(' / ')||'阶段推进'}`),create('span','actor-summary subagent',`子 Agent 分支 · ${sub.join(' / ')||'无执行中分支'}`));
+    if(state.native.running||state.native.returned)actors.append(create('span','actor-summary native',`宿主自动记录 · ${state.native.running} 会话执行中 / ${state.native.returned} 会话已返回`));
   }
   const changes=byId('replay-changes');changes.replaceChildren();
   const delta=replayDelta;
@@ -238,7 +240,7 @@ async function seekReplayTime(position: number, playing = false) {
     current = saved.task; timeline = saved.events; replayIndex = index; replayLoading = false;
     if (replayPlaying) replayClock.play();
     replayDelta=saved.checkpoint??compareCheckpoint(saved.task,undefined,{baseline:'unknown'});
-    const primary=replayDelta.changes.find(change=>change.kind==='branch'&&change.change!=='removed');
+    const primary=replayDelta.changes.find(change=>['branch','agent'].includes(change.kind)&&change.change!=='removed');
     detailGeneration++; selectedNode = primary?.relatedIds[0]??primary?.nodeId??(current.status==='completed'?'goal':'origin'); renderCurrent(); showError(); scheduleReplay();
   } catch (error) { if (generation === replayGeneration) { replayLoading = false; stopReplayPlayback(); renderReplay(); showError(error); } }
 }
@@ -341,7 +343,7 @@ function focusNodes(ids:string[]){
   transform.x=rect.width/2-(left+right)/2*transform.scale;transform.y=rect.height/2-(top+bottom)/2*transform.scale;viewportCustomized=true;applyTransform();
 }
 function followReplayActivity(){
-  const flow=[...nodes.values()].filter(node=>node.kind==='branch'||node.kind==='review');
+  const flow=[...nodes.values()].filter(node=>['branch','agent','review'].includes(node.kind));
   focusNodes(flow.length?flow.map(node=>node.id):replayDelta?.highlighted??[]);viewportCustomized=false;
 }
 function applyTransform() {
@@ -386,10 +388,19 @@ async function renderDetails() {
   const delta=replayActive?replayDelta?.changes.find(change=>change.nodeId===selectedNode||change.relatedIds.includes(selectedNode)):undefined;
   if(delta)panel.append(create('div','checkpoint-detail',`最近记录 · ${delta.label}${delta.before?`\n${delta.before} → ${delta.after??'已移除'}`:''}`));
   const reviewing=selectedNode.startsWith('review:');
+  if(selectedNode.startsWith('agent:')){
+    const run=task.agentRuns?.find(run=>`agent:${run.epoch}:${run.attempt}:${run.agentId}`===selectedNode);
+    if(run){
+      text('detail-kind','宿主执行会话');panel.append(create('h2','',run.status==='returned'?'子 Agent 执行已返回':'子 Agent 正在执行'));
+      metadata(panel,'状态来源','原生生命周期事件 · 自动保存');metadata(panel,'原生 Agent ID',run.agentId);metadata(panel,'宿主',run.host);
+      if(run.startedAt)metadata(panel,'启动时间',formatTime(run.startedAt));if(run.returnedAt)metadata(panel,'返回时间',formatTime(run.returnedAt));
+      panel.append(create('div','notice','这是宿主实际执行会话，尚未与某个排查分支建立确切身份关联；它不是新增的排查方向。执行返回不代表结论已被主 Agent 接受。无需 Agent 转述生命周期，不保存工具调用或会话全文。'));
+    }return;
+  }
   if(selectedNode.startsWith('branch:')||reviewing){
     const branch=task.branches.find(item=>item.key===selectedNode.slice(7));
     if(branch){
-      text('detail-kind',reviewing?'主 Agent 复核汇总':'排查分支');panel.append(create('div',`detail-tag ${branch.status}`,reviewing?(branch.status==='completed'?'复核完成':'返回待汇总 · 等待复核'):branch.statusLabel),create('h2','',branch.title));
+      text('detail-kind',reviewing?'主 Agent 复核汇总':'排查分支');panel.append(create('div',`detail-tag ${branch.status}`,reviewing?(branch.status==='completed'?'复核完成':branch.status==='reviewing'?'正在复核':'返回待汇总 · 等待复核'):branch.statusLabel),create('h2','',branch.title));
       metadata(panel,'负责人',reviewing?'主 Agent':branch.executor==='subagent'?`子 Agent · ${branch.executorLabel}`:branch.executorLabel);metadata(panel,'分支标识',branch.key);
       if(reviewing)metadata(panel,'结果返回自',`子 Agent · ${branch.executorLabel}`);
       if(branch.agentId)metadata(panel,'宿主 Agent ID',branch.agentId);
