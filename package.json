@@ -1,6 +1,6 @@
 {
   "name": "cairn",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "description": "Goal and evidence plugin for Pi, Claude Code and Codex",
   "type": "module",
   "license": "AGPL-3.0-only",

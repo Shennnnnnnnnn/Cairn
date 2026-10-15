@@ -56,7 +56,9 @@ The emergency profile adds its shared 30-minute match deadline and default final
 
 ## Identity, subagents and ownership
 
-One `ToolRuntime` belongs to one native session or MCP connection and owns its gateway lifecycle. Pi obtains identity from the actual invocation context. Claude/Codex startup hooks provide the true native session ID; a connection supplies it on its first start/resume and then uses its binding. Standalone MCP can use `--session-id`.
+One `ToolRuntime` belongs to one native session or MCP connection and owns its gateway lifecycle. Pi obtains identity from the actual invocation context. Native Claude/Codex startup hooks provide the true native session ID; a connection supplies it on its first start/resume and then uses its binding. Generic `cairn mcp` automatically generates a fresh per-process UUID when no explicit `--session-id` is supplied. This is a generic MCP identity, not a claimed native CLI session. New owners still require explicit takeover; no identity is inferred from recent tasks.
+
+Generic MCP database selection uses `--db`, then `CAIRN_DB`, then `userHome()/.cairn/mcp.json`, then the workspace. `--remember` writes the generic preference atomically; `--forget` clears it and exits. Explicit native hosts retain their existing database/identity path. UI preferences remain separate; integration installation intentionally saves both to the same database.
 
 No identity is guessed from recent activity or a database row. Read-only inspection can address another task; editing requires the active bound owner, matching cwd and execution epoch. A new child-agent context is not automatically bound to its parent's goal.
 

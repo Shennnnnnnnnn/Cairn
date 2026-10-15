@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Store } from './core/store.js';
@@ -17,6 +18,8 @@ import { gatewaySchema, Gateway } from './gateway.js';
 import { markdown, html } from './export.js';
 import { startUi } from './ui/server.js';
 import { uiDatabase, rememberUiDatabase, forgetUiDatabase } from './ui/preferences.js';
+import { mcpDatabase, rememberMcpDatabase, forgetMcpDatabase } from './mcp-preferences.js';
+import { installMultica, uninstallMultica, multicaStatus } from './multica.js';
 import { VERSION } from './version.js';
 import { prepareDemo, runDemo } from './demo.js';
 import { startDemoTools } from './demo-tools.js';
@@ -68,12 +71,13 @@ async function demonstration(v:{root?:string;port?:string;delay?:string;prepare?
 export async function main(argv=process.argv.slice(2)){
  const command=argv[0]??'help';
  if(['--version','-v','version'].includes(command)){process.stdout.write(`${VERSION}\n`);return;}
- const {values:v,positionals}=parseArgs({args:argv.slice(1),allowPositionals:true,options:{target:{type:'string'},scope:{type:'string'},root:{type:'string'},host:{type:'string'},port:{type:'string'},remember:{type:'boolean'},forget:{type:'boolean'},prepare:{type:'boolean'},'no-ui':{type:'boolean'},delay:{type:'string'},'session-id':{type:'string'},db:{type:'string'},file:{type:'string'},input:{type:'string'},'task-id':{type:'string'},format:{type:'string'},out:{type:'string'},'takeover':{type:'boolean'},'json':{type:'boolean'}}});
- if((v.remember||v.forget)&&command!=='ui')throw new CairnError('invalid_input','--remember and --forget are only available for cairn ui');
+ const {values:v,positionals}=parseArgs({args:argv.slice(1),allowPositionals:true,options:{target:{type:'string'},agent:{type:'string'},'workspace-id':{type:'string'},adopt:{type:'boolean'},scope:{type:'string'},root:{type:'string'},host:{type:'string'},port:{type:'string'},remember:{type:'boolean'},forget:{type:'boolean'},prepare:{type:'boolean'},'no-ui':{type:'boolean'},delay:{type:'string'},'session-id':{type:'string'},db:{type:'string'},file:{type:'string'},input:{type:'string'},'task-id':{type:'string'},format:{type:'string'},out:{type:'string'},'takeover':{type:'boolean'},'json':{type:'boolean'}}});
+ if((v.remember||v.forget)&&!['ui','mcp'].includes(command))throw new CairnError('invalid_input','--remember and --forget are only available for cairn ui or cairn mcp');
  if(v.remember&&v.forget)throw new CairnError('invalid_input','Use either --remember or --forget');
+ if((v.agent||v['workspace-id']||v.adopt)&&(!['install','update','uninstall','doctor'].includes(command)||v.target!=='multica'))throw new CairnError('invalid_input','--agent, --workspace-id and --adopt require --target multica on an installation or doctor command');
  const output=(value:unknown)=>process.stdout.write(JSON.stringify(value??{ok:true},null,2)+'\n');
  if(command==='help'||command==='--help'){
-  process.stdout.write(`Cairn ${VERSION} — goals and evidence for Pi, Claude Code and Codex\n\nNode >=24 required. Install globally from the repository with npm run install:global.\n\n  cairn --version\n  cairn demo [--port 8000] [--delay 1500] [--no-ui] [--json]\n  cairn demo --prepare [--target pi|claude|codex] [--root NEW_DIR]\n  cairn install|update|uninstall --target pi|claude|codex [--scope project|user] [--root DIR]\n  cairn doctor [--target pi|claude|codex] [--scope project|user] [--root DIR]\n  cairn ui                         # open the remembered dashboard or current workspace\n  cairn ui --db FILE --remember    # remember a dashboard database once\n  cairn ui --forget                # clear the remembered database and exit\n  cairn ui [--port 8000] [--db FILE]\n  cairn mcp --host pi|claude|codex|mcp [--session-id ID] [--db FILE]\n  cairn hook --host claude|codex     # native hook JSON on stdin\n  cairn configure --file whitelist.json\n  cairn task list|show|resume|suspend|hint [ID] --host HOST --session-id ID [--takeover]\n  cairn call TOOL --input args.json --host HOST --session-id ID\n  cairn confirm TASK_ID            # human team confirmation after platform receipt\n  cairn export TASK_ID [--format json|markdown|html] [--out FILE]\n\nTask database defaults to <workspace>/.cairn/state.db. CAIRN_DB overrides it.\nUI database: --db > CAIRN_DB > remembered dashboard > workspace database.\nWithout --port, UI tries 8000 and selects a free port if occupied.\nDemo always creates a separate workspace/database and uses labelled simulated data.\n`);return;
+  process.stdout.write(`Cairn ${VERSION} — goals and evidence for Pi, Claude Code and Codex\n\nNode >=24 required. Install globally from the repository with npm run install:global.\n\n  cairn --version\n  cairn demo [--port 8000] [--delay 1500] [--no-ui] [--json]\n  cairn demo --prepare [--target pi|claude|codex] [--root NEW_DIR]\n  cairn install|update|uninstall --target pi|claude|codex [--scope project|user] [--root DIR]\n  cairn install --target multica --agent NAME [--workspace-id ID] [--adopt]\n  cairn update|uninstall|doctor --target multica\n  cairn doctor [--target pi|claude|codex] [--scope project|user] [--root DIR]\n  cairn ui                         # open the remembered dashboard or current workspace\n  cairn ui --db FILE --remember    # remember a dashboard database once\n  cairn ui --forget                # clear the remembered database and exit\n  cairn ui [--port 8000] [--db FILE]\n  cairn mcp                        # generic MCP, automatic connection identity\n  cairn mcp --db FILE --remember   # remember the generic MCP database\n  cairn mcp --forget               # clear the generic MCP preference and exit\n  cairn mcp --host pi|claude|codex [--session-id ID] [--db FILE]\n  cairn hook --host claude|codex     # native hook JSON on stdin\n  cairn configure --file whitelist.json\n  cairn task list|show|resume|suspend|hint [ID] --host HOST --session-id ID [--takeover]\n  cairn call TOOL --input args.json --host HOST --session-id ID\n  cairn confirm TASK_ID            # human team confirmation after platform receipt\n  cairn export TASK_ID [--format json|markdown|html] [--out FILE]\n\nTask database defaults to <workspace>/.cairn/state.db. CAIRN_DB overrides it.\nUI database: --db > CAIRN_DB > remembered dashboard > workspace database.\nGeneric MCP: --db > CAIRN_DB > remembered MCP database > workspace database.\nNative adapters keep real host identity and workspace database selection.\nWithout --port, UI tries 8000 and selects a free port if occupied.\nDemo always creates a separate workspace/database and uses labelled simulated data.\n`);return;
  }
  if(command==='demo'){await demonstration(v);return;}
  if(command==='demo-tools'){
@@ -86,7 +90,16 @@ export async function main(argv=process.argv.slice(2)){
   if(process.stdin.readableEnded)await close();else process.stdin.once('end',()=>{void close().catch(error=>{process.stderr.write(`Cairn demo tools: ${error.message}\n`);process.exitCode=1;});});return;
  }
  if(['install','update','uninstall'].includes(command)){
-  if(!['pi','claude','codex'].includes(v.target??''))throw new CairnError('invalid_input','--target pi|claude|codex is required');
+  if(v.target==='multica'){
+   if(v.scope&&v.scope!=='user')throw new CairnError('invalid_input','Multica connects a runtime user; use --scope user or omit it');
+   const options={agent:v.agent,workspaceId:v['workspace-id'],db:v.db,adopt:v.adopt,root:v.root};
+   if(command==='uninstall'){output(uninstallMultica(options));return;}
+   const result=installMultica(options);
+   if(result.installed){rememberMcpDatabase(result.database);rememberUiDatabase(result.database);}
+   output(result);return;
+  }
+  if(!['pi','claude','codex'].includes(v.target??''))throw new CairnError('invalid_input','--target pi|claude|codex|multica is required');
+  if(v.db)throw new CairnError('invalid_input','--db on installation commands is only supported for --target multica');
   if(v.scope&&!['project','user'].includes(v.scope))throw new CairnError('invalid_input','Invalid scope');
   const target=v.target as Target,scope=(v.scope??'project') as 'project'|'user';
   output(command==='uninstall'?uninstall(target,scope,v.root):install(target,scope,v.root));return;
@@ -95,14 +108,20 @@ export async function main(argv=process.argv.slice(2)){
   if(v.db||v.port||v.host||v.root)throw new CairnError('invalid_input','--forget clears the remembered dashboard and exits; do not combine it with startup options');
   forgetUiDatabase();process.stdout.write('已清除默认看板。下次 cairn ui 将读取当前工作区数据库。\n');return;
  }
+ if(command==='mcp'&&v.forget){
+  if(v.db||v.root||v['session-id']||v.host&&v.host!=='mcp')throw new CairnError('invalid_input','--forget clears the generic MCP database preference and exits; do not combine it with startup options');
+  forgetMcpDatabase();process.stdout.write('已清除通用 MCP 默认数据库。\n');return;
+ }
+ if(command==='doctor'&&v.target==='multica'){output(multicaStatus({agent:v.agent,workspaceId:v['workspace-id'],root:v.root}));return;}
  let hookEvent:any;
  if(command==='hook')hookEvent=JSON.parse(readFileSync(0,'utf8'));
  const host=(command==='ui'?'mcp':v.host??process.env.CAIRN_HOST??'mcp') as Host;
  if(!['pi','claude','codex','mcp'].includes(host))throw new CairnError('invalid_input','Invalid host');
+ if(command==='mcp'&&v.remember&&host!=='mcp')throw new CairnError('invalid_input','Only generic --host mcp uses a remembered MCP database; native adapters use their workspace configuration');
  const cwd=hookEvent?.cwd??v.root??process.cwd();
- const selectedDatabase=command==='ui'?uiDatabase(cwd,v.db):v.db?resolve(v.db):database(cwd);
+ const selectedDatabase=command==='ui'?uiDatabase(cwd,v.db):command==='mcp'&&host==='mcp'?mcpDatabase(cwd,v.db):v.db?resolve(v.db):database(cwd);
  const store=new Store(selectedDatabase),engine=new Engine(store);
- const session:Session={host,cwd,sessionId:v['session-id']??''};
+ const session:Session={host,cwd,sessionId:v['session-id']??(command==='mcp'&&host==='mcp'?`mcp-${randomUUID()}`:'')};
  try{
   if(command==='ui'){
    let dashboard:Awaited<ReturnType<typeof startUi>>|undefined,usedFreePort=false;
@@ -120,9 +139,11 @@ export async function main(argv=process.argv.slice(2)){
    process.once('SIGTERM',close);process.once('SIGINT',close);return;
   }
   if(command==='mcp'){
-   const server=await startMcp(engine,session);
+   let server:Awaited<ReturnType<typeof startMcp>>|undefined;
+   try{server=await startMcp(engine,session);if(v.remember)rememberMcpDatabase(selectedDatabase);}
+   catch(error){await server?.close();store.close();throw error;}
    let closing:Promise<void>|undefined;
-   const close=()=>closing??=(async()=>{try{await server.close();}finally{store.close();}})();
+   const close=()=>closing??=(async()=>{try{await server!.close();}finally{store.close();}})();
    process.once('SIGTERM',()=>{void close().finally(()=>process.exit(0));});
    process.once('SIGINT',()=>{void close().finally(()=>process.exit(0));});
    // EOF must also release upstream processes, not wait for the host to force termination.

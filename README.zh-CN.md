@@ -52,11 +52,35 @@ cairn ui
 
 [通用目标工作流完整指南](docs/goal-workflow.zh-CN.md) 提供不配置工具、不保存调用日志的完整样例，并解释进度、预算、子 Agent 和原始观测的职责。
 
+## Multica 一次安装
+
+在运行 Multica 的同一台机器上执行，使用实际工作区 ID 和智能体名称：
+
+```sh
+cairn install --target multica --agent "排障助手" --workspace-id WORKSPACE_ID
+```
+
+安装器会登记 Cairn MCP、绑定共享 skill，并让通用 MCP 与 `cairn ui` 使用同一份持久数据库。已有手工登记的 `cairn` 服务时加 `--adopt` 接管。后续直接使用：
+
+```sh
+cairn update --target multica
+cairn doctor --target multica
+cairn ui
+```
+
+从源码安装全局命令时，也可以一次完成接入：
+
+```sh
+npm run install:global -- --target multica --agent "排障助手" --workspace-id WORKSPACE_ID
+```
+
+无 `--target` 时安装脚本只更新全局命令。详见 [Multica 接入指南](docs/multica.zh-CN.md)。
+
 ## 模型的最短使用流程
 
 ### 开始 → 自由使用工具 → 完成验收
 
-以下是 **Cairn 工具调用参数**，由 Agent 在宿主中执行。Claude Code／Codex 的 MCP 连接首次调用 `cairn_start` 或 `cairn_resume` 时，使用启动 hook 提供的真实 `session_id`；Pi 自动绑定原生会话，省略该字段。后续无需重复传会话或任务 ID。
+以下是 **Cairn 工具调用参数**，由 Agent 在宿主中执行。通用 `cairn mcp`（包括 Multica）自动绑定独立会话，省略 `session_id`。原生 Claude Code／Codex 适配在首次 start／resume 使用启动 hook 提供的真实身份；Pi 自动绑定。后续无需重复传会话或任务 ID。
 
 **1. `cairn_start`：** 只给目标即可，未提供 `criteria` 时，目标本身成为唯一完成条件 `c1`。
 
@@ -207,15 +231,18 @@ cairn export TASK_ID --format html --out evidence.html
 | Pi | 自包含原生 package、扩展和共享 skill | 自动绑定原生会话；状态变更／压缩后恢复摘要；checkpoint 保存进度 |
 | Claude Code | 本地 marketplace 插件，含 skills、hooks、stdio MCP | 首次 start／resume 使用启动 hook 的真实 ID；checkpoint 保存进度 |
 | Codex | 项目／用户 hooks、MCP、skill；同时构建 marketplace 包 | 同样绑定身份；checkpoint 保存进度；captured 计划事件需可靠任务／代次关联 |
+| Multica | 本机运行时上的受管 MCP 与共享 skill | 自动连接身份；显式 checkpoint／恢复／完成；与看板同库 |
 
 构建产物位于 `dist/plugins/{pi,claude,codex}`，每包包含自己的运行时。Codex 项目级安装使用原生配置登记，不依赖全局插件缓存自动激活。
 
 其他 MCP 客户端可运行共享服务并加载 `skills/cairn`：
 
 ```sh
-cairn mcp --host mcp --session-id my-task-session
+cairn mcp
 cairn doctor --target codex
 ```
+
+通用 MCP 自动生成本次连接独立的会话身份。可用 `cairn mcp --db FILE --remember` 保存通用 MCP 数据库，`cairn mcp --forget` 清除。数据库优先级为 `--db` → `CAIRN_DB` → MCP 已保存配置 → 当前工作区；原生适配继续使用自己的身份与工作区配置。
 
 仅 MCP 即可显式记录普通任务和恢复状态。原生生命周期与压缩上下文接入取决于宿主实际提供的事件。`doctor` 区分声明能力和已观察到的事件，检查版本、安装、MCP、已配置上游与 hooks 启动观察状态。缺少取证 hooks 不影响 curated 任务；缺少恢复事件时使用显式 read／resume。严格比赛任务缺少要求的能力时拒绝启动或接管。
 

@@ -50,7 +50,7 @@ Tool guidance is task input. Cairn does not hardcode which diagnostic, code or r
 
 ## The shortest model workflow
 
-On Claude/Codex MCP, supply the actual startup-hook `session_id` once on the first start/resume. Pi binds its native identity automatically; omit that field. Subsequent calls use the connection binding.
+Generic `cairn mcp`, including Multica, binds a fresh connection identity automatically; omit `session_id`. Native Claude/Codex adapters supply the actual startup-hook `session_id` once on the first start/resume. Pi binds its native identity automatically. Subsequent calls use the connection binding.
 
 **`cairn_start`:** omitted criteria default to the goal.
 
@@ -179,15 +179,39 @@ User interruption is authoritative, suspended work has no continuation prompts, 
 | Pi | Self-contained native package, extension and skill | Native identity; changed checkpoints and compaction restore context; explicit checkpoint progress |
 | Claude Code | Local marketplace plugin with skills, hooks and stdio MCP | Startup ID binds the first start/resume; explicit checkpoint progress |
 | Codex | Project/user hooks, MCP and skill; a marketplace package is also built | Same identity binding; explicit checkpoint progress; optional captured plan-event mapping with a valid task/epoch association |
+| Multica | Managed MCP and shared skill on its local runtime | Automatic MCP identity; explicit checkpoint/resume/finish; shared dashboard database |
 
 Packages under `dist/plugins/{pi,claude,codex}` include their runtime. Codex project installation uses scoped hooks/MCP/skill registration rather than automatic global plugin-cache activation.
 
 Other clients can run the shared MCP server and load `skills/cairn`:
 
 ```sh
-cairn mcp --host mcp --session-id my-task-session
+cairn mcp
 cairn doctor --target codex
 ```
+
+Generic MCP selects `--db`, then `CAIRN_DB`, then its saved database, then the workspace. Remember it with `cairn mcp --db FILE --remember`; clear it with `cairn mcp --forget`. Native adapters keep their actual host identities and workspace selection.
+
+### Multica installation
+
+Run on the same machine as the selected Multica runtime, using the real workspace ID:
+
+```sh
+cairn install --target multica --agent "Troubleshooting Assistant" --workspace-id WORKSPACE_ID
+cairn update --target multica
+cairn doctor --target multica
+cairn ui
+```
+
+The installer registers the MCP server, binds the shared skill, and saves the same persistent database for generic MCP and the dashboard. An existing unmanaged `cairn` server needs explicit `--adopt`. The last successful workspace/agent selection is remembered; later updates do not depend on Multica's current workspace selection.
+
+The global installation script can run that setup with the installed copy:
+
+```sh
+npm run install:global -- --target multica --agent "Troubleshooting Assistant" --workspace-id WORKSPACE_ID
+```
+
+Omit `--target` to update only the global command. See the [Chinese Multica guide](docs/multica.zh-CN.md) for ownership, recovery and capability limits.
 
 MCP alone is sufficient for explicit curated checkpoints and recovery. Native lifecycle/context restoration depends on actual host integration. Curated goals do not automatically mirror native plans, and Claude/Pi have no guaranteed native-plan mapping in Cairn. Captured Codex plan events require a previously reserved call for the current task and epoch; hosted paths may bypass local hooks.
 

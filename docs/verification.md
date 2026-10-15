@@ -2,6 +2,19 @@
 
 Record date: 2026-10-15 (Asia/Shanghai). Results below identify the evidence mode and distinguish automated integration checks from real model executions.
 
+## Cairn 3.1 MCP defaults and Multica installer
+
+Verified locally on 2026-10-15 (Asia/Shanghai).
+
+- **172 automated tests passed on Node 26.3.0 and Node 24.19.0**, including the shared build/typecheck. Shared skill validation and 11 JSON / 38 shell documentation blocks passed.
+- Real stdio tests cover bare `cairn mcp` identity generation, startup without model-supplied session IDs, cross-directory recovery, explicit takeover and rejection of old connections. Generic MCP preferences remain independent of UI preferences; native adapters retain their actual-session requirements and workspace database selection.
+- Multica installer tests use a deterministic injected runner: exact workspace/agent selection, remembered defaults, existing-registration adoption, unrelated binding preservation, known old-skill migration, user-edit protection, repeated updates and partial failure reconciliation. Runtime bundles/configurations are immutable versions; old successful receipts remain available. Interrupted skill upgrades retain the full prechecked baseline for retry.
+- Global installer tests verify forwarding Multica options to the actual globally installed copy, source-independent paths, argument boundaries, failure propagation and archive cleanup. Without `--target`, global installation keeps its existing command-only behavior.
+- Compatibility checks cover Multica write commands returning `null` or acknowledgement payloads: the installer confirms MCP identity and created skill content through subsequent reads, rather than assuming a full object response.
+- Actual local Multica 0.4.41 setup was upgraded through `npm run install:global -- --target multica ... --adopt`. The partial receipt from an initial response-format mismatch was recovered by retry. A subsequent parameter-free `cairn update --target multica` reused the same MCP and skill IDs in the saved workspace. Doctor confirmed both bindings enabled and the installed runtime present; the imported skill matched the source. Model, effort, service tier, runtime, instructions, custom arguments, concurrency and access settings matched their pre-install snapshot.
+- The actual generated MCP entry was exercised with an isolated temporary database and a PATH without Node: automatic identity, checkpoint, pause, cross-directory takeover, stale-owner rejection and completion passed, with zero tool records. This is an installed-runtime stdio protocol check, not a new Multica model reasoning run. MCP and UI preferences were confirmed to select the same persistent database.
+- Multica MCP configuration is write-only. Doctor reports remote registration/binding state and the locally recorded last successful configuration; it cannot independently read back the server entry's full contents. This integration provides the generic curated MCP workflow, with explicit checkpoints/recovery rather than native capture hooks.
+
 ## Cairn 3.0.2 shorter dashboard command
 
 Verified locally on 2026-10-15 (Asia/Shanghai).

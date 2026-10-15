@@ -22,6 +22,106 @@ test('global installer accepts directory arguments literally and rejects invalid
   assert.throws(() => parseOptions(['--force']), /Unknown option/);
   assert.throws(() => parseOptions(['--prefix']), /requires a directory/);
   assert.throws(() => parseOptions(['--prefix', '--cache', 'cache']), /requires a directory/);
+  assert.deepEqual(parseOptions(['--target=multica', '--agent', '排障助手', '--workspace-id=workspace-1', '--db', 'shared state.db', '--adopt']), {
+    target: 'multica', agent: '排障助手', workspaceId: 'workspace-1', db: resolve('shared state.db'), adopt: true,
+  });
+  for (const target of ['pi', 'claude', 'codex']) assert.deepEqual(parseOptions(['--target', target]), { target });
+  assert.throws(() => parseOptions(['--target', 'other']), /--target must be one of/);
+  for (const args of [['--agent', 'a'], ['--workspace-id', 'w'], ['--db', 'state.db'], ['--adopt'], ['--target', 'codex', '--db', 'state.db']]) {
+    assert.throws(() => parseOptions(args), /requires --target multica/);
+  }
+  for (const flag of ['--target', '--agent', '--workspace-id', '--db']) {
+    assert.throws(() => parseOptions(['--target', 'multica', flag]), /requires a value/);
+    assert.throws(() => parseOptions(['--target', 'multica', `${flag}=`]), /requires a value/);
+  }
+});
+
+function installerFixture() {
+  const root = mkdtempSync(join(tmpdir(), 'cairn-global-forward-'));
+  const checkout = join(root, 'checkout'), workspace = join(root, 'workspace'), prefix = join(root, "global prefix'$(false)");
+  const npmLog = join(root, 'npm.jsonl'), executionLog = join(root, 'execution.json'), archiveLog = join(root, 'archive.json');
+  mkdirSync(join(checkout, 'scripts'), { recursive: true });
+  mkdirSync(workspace);
+  cpSync(script, join(checkout, 'scripts/install-global.mjs'));
+  const npmPath = join(root, 'fake-npm.mjs');
+  const runtime = `import {writeFileSync} from 'node:fs';
+writeFileSync(${JSON.stringify(executionLog)},JSON.stringify({argv:process.argv,cwd:process.cwd(),execPath:process.execPath}));
+if(process.env.CAIRN_FIXTURE_ADAPTER_EXIT)process.exitCode=Number(process.env.CAIRN_FIXTURE_ADAPTER_EXIT);
+`;
+  writeFileSync(npmPath, `import {appendFileSync,mkdirSync,writeFileSync} from 'node:fs';import {dirname,join} from 'node:path';
+const args=process.argv.slice(2);appendFileSync(${JSON.stringify(npmLog)},JSON.stringify({args,cwd:process.cwd()})+'\\n');
+if(args[0]==='pack'){const dir=args[args.indexOf('--pack-destination')+1];writeFileSync(join(dir,'cairn-fixture.tgz'),'fixture');writeFileSync(${JSON.stringify(archiveLog)},JSON.stringify(dir));console.log(JSON.stringify([{filename:'cairn-fixture.tgz'}]));}
+if(args[0]==='install'){const selected=args.includes('--prefix')?args[args.indexOf('--prefix')+1]:${JSON.stringify(prefix)};const entry=join(selected,process.platform==='win32'?'node_modules':'lib/node_modules','cairn/bin/cairn.mjs');mkdirSync(dirname(entry),{recursive:true});writeFileSync(entry,${JSON.stringify(runtime)});}
+if(args[0]==='prefix')console.log(${JSON.stringify(prefix)});
+`);
+  const invoke = (args: string[], extraEnv: Record<string, string> = {}) => spawnSync(process.execPath, [join(checkout, 'scripts/install-global.mjs'), ...args], {
+    cwd: workspace, env: { ...env, npm_execpath: npmPath, ...extraEnv }, encoding: 'utf8', timeout: 15000,
+  });
+  return { root, checkout, workspace, prefix, npmLog, executionLog, archiveLog, invoke };
+}
+
+test('global installer forwards integration arguments literally to the installed command in the caller workspace', () => {
+  const fixture = installerFixture();
+  try {
+    const marker = join(fixture.root, 'must-not-exist');
+    const agent = `排障助手 ';$(touch ${marker});\`touch ${marker}\``;
+    const workspaceId = 'workspace with space; literal', db = join(fixture.root, 'db with space;$(false).db');
+    const result = fixture.invoke(['--prefix', fixture.prefix, '--offline', '--target', 'multica', '--agent', agent, '--workspace-id', workspaceId, '--db', db, '--adopt']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const execution = JSON.parse(readFileSync(fixture.executionLog, 'utf8'));
+    const entry = join(fixture.prefix, process.platform === 'win32' ? 'node_modules' : 'lib/node_modules', 'cairn/bin/cairn.mjs');
+    assert.deepEqual(execution.argv, [process.execPath, entry, 'install', '--target', 'multica', '--agent', agent, '--workspace-id', workspaceId, '--db', db, '--adopt']);
+    assert.equal(execution.cwd, realpathSync(fixture.workspace));
+    assert.equal(execution.execPath, process.execPath);
+    assert.ok(!entry.startsWith(fixture.checkout));
+    assert.equal(existsSync(marker), false);
+    const npmCalls = readFileSync(fixture.npmLog, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    assert.ok(npmCalls.every(call => call.cwd === realpathSync(fixture.checkout)));
+    assert.deepEqual(npmCalls.map(call => call.args[0]), ['run', 'pack', 'install']);
+    assert.equal(existsSync(JSON.parse(readFileSync(fixture.archiveLog, 'utf8'))), false);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('global installer supports each native target and discovers the actual npm prefix', () => {
+  for (const target of ['pi', 'claude', 'codex']) {
+    const fixture = installerFixture();
+    try {
+      const result = fixture.invoke(['--target', target]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const execution = JSON.parse(readFileSync(fixture.executionLog, 'utf8'));
+      assert.deepEqual(execution.argv.slice(2), ['install', '--target', target]);
+      assert.ok(execution.argv[1].startsWith(fixture.prefix));
+      assert.equal(execution.cwd, realpathSync(fixture.workspace));
+      const npmCalls = readFileSync(fixture.npmLog, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+      assert.equal(npmCalls.at(-1).args[0], 'prefix');
+    } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+  }
+});
+
+test('global installer rejects bad integration options before npm or leaves integration untouched without a target', () => {
+  const fixture = installerFixture();
+  try {
+    for (const args of [['--agent', '排障助手'], ['--workspace-id', 'w'], ['--adopt'], ['--db', 'db'], ['--target', 'invalid'], ['--target', 'pi', '--agent', 'a']]) {
+      const result = fixture.invoke(args);
+      assert.equal(result.status, 1);
+      assert.equal(existsSync(fixture.npmLog), false);
+      assert.equal(existsSync(fixture.executionLog), false);
+    }
+    const result = fixture.invoke(['--prefix', fixture.prefix]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(existsSync(fixture.executionLog), false);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('global installer reports integration failure after global installation and removes the archive', () => {
+  const fixture = installerFixture();
+  try {
+    const result = fixture.invoke(['--prefix', fixture.prefix, '--target', 'multica', '--agent', '排障助手'], { CAIRN_FIXTURE_ADAPTER_EXIT: '19' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Global package installed, but cairn install --target multica failed: exit status 19/);
+    assert.ok(existsSync(fixture.executionLog));
+    assert.equal(existsSync(JSON.parse(readFileSync(fixture.archiveLog, 'utf8'))), false);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
 test('built runtimes expose only Node builtin external imports', async () => {
