@@ -3,7 +3,12 @@ export interface Session { host: Host; sessionId: string; cwd: string }
 export interface Owner extends Session { epoch: number }
 export interface Capabilities { capture: boolean; preTool: boolean; restore: boolean; stop: boolean }
 export interface Scope { workspaceId?: string; issueId?: string; teamId?: string; roundId?: string; matchId?: string }
-export interface Budget { deadline?: string; maxCalls?: number; maxParallel: number; submitReserveMs?: number }
+export type EvidenceMode = 'curated' | 'captured';
+export interface Budget { deadline?: string; maxCalls?: number; maxParallel?: number; submitReserveMs?: number }
+export interface ProgressInput {
+  key: string; title: string; status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled'; detail?: string;
+}
+export interface ProgressItem extends ProgressInput { source: 'agent' | 'host'; updatedAt: string }
 export interface Criterion { id: string; text: string; claimIds: string[] }
 export interface Observation {
   id: string; callId: string; tool: string; input: unknown; output: unknown;
@@ -16,6 +21,7 @@ export interface Claim {
   id: string; text: string; status: 'proposed' | 'supported' | 'refuted' | 'inconclusive';
   supports: string[]; refutes: string[]; scope: Scope; revision: number;
   key?: string; updatedAt?: string;
+  basis?: string; references?: string[]; provenance?: 'agent' | 'captured'; relatedCriteria?: string[];
 }
 export interface Action {
   id: string; purpose: string; stopCondition: string;
@@ -24,6 +30,7 @@ export interface Action {
 export interface EvidenceCitation { observationId: string; resultRef?: string; statement: string }
 export interface Report {
   summary: string; citations: EvidenceCitation[];
+  curatedReferences?: { claimId: string; statement: string; basis?: string; references: string[] }[];
   impact?: { text: string; scope: Scope; observationIds: string[] };
   rootCause?: { text: string; level: 'symptom' | 'service' | 'code' | 'root'; trigger?: string; amplification?: string };
   solution?: { mitigation: string; fix: string; prevention: string };
@@ -33,8 +40,9 @@ export interface CheckpointInput {
   summary: string;
   findings?: {
     key?: string; text: string; status?: Claim['status']; evidence?: string[]; against?: string[];
-    covers?: string[]; scope?: Scope;
+    covers?: string[]; scope?: Scope; basis?: string; references?: string[];
   }[];
+  progress?: ProgressInput[];
   questions?: string[]; next?: string;
   report?: { summary?: string; impact?: Report['impact']; rootCause?: Report['rootCause']; solution?: Report['solution'] };
 }
@@ -48,6 +56,9 @@ export interface Task {
   calls: Record<string, { status: 'running' | 'finished'; tool: string; startedAt: string; epoch?:number }>;
   report?: Report; delivery?: { key: string; receipt: unknown; recordedAt: string }; confirmedAt?: string;
   checkpoint?: Checkpoint;
+  /** Older records omit evidenceMode and retain captured semantics. */
+  evidenceMode?: EvidenceMode; progress?: ProgressItem[];
+  lastCheck?: { revision: number; fingerprint: string };
   continuation?: { revision: number; count: number }; interrupted: boolean;
 }
 export interface Check { ok: boolean; issues: string[]; unmet: string[] }

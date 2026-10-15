@@ -53,7 +53,7 @@ const server=createServer(async(req,res)=>{
   for(const tool of body.tools??[])if(coreNames.includes(tool.name))assert.equal(tool.input_schema?.properties?.session_id,undefined,'Pi must bind native identity without a model-facing session_id');
   verifyPrevious(body);
   const planned=phase==='create'?[
-   ['cairn_start',{goal:'Verify marker',criteria:['File contains marker']}],
+   ['cairn_start',{evidence_mode:'captured',goal:'Verify marker',criteria:['File contains marker']}],
    ['read',{path:join(root,'evidence.txt')}],
    ['cairn_finish',{outcome:'suspended',summary:'Verified marker; reviewer pending',findings:[{key:'marker',text:'File contains marker',evidence:['E1'],covers:['c1']}],questions:['Reviewer acceptance pending']}],
   ]:[

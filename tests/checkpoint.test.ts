@@ -120,7 +120,7 @@ test('strict completion exposes delivery and confirmation stages and freezes rec
   const receipt=observation(engine,task.id,'submit',{tool:'submit',resultRef:'receipt-ref',receipt:{accepted:true}});
   engine.delivery(task.id,session,'delivery-1',receipt.id);
   assert.equal(engine.finish(task.id,session,{outcome:'completed'}).phase,'awaiting_confirmation');
-  const delivered=store.get(task.id);assert.throws(()=>engine.checkpoint(task.id,session,{summary:'Changed conclusion'}),/frozen/);
+  const delivered=store.get(task.id);engine.checkpoint(task.id,session,{summary:'Progress only'});assert.deepEqual(store.get(task.id).report,delivered.report);assert.throws(()=>engine.checkpoint(task.id,session,{summary:'Changed conclusion',report:{summary:'Changed report'}}),/frozen/);
   assert.throws(()=>engine.report(task.id,session,{...delivered.report!,summary:'Changed report'}),/frozen/);
   assert.throws(()=>engine.claim(task.id,session,{id:delivered.claims[0]!.id,key:'cause',text:'Changed claim',status:'supported',supports:[delivered.observations[0]!.id],refutes:[]}),/frozen/);
   engine.confirm(task.id);const confirmation=store.get(task.id).confirmedAt;

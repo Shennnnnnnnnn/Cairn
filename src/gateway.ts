@@ -133,6 +133,7 @@ export class Gateway {
   async call(taskId: string, session: Session, name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<Observation> {
     if (this.closed) throw new CairnError('gateway_closed', 'Gateway has been closed');
     const task = this.engine.store.get(taskId), config = this.config(), tool = config.tools.find(candidate => candidate.name === name);
+    if (task.evidenceMode === 'curated') throw new CairnError('invalid_mode', 'Curated tasks use unrecorded read passthrough and cannot bypass captured delivery checks');
     if (!tool) throw new CairnError('not_allowed', `Tool ${name} is not on the configured whitelist`);
     let args = input;
     if (tool.role === 'submit') {
@@ -178,6 +179,29 @@ export class Gateway {
       // A successful platform submission remains immutable even when its receipt is missing.
       if (!observation) this.engine.observe(taskId, session, { callId, tool: name, input: args, output: rawResult ?? { error: (error as Error).message }, source: 'gateway', status: 'error' });
       if (transportFailed && connection) await this.dispose(connection);
+      throw error;
+    }
+  }
+  /** Optional MCP passthrough for curated goals. It deliberately creates no Cairn
+   * tool-call or observation records; arbitrary native tools do not need this path.
+   * Submission and receipt tools must keep their captured delivery safeguards. */
+  async callUnrecorded(taskId: string, session: Session, name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<Awaited<ReturnType<Client['callTool']>>> {
+    if (this.closed) throw new CairnError('gateway_closed', 'Gateway has been closed');
+    const task = this.engine.assertActiveOwner(taskId, session);
+    if (task.evidenceMode !== 'curated' || task.profile === 'emergency') throw new CairnError('invalid_mode', 'Unrecorded MCP calls require a curated general task');
+    const tool = this.config().tools.find(candidate => candidate.name === name);
+    if (!tool) throw new CairnError('not_allowed', `Tool ${name} is not a configured MCP passthrough`);
+    if (tool.role !== 'read') throw new CairnError('capture_required', 'Submission and receipt tools require captured mode and its delivery checks');
+    signal?.throwIfAborted();
+    const connection = await this.connection(tool.server);
+    // Connecting can outlive an explicit takeover or pause. Recheck immediately
+    // before dispatch without reserving or counting the host's tool execution.
+    this.engine.assertActiveOwner(taskId, session);
+    signal?.throwIfAborted();
+    try {
+      return await connection.client.callTool({ name: tool.upstream, arguments: input }, undefined, { timeout: tool.timeoutMs, resetTimeoutOnProgress: false, signal });
+    } catch (error) {
+      if (!connection.client.transport) await this.dispose(connection);
       throw error;
     }
   }

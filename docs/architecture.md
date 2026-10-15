@@ -1,85 +1,121 @@
-# Cairn 2.0 plugin architecture
+# Cairn 3.0 plugin architecture
 
-Cairn provides goals, evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tool execution and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
+Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
 
 ## Model interface: five operations
 
-`ToolRuntime` supplies the same implementation to Pi native tools and stdio MCP:
+`ToolRuntime` supplies the same domain interface to Pi native tools and stdio MCP:
 
 | Operation | Behavior |
 | --- | --- |
-| `cairn_start` | Create a goal; criteria default to the goal when omitted |
+| `cairn_start` | Create a goal, criteria, initial constraints and optional progress; general tasks default to curated evidence |
 | `cairn_resume` | Bind an existing task; require explicit takeover to change owners |
-| `cairn_read` | Read bounded context, original evidence, evidence indexes, history or tasks |
-| `cairn_checkpoint` | Atomically save findings, counterevidence, coverage, unresolved questions and next action |
-| `cairn_finish` | Save the same milestone content and finish, or suspend with progress |
+| `cairn_read` | Read bounded context, findings/references, optional captured observations, full details, history or tasks |
+| `cairn_checkpoint` | Atomically save findings, progress, coverage, questions and next action |
+| `cairn_finish` | Save milestone content and validate completion, or suspend with gaps |
 
-The earlier 16-tool interface is replaced. Internal domain methods remain useful to the core, tests and compatibility with persisted task records; they are not separate model-facing tools. There is no new public manual-observation tool.
+The model does not separately maintain claim IDs, criterion links and report citations. A small task uses start → host tools → finish. Longer tasks add checkpoints at useful milestones. Initial tool guidance is goal/constraint input, rather than a framework-specific tool registry requirement.
 
-A normal small task uses start → native tool(s) → finish. A longer task inserts checkpoints only at useful milestones. Findings contain supporting `evidence`, refuting `against`, optional status and criterion `covers`. Readable `key` values identify intentional revisions; omitted status preserves an existing finding, counterevidence can downgrade it, and upgrades require an explicit declaration; exact unkeyed retries reuse an existing equivalent conclusion. New supported findings cover the sole criterion automatically. Multiple criteria use explicit c# identifiers or unambiguous criterion text.
+Finding `key` values identify intentional revisions. `covers` associates supported findings with c# criteria; a new supported finding covers the sole criterion automatically. Finding statuses are `proposed`, `supported`, `refuted` and `inconclusive`. Work progress is separate: `{key,title,status,detail?}` uses `pending`, `running`, `completed`, `blocked` and `cancelled`. Updating a work item does not prove its corresponding goal condition.
 
-The core derives report citations from supported conclusions covering criteria, retaining original `result_ref` values. Checkpoints can supplement emergency impact/root-cause/solution fields. A finding with unresolved counterevidence cannot be supported. Proof changes invalidate any existing confirmation; delivered proof/report content is frozen rather than silently rewritten.
+Checkpoint `summary` describes current progress without replacing an existing report summary. An explicit finish `summary` or `report.summary` supplies the final report summary. The core regenerates the report's reference links from the saved findings. Missing conditions keep `status: active` and return `phase: incomplete`. A stopped attempt or expired budget is never completion.
 
-Finish returns a validation result and a phase. Missing completion conditions retain `status: active` and `phase: incomplete`. General tasks with valid evidence complete. Emergency tasks progress through `ready_for_delivery` and `awaiting_confirmation`, remaining active until a real delivery and human team confirmation exist. `outcome: suspended` saves incomplete work and suppresses continuation hints. Repeating a completed finish without new content returns the recorded status.
+## Two evidence modes
 
-## Identity and task binding
+### Curated: the public general default
 
-One `ToolRuntime` belongs to one native session or one MCP connection and owns its gateway lifecycle. Pi resolves identity from the actual invocation context. Claude/Codex startup hooks inject the real host session ID. A new MCP connection supplies it only on its first start/resume, then subsequent calls use the connection binding. Standalone clients can set `--session-id` when launching MCP.
+`cairn_start` defaults to `evidence_mode: "curated"` for the general profile. No gateway or tool whitelist is necessary. Native host tools remain freely selectable under the host's own permissions.
 
-No session is selected from recent activity or guessed from a database row. A task/session identity change must be explicit. Read-only inspection can address another task; editing requires the active bound owner. Hooks continue to identify native calls from the host's true event identity.
+Curated findings store:
 
-A task has a host-session owner and execution epoch. Explicit takeover increments the epoch and settles the previous owner's in-flight bookkeeping. Old sessions cannot mutate goal state or finish the task. Late observations are retained for audit and are ineligible as evidence. Suspended tasks can be resumed; completed tasks are immutable.
+- `basis`: the agent's concise explanation of what supports or refutes the conclusion.
+- `references`: file paths, URLs or other useful source pointers selected by the agent.
+- Conclusion state, readable key and criterion coverage.
 
-## Persistent records and compact restoration
+Supported findings need a recorded basis or references. The core validates their structure, recorded state and report/criterion relationships. It does not resolve file/link content, attest that a cited file was read, or establish causal correctness. References remain explicitly agent-curated. A model declaration of `supported` is not independent verification.
 
-`Engine` operates on goals, observations, claims, actions, human hints and checkpoints. `Store` commits the current projection and an append-only event atomically with SQLite `BEGIN IMMEDIATE`. WAL and a busy timeout support concurrent native hooks, MCP and dashboard processes. Original observations include raw input/output, source, scope, host, session and epoch. Claim revisions remain in the event ledger.
+No `tool.started`, raw observation or tool-call metadata is stored for curated host tools. Pre/post hooks do not reserve a quota, block native tools, retain inputs/results or create E# aliases. Curated progress comes from explicit milestones, not uncorrelated host plan events. Goal/checkpoint/resume/finish events still form a persistent task history.
 
-Evidence aliases **E1, E2, …** refer to append-only positions within a task. They remain stable after compaction and cross-host recovery. References can also be immutable observation IDs or unambiguous real platform references; cross-task, missing and ambiguous references are rejected. Raw evidence remains separate from model interpretations and human hints.
+### Captured: explicit raw evidence
 
-`Engine.context` returns a bounded recovery projection, within 16 KiB, with the goal, relevant/recent findings, evidence pointers, criterion gaps, latest checkpoint, questions, next step, owner and budget. Totals and truncation indicators distinguish omitted history from missing records. The full canonical task stays in SQLite. `cairn_read` retrieves evidence by alias, ID or result reference, paginates indexes/history and chunks large evidence by character offsets. Full metadata can be paged with `view: "details"` and individual immutable audit payloads with `view: "history", ref: "event:SEQ"`. Details pages support a revision check against concurrent writes. The UI and exports also provide full snapshots/reports.
+New general tasks opt in with `evidence_mode: "captured"`; emergency tasks require captured evidence. Existing tasks without an `evidenceMode` field retain captured semantics. Starting a new public task with a different default does not convert old records.
 
-This projection is additive to the TypeScript 1.x task shape. Existing SQLite tasks and saved reports are retained and can be resumed. The older Python database format has no automatic migration. Replacing the public tool protocol does not erase task history.
+An `Observation` is an original tool result record, not an agent role. It includes original input/output, source, scope, actor host/session/epoch, time, result status and eligibility. Append-only E1/E2 aliases refer to its positions in a task. Immutable IDs and unambiguous genuine platform `result_ref` values are also accepted. Missing, ambiguous, cross-task, failed or late references cannot support completion.
+
+Findings use `evidence` and `against` to link supporting and refuting observations. Original records stay separate from interpretations and human hints. A finding with unresolved captured counterevidence cannot be supported. Changes to goal proof invalidate confirmation; delivered report/proof content remains frozen. Historical manual observations retain their source and do not become automatic capture.
+
+Captured validation establishes structural integrity, task/scope membership and eligibility. The agent must still review relevance and contradictions; diagnostic truth needs evaluation against labelled cases.
+
+## Budget policy
+
+Curated tasks have no default `maxCalls` or `maxParallel`. Supplying them is rejected, because unrecorded calls cannot be counted or limited reliably. A curated `budget.deadline` is advisory; passing it does not prevent a checkpoint, further native work or a valid finish. Host model limits, approvals and concurrency remain host responsibilities.
+
+Captured calls reserve configured count/parallel limits atomically, and apply deadlines to gateway requests and native tool paths actually covered by hooks. The historical captured concurrency default remains three when unspecified. This is not a universal quota over arbitrary host paths. Hooks can be missing, and hosted tools may not invoke local hooks.
+
+The emergency profile adds its shared 30-minute match deadline and default final 30-second submission reserve. Exhausting any budget leaves an incomplete goal; suspend with a gap report if further work must stop. A six-call fixture budget is sample configuration, not a general success threshold.
+
+## Identity, subagents and ownership
+
+One `ToolRuntime` belongs to one native session or MCP connection and owns its gateway lifecycle. Pi obtains identity from the actual invocation context. Claude/Codex startup hooks provide the true native session ID; a connection supplies it on its first start/resume and then uses its binding. Standalone MCP can use `--session-id`.
+
+No identity is guessed from recent activity or a database row. Read-only inspection can address another task; editing requires the active bound owner, matching cwd and execution epoch. A new child-agent context is not automatically bound to its parent's goal.
+
+Subagents can conduct independent checks or work in fresh context using the host's native mechanism. The primary owner reviews the results and saves the canonical checkpoint. Another durable native session can become the owner only through explicit resume/takeover. A child context is not a portable substitute for a new native session, its lifecycle hooks or task fencing.
+
+Takeover increments the epoch and settles the previous owner's in-flight bookkeeping. Old owners cannot mutate or finish the task. In captured mode late observations remain audit-only. Suspension turns running progress items into blocked work, retains their meaning and suppresses continuation prompts. Resumption does not assume a previously running process is still alive. Completed tasks are immutable; repeating a content-free finish returns their recorded result.
+
+## Persistence and compact restoration
+
+`Engine` operates on goals, findings, optional observations, work progress, human hints and checkpoints. `Store` commits a projection and an append-only event atomically using SQLite `BEGIN IMMEDIATE`. WAL and a busy timeout support hooks, MCP and dashboard processes sharing the database. Claim revisions and task milestones remain in the event ledger.
+
+`Engine.context` returns at most 16 KiB with goal, constraints, relevant/recent findings, basis/reference pointers, progress, criterion gaps, latest checkpoint, open questions, next step, owner and budget policy. Totals and truncation indicators distinguish omitted history from absent information. It contains neither private reasoning nor a full host transcript.
+
+`cairn_read` retrieves a curated finding by key/ID or a captured observation by alias/ID/result reference. Indexes and history use record pagination. Full task metadata uses `view: "details"`; large records and immutable event payloads use character offsets. Details pages can require a matching revision; individual audit payloads use `view: "history", ref: "event:SEQ"`. UI/export projections retain access to full persisted records.
+
+Existing TypeScript SQLite tasks and reports remain available with their original mode. Older Python formats have no automatic migration. Replacing the public workflow does not erase task history.
 
 ## Native adapters
 
-Pi uses a native extension with tool-call, tool-result, before-start, compaction, settlement and shutdown events. Claude Code uses a local marketplace plugin containing skills, command hooks and stdio MCP. Codex uses native project/user hooks, MCP configuration and skill registration, while also building a marketplace package. Each bundle includes its runtime and does not depend on the source checkout after installation.
+Pi uses a native extension for session, tool, compaction, settlement and shutdown events. Claude uses a local marketplace plugin with skills, hooks and stdio MCP. Codex installs project/user hooks, MCP and a skill, while a marketplace package is also built. Each bundle contains its runtime.
 
-Only enabled tasks receive task processing. PreToolUse reserves budgets; PostToolUse captures the raw result and provides its E# alias to the agent. Core tools and typed `cairn_tool_*` calls in Cairn's actual host namespace are excluded to avoid recursive/double capture. A similarly named tool in another server namespace is not automatically exempt.
+Lifecycle processing remains available to enabled tasks in both modes: startup context, compaction restoration, interruption and bounded Stop checks. Pi injects context after a meaningful state revision or compaction rather than repeating an unchanged projection on every turn. Claude/Codex use startup/resume context and explicit read on bound connections. A restarted MCP connection binds again with resume.
 
-Pi restores compact context before turns and after compaction. Claude/Codex use startup/resume context and explicit read on a bound connection; a restarted MCP connection must bind with resume. User interruption wins over completion hints. Stop hooks may offer at most two bounded suggestions, without repeating one for an unchanged revision; core completion checks remain authoritative.
+Native plan integration is conditional and captured-only. A successful Codex `update_plan` result can supply semantic progress only if a previous captured PreToolUse reservation associates its call ID with the current task and owner epoch, and its observation is eligible. The progress event contains only known `plan[{step,status}]` fields; the captured observation retains its normal provenance separately. Missing, stale or cross-task associations do not update progress. Curated hooks skip native plan results entirely: without call association, a result delayed across same-session goal changes cannot be safely attributed. No call metadata is added to curated mode for this purpose. Arbitrary similarly named MCP tools are not interpreted as plans. Claude/Pi have no guaranteed native-plan mapping; `checkpoint.progress` is the reliable shared path for all three hosts.
 
-Native events have different coverage and failure semantics. Codex hosted tools may bypass local hooks. An adapter's declared capabilities describe implemented integration points; observed events show what has actually run. `doctor` reports both, together with installation, version, startup observation, MCP and upstream probes. A file's existence or a successful startup hook does not prove every tool path is captured. Missing native integration degrades capture/recovery; strict emergency start/resume rejects missing required capabilities.
+In curated mode all other native pre/post tool events remain unrecorded and unblocked by Cairn. In captured mode PreToolUse reserves budgets and PostToolUse records results. Actual Cairn namespaces are excluded from recursive capture; similarly named tools on another server are not exempt.
 
-## Typed upstream gateway
+User interruption takes priority. Stop hints are bounded and do not replace core finish/submit validation. Declared capabilities describe adapter implementation; observed lifecycle events show what actually ran. `doctor` reports both with installation/version/MCP/upstream status. An installed hook does not prove complete tool coverage. Missing hooks degrade automatic restoration or captured evidence; explicit curated management remains available. Emergency start/resume rejects missing required integration.
 
-`cairn configure --file FILE` stores an explicit whitelist in the local database. Configuration is a local user operation, not a model tool. Each entry maps a safe public name to a server, upstream name, result-reference path, scope paths and role:
+## Optional typed upstream gateway
 
-- `read`: diagnostic query.
-- `submit`: requires `reportPath` and `receiptPath`; the gateway injects the saved validated JSON or Markdown report.
-- `receipt`: query that can reconcile a previous ambiguous submission using a real mapped receipt.
+`cairn configure --file FILE` stores optional local upstream configuration. The five goal tools work without it. Each configured tool maps a safe public name to a server, original upstream name, role and optional result/scope/receipt paths:
 
-`Gateway.list` retains original upstream JSON Schemas, descriptions and constraints. `ToolRuntime` exposes each entry as `cairn_tool_<name>` with those arguments directly, validates them and records a real gateway observation. The public submit schema removes the injected report field and its required entry through explicit object properties, preserving other caller arguments. It does not broadly rewrite references, alternatives or unrelated schema constraints.
+- `read`: an optional read tool; curated tasks can use it without storing calls/results.
+- `submit`: captured-only validated delivery, requiring report and receipt mappings.
+- `receipt`: captured-only query to reconcile a prior ambiguous submission.
 
-Configuration names contain 1–53 ASCII letters, digits, underscores or hyphens, yielding tool names of at most 64 characters. Duplicate names and prototype keys are rejected. Dotted mapping paths reject empty/prototype segments, `valueAt` reads only own properties, and scope mapping keys are limited to supported scope fields. Data comes from `structuredContent` or JSON in the first text result; non-JSON responses remain original observations. Credentials in server environment/header settings are not returned in the catalogue.
+`Gateway.list` preserves upstream JSON Schemas, descriptions and constraints; `ToolRuntime` exposes `cairn_tool_<name>` with original arguments and validates them. The injected report field is removed from the public submit schema without broadly rewriting alternatives or references. Names are restricted to 1–53 ASCII letters/digits/underscores/hyphens; unsafe mapping keys, prototype paths and duplicate names are rejected. Configuration credentials are not returned in the tool catalog.
 
-A gateway instance reuses a client and cached paginated catalogue per server. Concurrent connection/catalog requests share promises. Close is idempotent and waits for in-flight connection cleanup. Changed server configuration creates a new client. Connection closure or a definite framing/protocol fault evicts the client; request cancellation, timeout and ordinary RPC business errors leave healthy shared transports available to other requests. Calls, especially external writes, are not automatically retried.
+`Gateway.callUnrecorded` requires an active curated general owner and a read role. It checks ownership before connecting and again before dispatch, propagates cancellation and creates no Cairn call/observation records on success or failure. Its request timeout is transport protection, not a whole-goal deadline. It does not constrain native tools. Submit/receipt cannot use this route to bypass delivery checks.
 
-Before execution, the core atomically reserves call/parallel budgets and checks the deadline. Cancellation signals propagate to the individual MCP request. Scope extraction failures retain raw upstream results as error observations. A successful submission with a missing receipt remains an immutable successful raw observation, while the gateway returns an ambiguous-submission error. A subsequent submit is blocked; a successful configured receipt query can automatically record delivery only when a prior configured submission attempt exists. Receipt inspection without a submission cannot manufacture delivery.
+`Gateway.call` retains the captured path: atomically reserve limits, execute, extract scope/reference/receipt and append original results. Scope extraction failure retains the raw result as an error observation. Successful submission without a receipt remains immutable captured evidence and returns an ambiguity error; another submit is blocked until a configured receipt query reconciles the previous attempt. A receipt query without a submission cannot manufacture delivery. In-flight submissions freeze report/proof changes.
 
-Submission freezes report and evidence changes while in flight. Core submit/delivery/finish entry points enforce required validation independently of hooks. The gateway controls its own calls; other host tools remain subject to the host sandbox and approvals. In the emergency profile, native tool hooks direct investigation/submission through typed gateway tools.
+One gateway reuses a client and cached paginated catalog per server. Concurrent requests share connection promises. Close is idempotent and awaits pending connection cleanup. Configuration changes replace clients. Transport/protocol faults evict connections; per-request cancellation, timeout and ordinary RPC errors do not stop unrelated healthy requests. Calls, especially external writes, are never retried automatically.
 
 ## Blue-and-white progress UI
 
-`cairn ui` starts an optional, read-only loopback HTTP server against the shared database. Server-side events detect committed audit-sequence changes from other processes. The browser refreshes compact projections after invalidation; raw evidence loads on selection. Dashboard traffic creates neither model requests nor audit events.
+`cairn ui` starts an optional read-only loopback HTTP server against the shared database. SSE invalidates compact projections after a committed audit sequence changes. Dashboard traffic creates no model calls or task audit events.
 
-The original blue-and-white layout has task cards, a graph canvas and Details/Hints/Log sidebar. It shows goal coverage, calls, budgets, reports and stored checkpoint context, with graph layouts, pan/zoom, fullscreen, resizable details and exports. Coverage uses the core's completion checks and can decrease when evidence is refuted. Phase labels describe committed state and do not impose a new execution workflow.
+The default progress view separates running, completed and pending/blocked work, with the latest checkpoint, questions and report. It displays stored, reported state, not live process liveness. `active` does not mean a process is running, and curated mode's lack of tool telemetry does not mean idle. Goal coverage comes from core validation and may decrease after revised findings.
 
-There are no browser mutation endpoints. Host/origin checks, no CORS permission and a nonce CSP protect local evidence from cross-site access. Closing the optional web process does not stop the host. Bootstrap remains the shared skill's direct first attempt inside the main session.
+The graph remains a supporting view of recorded relationships. Raw observations are labelled as original evidence where present; curated conclusions display basis/references and agent provenance. The timeline emphasizes human-readable milestone summaries and expandable detail, with captured evidence events filterable separately. Phase labels describe persisted state, not a fixed execution pipeline.
+
+The server has no browser mutation endpoints. Host/origin checks, no CORS permission and nonce CSP protect local data from cross-site access. Closing the UI does not stop the host. Bootstrap remains a direct useful first attempt in the ongoing host session, without a second model runtime.
 
 ## Emergency profile
 
-The profile requires native integration, a configured whitelist and team/round/issue/match scope. One stored 30-minute match deadline spans all rounds and survives task recreation or host restart, with a default final 30-second submission reserve. Reports require impact scope evidence, root cause/causal level, actual result references and mitigation/fix/prevention. Manual observations and human hints are ineligible competition evidence.
+Emergency requires captured evidence, native integration, an official configured tool gateway and team/round/issue/match scope. A stored 30-minute match deadline spans rounds and survives restarts or task recreation, with a default final 30-second submission reserve. Reports require impact scope evidence, root cause/causal level, genuine result references and mitigation/fix/prevention. Human hints and manual observations are ineligible evidence.
 
-Validated finish remains active as `ready_for_delivery`. A configured typed submission injects the saved report and records/reconciles the real receipt. `cairn confirm TASK_ID` records team confirmation outside model tools; the next finish can complete. These invariants survive missing hooks and do not depend on a Stop hook's behavior.
+Validated finish remains active as `ready_for_delivery`. The typed submit injects the saved report and records/reconciles the real receipt. `cairn confirm TASK_ID` records human team confirmation outside model tools; a subsequent finish completes. Core entry points enforce these invariants independently of Stop hook behavior.
 
-The organizer's official tool names and exact scope/result/receipt mappings remain required integration inputs. The example profile is an unconfigured template. Local reference checks establish structural integrity and scope, not causal truth or the organizer's authoritative result ownership/scoring.
+Official tool names and exact result/scope/receipt mappings remain organizer integration inputs. The example profile is an unconfigured template. Local checks do not replace the organizer's authoritative reference ownership and scoring.

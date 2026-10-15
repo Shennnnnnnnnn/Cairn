@@ -4,9 +4,9 @@
 
 **为 Pi、Claude Code、Codex 保留目标、证据链和可恢复的进度。**
 
-Cairn 2.1 将模型的操作收敛为五个工具：**开始、恢复、读取、阶段记录、结束**。模型照常使用宿主工具，在得到有价值的结论时一次记录证据与目标覆盖情况。简单任务可以直接结束，无需逐项维护结论 ID、完成条件关联和报告引用。
+Cairn 3.0 将模型操作收敛为五个工具：**开始、恢复、读取、阶段记录、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，只在有价值的阶段保存进度、结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
 
-模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存任务记录，并提供蓝白配色的只读进度看板。
+模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存目标记录，并提供蓝白进度看板。普通任务无需配置工具白名单或 MCP 上游。
 
 ## 快速开始
 
@@ -18,7 +18,7 @@ npm run install:global
 cairn --version
 ```
 
-安装脚本自动构建、打包，再安装一份独立的全局副本。**本流程安装当前仓库的构建产物，无需 npm registry 上已有 Cairn 包。** 安装完成后，在任意项目目录都可以直接执行 `cairn`，无需输入 `node bin/cairn.mjs`，也不依赖当前终端位于源码目录。
+脚本构建、打包并安装一份独立的全局副本，不向 npm registry 发布包。安装后可在任意项目目录执行 `cairn`，无需输入 `node bin/cairn.mjs`，也不依赖当前终端位于源码目录。
 
 如果 npm 默认全局目录不可写，可选择用户目录：
 
@@ -30,7 +30,7 @@ cairn --version
 
 脚本还支持 `--cache DIR` 和 `--offline`；离线安装要求仓库依赖已准备好。
 
-接着进入要使用 Cairn 的项目，安装相应宿主的适配包；实际执行需要目标 CLI 已安装并配置好账号或模型。
+进入要使用 Cairn 的项目，按实际使用的宿主选择安装命令。目标 CLI 需要已安装并配置模型或账号。
 
 ```sh
 cd /path/to/your-project
@@ -42,61 +42,23 @@ cairn install --target codex
 cairn ui
 ```
 
-安装后开启新的 CLI 会话。Codex 需要信任项目，并通过 `/hooks` 检查和信任 Cairn hooks。需要跨项目使用时，给安装命令增加 `--scope user`；`--root DIR` 可指定安装根目录。
+安装后开启新的 CLI 会话。Codex 需要信任项目，并通过 `/hooks` 检查和信任 Cairn hooks。跨项目使用可增加 `--scope user`；`--root DIR` 可指定安装根目录。
 
-直接向 Agent 描述目标即可：
+直接把目标和工具使用说明交给 Agent：
 
-> 使用 Cairn 排查这个接口为什么超时。先做最有价值的查询，保留支持与反驳证据；得到阶段结论时保存进度。最终说明影响面、根因和解决方案。如果证据不足，保存缺口并暂停。
+> 使用 Cairn 排查这个接口为什么超时。可用日志和指标工具的说明如下，请自行选择最有价值的查询。形成阶段结论时保存依据、文件或链接引用，以及正在执行、已完成和阻塞的工作。完成条件是说明影响面、原因和解决建议；证据不足就保存缺口并暂停。不需要保存工具调用记录。
 
-或者：
+工具说明属于初始任务输入，可放入 `goal`／`constraints`；框架不预先写死 AI 必须调用哪些工具。工具能否执行仍遵守宿主自身的授权和权限。
 
-> 用 Cairn 跟踪这次修改，目标是修复解析错误并通过现有回归测试。照常使用代码工具，完成时给出证据支持的结果。
-
-只有开始或恢复 Cairn 任务后，相关 hooks 才处理任务状态。普通 CLI 工作仍可按原有方式进行。
-
-## 完整样例：先看链路，再交给真实模型
-
-无需模型账号即可运行：
-
-```sh
-cairn demo
-```
-
-命令创建隔离的临时工作区，打开蓝白看板服务，按节奏执行价格异常诊断：目标创建 → 健康检查反证 → 价格样例 → 阶段记录 → 暂停 → 新会话接管 → 单位映射与影响面取证 → 校验完成与导出。终端会打印看板地址和样例目录；完成后看板继续保持前台，按 Ctrl+C 关闭。
-
-这是固定步骤驱动的演示，使用真实 stdio MCP 和 Cairn 网关采证，数据来自本地模拟工具，**不冒充真实模型推理或主办方比赛数据**。
-
-```sh
-# 自动选一个空闲看板端口
-cairn demo --port 0
-
-# 无界面、零延迟执行，输出 JSON 结果及产物路径
-cairn demo --no-ui --delay 0 --json
-```
-
-要让真实 Agent 自行排查，先准备一个新的工作区：
-
-```sh
-unset CAIRN_WORKSPACE
-cairn demo --prepare --target codex --root ./cairn-example
-cd cairn-example
-export CAIRN_DB="$PWD/.cairn/state.db"
-codex
-```
-
-告诉 Agent：“读取 `PROMPT.md`，使用 Cairn 完成其中的诊断目标。” 也可以将 `--target codex` 改为 `pi` 或 `claude`，再启动对应 CLI。准备命令只生成样例、配置受控工具并安装适配包，不会自动启动模型。另开终端进入同一样例目录，执行 `cairn ui --db "$PWD/.cairn/state.db" --port 0` 即可观察。
-
-这里显式设置样例数据库，确保样例位于其他 Git 仓库内部时也使用自己的记录。`CAIRN_DB` 只在本次样例终端设置；做其他项目时使用新终端，或在结束后执行 `unset CAIRN_DB`。
-
-指定的样例目录非空时命令会拒绝覆盖。完整输入、返回、证据与目标关联、暂停恢复及产物说明见 [价格异常诊断完整样例](docs/examples/price-incident.zh-CN.md)。
+[通用目标工作流完整指南](docs/goal-workflow.zh-CN.md) 提供不配置工具、不保存调用日志的完整样例，并解释进度、预算、子 Agent 和原始观测的职责。
 
 ## 模型的最短使用流程
 
-### 开始 → 原生工具 → 结束
+### 开始 → 自由使用工具 → 完成验收
 
-以下是调用格式示例。Claude Code／Codex 的 MCP 连接在首次 `cairn_start` 或 `cairn_resume` 时，使用启动 hook 提供的真实 `session_id`；Pi 自动绑定原生会话，省略该字段。后续操作均使用当前绑定，无需重复传会话或任务 ID。
+以下是 **Cairn 工具调用参数**，由 Agent 在宿主中执行。Claude Code／Codex 的 MCP 连接首次调用 `cairn_start` 或 `cairn_resume` 时，使用启动 hook 提供的真实 `session_id`；Pi 自动绑定原生会话，省略该字段。后续无需重复传会话或任务 ID。
 
-**1. `cairn_start`**：只给目标即可，未提供 `criteria` 时，目标本身成为唯一完成条件 `c1`。
+**1. `cairn_start`：** 只给目标即可，未提供 `criteria` 时，目标本身成为唯一完成条件 `c1`。
 
 ```json
 {
@@ -105,152 +67,88 @@ codex
 }
 ```
 
-**2. 使用宿主原生工具读取 `package.json`。** 已接入的工具结果由 hook 自动记录，并返回类似 `Cairn E1` 的提示。`E1` 是该任务内的稳定证据别名；以实际返回的别名为准。
+**2. Agent 使用宿主已有工具读取 `package.json`。** 默认不保存读取的工具名、参数和结果，不生成 `E1` 等原始取证编号。
 
-**3. `cairn_finish`**：一次写入结论、生成报告引用并检查完成。
+**3. `cairn_finish`：** 一次写入整理后的结论并检查完成条件。
 
 ```json
 {
   "summary": "已确认项目名称为 cairn。",
-  "findings": [
-    {
-      "text": "package.json 的 name 字段为 cairn。",
-      "evidence": ["E1"]
-    }
-  ]
+  "findings": [{
+    "key": "project-name",
+    "text": "package.json 的 name 字段为 cairn。",
+    "status": "supported",
+    "basis": "读取项目清单，核对 name 字段。",
+    "references": ["package.json"]
+  }]
 }
 ```
 
-单一完成条件会自动关联新增的已支持结论。程序验证证据属于当前任务、状态成功、范围合适，以及报告覆盖完成条件。通过后返回 `status: "completed"`；缺少证据或条件未满足时，任务保持 `active`，返回 `phase: "incomplete"` 和具体缺口。
+单一完成条件会自动关联新增的已支持结论；多个条件用 `covers: ["c1", "c2"]` 关联。未满足条件时保持 `active`，返回 `phase: "incomplete"` 和缺口。程序检查记录格式、结论状态和覆盖关系，**不会自动打开引用验证内容，也不能替 AI 判断因果是否成立**。
 
-这个例子说明接口形态，并不意味着所有原生工具路径都能被 hook 捕获。没有收到证据提示时，先用 `cairn_read` 检查证据索引和 `doctor` 观察记录。
+### 长任务：保存依据和可见的执行进度
 
-### 长任务：一次保存阶段进展
-
-只有在形成结论、发现反证、改变方向或需要暂停时，调用 `cairn_checkpoint`：
+形成阶段结论、改变方向或需要交接时，用 `cairn_checkpoint` 保存同样的 finding 内容，再带上 `questions`、`next` 和可选执行项：
 
 ```json
 {
-  "summary": "应用进程正常，超时与连接池耗尽相关，仍需定位连接未释放的路径。",
-  "findings": [
-    {
-      "key": "pool-exhaustion",
-      "text": "超时发生时连接池持续处于上限。",
-      "evidence": ["E2", "E3"],
-      "covers": ["c1"]
-    },
-    {
-      "key": "process-crash",
-      "text": "进程崩溃导致本次超时。",
-      "against": ["E1"],
-      "status": "refuted"
-    }
+  "summary": "已检查配置，正在核对超时窗口。",
+  "progress": [
+    {"key":"config","title":"检查配置","status":"completed"},
+    {"key":"window","title":"核对超时窗口","status":"running"}
   ],
-  "questions": ["哪些请求路径没有归还连接？"],
-  "next": "查询连接占用栈并与超时窗口对齐。"
+  "questions": ["连接持有时间是否异常？"],
+  "next": "核对连接占用与慢查询时间窗口。"
 }
 ```
 
-- `key` 是模型自行选择的可读标识；下次使用同一个 `key` 会修订原结论。
-- `evidence` 是支持观测，`against` 是反驳观测。可使用 `E#`、原始观测 ID 或任务内无歧义的真实 `result_ref`。
-- 新增结论的 `status` 可省略：仅有支持证据时为 `supported`，仅有反证时为 `refuted`，两者都有时为 `inconclusive`，都没有时为 `proposed`。修订已有 `key` 时默认保留原状态；新增反证可以降级，清除反证后需明确声明 `status: "supported"` 才会升级。
-- 多个完成条件用 `covers` 关联 `c1`、`c2` 等；核心批量维护结论、覆盖关系和报告引用。
-- `questions` 保存未解决问题，`next` 保存下一步。无需登记每次思考或每个工具调用。
+- `key` 是可读标识，复用它会修订同一结论或进度项。
+- `basis` 保存 AI 整理的支撑理由；`references` 保存文件路径、链接等来源。已支持结论需要依据或引用，建议同时提供。
+- `status` 用 `proposed`、`supported`、`refuted`、`inconclusive` 表示结论状态；不要把未验证假设标成已支持。
+- `progress.status` 用 `pending`、`running`、`completed`、`blocked`、`cancelled` 表示工作状态。它与目标是否通过验收分别保存。
+- `questions` 是未解决问题，`next` 是下一步。无需登记每次思考或每个工具调用。
 
-`cairn_finish` 接受相同的阶段内容，简单任务无需先调用 checkpoint。已经保存完内容后，可用 `cairn_finish {}` 检查并完成；无新增内容地重试已完成操作会返回已有状态。
+阶段记录的 `summary` 描述当前进展，不覆盖已有最终报告摘要；结束时明确传入 `summary` 或 `report.summary` 设置最终报告。简单任务可直接 finish，无需先 checkpoint。无新增内容地重试已完成的 finish，会返回已有状态。
 
-### 五个固定工具
-
-| 工具 | 用途 |
+| 五个固定工具 | 用途 |
 | --- | --- |
-| `cairn_start` | 创建目标、约束与预算；完成条件默认使用目标 |
-| `cairn_resume` | 恢复或显式接管任务，并绑定当前连接 |
-| `cairn_read` | 读取摘要、原始证据、分页历史或任务列表 |
-| `cairn_checkpoint` | 批量记录结论、反证、目标覆盖、问题和下一步 |
-| `cairn_finish` | 一次保存并校验完成，或保存未完成进度后暂停 |
+| `cairn_start` | 创建目标、完成条件、初始约束和可选进度 |
+| `cairn_resume` | 恢复或显式接管任务，绑定当前连接 |
+| `cairn_read` | 读取摘要、整理依据与引用、完整任务或分页历史 |
+| `cairn_checkpoint` | 一次保存结论、进度、目标覆盖、问题和下一步 |
+| `cairn_finish` | 一次保存并验收完成，或保存缺口后暂停 |
 
-配置上游白名单后，另增加按原参数结构暴露的 `cairn_tool_*` 工具。旧版 16 工具接口不再作为公共兼容接口。
+## 预算如何配置
 
-## 三种 CLI 的适配与能力
+**普通任务默认不配置次数和并发预算，以完成目标为结果。** 省略 `budget` 即可；并发由宿主安排，模型与账号额度由宿主管理。
 
-| 宿主 | 安装与运行方式 | 会话与证据 |
-| --- | --- | --- |
-| Pi | 自包含原生 package、扩展和共享 skill | 原生会话自动绑定；工具事件自动采证，回合前恢复摘要 |
-| Claude Code | 本地 marketplace 原生插件，含 skills、hooks、stdio MCP | 首次 start／resume 使用启动 hook 的真实会话 ID；后续连接内自动绑定 |
-| Codex | 项目级／用户级 hooks、MCP 和 skill；同时生成 marketplace 插件包 | 同上；项目级安装使用原生配置登记，hooks 需要宿主信任 |
+| 情况 | 行为 |
+| --- | --- |
+| 普通 `curated`，不传预算 | 没有 Cairn 调用次数／并发配额 |
+| 普通 `curated`，传 `budget.deadline` | 时间目标，仅提醒；到期可继续，不自动完成 |
+| 普通 `curated`，传 `maxCalls`／`maxParallel` | 拒绝配置：不统计调用，就不能宣称执行硬限制 |
+| 显式 `captured` | 可限制网关调用和实际经过 hook 的原生调用；不能保证覆盖宿主所有工具路径 |
+| `emergency` 比赛 | 保留共享 30 分钟截止时间及提交预留窗口 |
 
-构建产物位于 `dist/plugins/pi`、`dist/plugins/claude` 和 `dist/plugins/codex`。每个包包含自己的运行时，可独立于源码目录移动。
+工具次数、到期或预算耗尽都不代表成功。确实需要停止时保存未满足条件和下一步，标记暂停；之后恢复继续。原演示的六次调用上限只是该样例配置，不是通用默认值。
 
-其他 MCP 客户端可以运行共享 stdio 服务，并加载 `skills/cairn`：
-
-```sh
-cairn mcp --host mcp --session-id my-task-session
-```
-
-**仅接入 stdio MCP 不会自动捕获宿主原生工具。** 这时可以使用配置好的 `cairn_tool_*` 自动取证。新版不提供让模型手动登记观测的工具；历史手动记录仍保留原始来源标记。hooks 缺失时，相应的原生捕获与恢复能力也不可用；严格应急 Profile 缺少所需接入能力时会拒绝启动或恢复。
-
-```sh
-cairn doctor --target pi
-cairn doctor --target claude
-cairn doctor --target codex
-```
-
-`doctor` 区分适配包**声明支持的能力**与**实际观察到的事件**，显示版本、安装、MCP、上游目录和 hooks 启动观察状态。配置文件存在、MCP 连通或 `startup_observed` 都不能证明每类工具调用都经过 hook。Codex 托管工具和部分特殊路径可能绕过本地 hooks；严格取证任务应使用受控网关工具。
-
-## 暂停、恢复与按需读取
-
-需要暂停时，让 Agent 调用：
-
-```json
-{
-  "outcome": "suspended",
-  "summary": "已定位连接池耗尽，等待获取调用栈。",
-  "questions": ["缺少连接占用栈。"],
-  "next": "取得调用栈后继续定位。"
-}
-```
-
-这是 `cairn_finish` 的参数。用户中断优先，暂停后不会收到自动续跑提示；完成检查只允许有界补充提示。
-
-新会话或跨 CLI 恢复时告诉 Agent：
-
-> 使用 Cairn 恢复任务 TASK_ID，并明确接管（takeover=true）。先查看保存的目标、阶段结论、未解决问题和下一步，再按需读取证据。
-
-`cairn_resume` 的示例参数：
-
-```json
-{
-  "session_id": "NEW_HOST_SESSION_ID_FROM_STARTUP",
-  "task_id": "TASK_ID",
-  "takeover": true
-}
-```
-
-接管递增执行代次，旧会话不能提交迟到的完成结果；迟到观测仅保留审计用途。同一宿主会话重新建立 MCP 连接也需要绑定一次，但未变更负责人时无需接管。恢复的是 Cairn 状态，原生聊天历史仍由宿主保存。
-
-恢复摘要控制在 **16 KiB 以内**，带有总量和截断标记。原始记录保持完整，不会因为压缩摘要而删除。细查时使用：
-
-```json
-{"view":"evidence","ref":"E3"}
-```
-
-这是 `cairn_read` 参数。`view: "evidence"` 不带 `ref` 时分页读取证据索引；`view: "history"` 查看分页审计历史。`view: "details"` 可读回完整目标、约束、结论和报告；`view: "history", ref: "event:123"` 可读取指定审计事件的完整内容。大段原文按字符 `offset`／`limit` 分块，跟随 `nextOffset` 继续；分页读取 details 时带上返回的 `revision`，任务发生变化会提示重读。UI 和导出也保留完整快照。
-
-## 蓝白实时进度看板
-
-![蓝白进度看板：检查点、未解决问题与证据链（模拟数据）](docs/images/dashboard.png)
+## 蓝白进度看板
 
 ```sh
 cairn ui
-
-# 使用其他端口或同一份指定数据库
 cairn ui --port 8001
 cairn ui --db .cairn/state.db --port 8001
 ```
 
-浏览器打开终端打印的地址，默认 `http://127.0.0.1:8000`。界面参照原版蓝白 Web UI：任务卡片总览、左侧证据关系画布、右侧“详情／提示／日志”。支持实时更新、原始结果按需查看、横纵布局、拖动缩放、全屏、调宽详情面板，以及报告和快照导出。阶段记录中的摘要、未解决问题和下一步也与任务一起保存。
+浏览器打开终端打印的地址，默认 `http://127.0.0.1:8000`。默认进度页将**正在执行、已完成、待推进／阻塞**分开展示，并显示最新阶段摘要、问题和报告。证据关系图作为辅助视图保留。时间线以目标创建、进展、暂停、恢复、检查和完成等关键事件为主，正文按需展开；原始取证事件可以单独筛选。
 
-进度表示“已满足条件数／总条件数”，并显示在途调用、累计调用和剩余预算。反证导致结论失效时，覆盖率可以下降。看板仅本机回环地址、只读访问，Agent 继续在原 CLI 工作；关闭看板不会停止任务。空白时检查看板和 CLI 是否使用同一数据库与工作区。
+![蓝白进度看板：正在执行、已完成、待推进与依据（合成界面演示数据）](docs/images/dashboard-v3.png)
+
+看板展示的是**最近记录的执行状态**。`active` 只表示目标仍可继续，不能证明 Agent 进程实时存活；普通模式也不会用“零次工具调用”推断没有在执行。三种 CLI 的 curated 任务均由 Agent 用 checkpoint 的统一 `progress` 保存并恢复工作状态。
+
+没有可靠原任务关联的宿主计划事件会跳过，避免迟到结果写进另一个目标。仅 captured Codex 在已有调用保留正确任务／执行代次关联时，才可映射成功的 `update_plan` 结果；Claude／Pi 不保证同步内部计划。普通模式不为此新增工具关联记录。
+
+界面只读且只监听本机回环地址。Agent 继续在原 CLI 工作；关闭看板不会停止任务。目标覆盖率可以随结论修订而下降。空白时检查看板和 CLI 是否使用同一数据库与工作区。
 
 ```sh
 cairn task list
@@ -260,103 +158,140 @@ cairn export TASK_ID --format markdown --out report.md
 cairn export TASK_ID --format html --out evidence.html
 ```
 
-将 `TASK_ID` 替换为实际值。HTML 导出包含可离线查看的证据图和原始结果。
+将 `TASK_ID` 替换为实际值。普通任务导出 AI 整理的依据与引用，captured 任务可包含原始结果。
 
-## 受控工具与应急比赛 Profile
+## 暂停、恢复和子 Agent
 
-共享网关支持 stdio 和 Streamable HTTP MCP 上游，按显式白名单提供 `cairn_tool_<配置名>`。例如配置名 `diagnose` 暴露为 `cairn_tool_diagnose`，直接接受上游工具的原始参数 Schema；模型无需再套一层通用 `tool`／`arguments`。
+先 checkpoint 保存进展，再调用 `cairn_finish`：
 
-```sh
-cairn configure --file profiles/emergency.example.json
+```json
+{"outcome":"suspended"}
 ```
 
-**示例尚未连接真实比赛环境。** 正式使用前替换主办方工具命令、名称、参数与引用／范围／回执字段映射。配置名允许 1–53 个字母、数字、下划线或连字符，加前缀后工具名最多 64 字符。
+新会话或跨 CLI 恢复时调用 `cairn_resume`：
 
-同一运行实例复用上游连接和工具目录。取消或超时针对当前请求，健康共享连接上的其他请求继续执行。网关记录原始结果、真实引用和失败，控制截止时间、次数与并发；不会自动重试外部提交。
+```json
+{
+  "session_id": "NEW_HOST_SESSION_ID_FROM_STARTUP",
+  "task_id": "TASK_ID",
+  "takeover": true
+}
+```
 
-`emergency` 要求原生事件接入、白名单和 `teamId`、`roundId`、`issueId`、`matchId`。同场各关共用持久化的 **30 分钟截止时间**，重启或新建关卡任务不会重置，默认保留最后 30 秒用于提交与回执核对。
+接管递增执行代次，旧会话不能再修改或完成该目标。暂停时正在执行的进度项变为阻塞；恢复后按实际情况显式更新为执行中。恢复包含目标、依据、引用、进度和未解决问题，原生聊天历史仍由宿主保存。
 
-报告保留四要素：
+**子 Agent 适合独立子任务或需要新上下文的检查。** 主 Agent 汇总并审阅子任务结果，再保存主目标的阶段记录。子 Agent 的新上下文不会自动获得主目标身份或写权限；持久交接到另一原生会话时，仍需要 Adapter 的显式 resume／takeover。无需建立新的 worker 池或固定 reason／explore 交接流程。
 
-1. **影响面**：受影响功能、用户与数据范围，以及支持范围判断的证据。
-2. **根因**：明确结论与因果层次，可补充触发因、放大机制。
-3. **证据链**：本队本关真实 `result_ref`，引用由已支持结论自动生成。
-4. **解决方案**：止血、根因修复与防复发。
+恢复摘要控制在 **16 KiB 以内**，带总量和截断标记；持久记录不随摘要截断而删除。`cairn_read` 的 evidence 视图按结论 key／ID 读取整理依据，details 读取完整任务，history 读取事件历史。分页与完整恢复格式见 [架构说明](docs/architecture.md#persistence-and-compact-restoration)。
 
-在 checkpoint 或 finish 中用 `report.impact`、`report.rootCause`、`report.solution` 补充比赛字段。人工 Hint 和手动记录不能满足比赛证据要求。
+用户中断优先，暂停后没有续跑提示；完成检查的补充提示有次数上限。
 
-### 提交与队伍确认
+## 三种 CLI 的适配
 
-1. `cairn_finish` 校验通过后返回 `phase: "ready_for_delivery"`，任务仍为 `active`。
-2. 调用配置的真实 `cairn_tool_*` 提交工具。网关注入已保存、已校验的报告，模型不再重写报告字段。
-3. 缺少回执时先查询允许的 receipt 工具；成功取得真实回执、且已有提交尝试时自动登记交付，不盲目重新提交。
-4. 未确认时 finish 返回 `phase: "awaiting_confirmation"`。队伍在模型工具之外执行：
+| 宿主 | 安装形态 | 进度与恢复 |
+| --- | --- | --- |
+| Pi | 自包含原生 package、扩展和共享 skill | 自动绑定原生会话；状态变更／压缩后恢复摘要；checkpoint 保存进度 |
+| Claude Code | 本地 marketplace 插件，含 skills、hooks、stdio MCP | 首次 start／resume 使用启动 hook 的真实 ID；checkpoint 保存进度 |
+| Codex | 项目／用户 hooks、MCP、skill；同时构建 marketplace 包 | 同样绑定身份；checkpoint 保存进度；captured 计划事件需可靠任务／代次关联 |
+
+构建产物位于 `dist/plugins/{pi,claude,codex}`，每包包含自己的运行时。Codex 项目级安装使用原生配置登记，不依赖全局插件缓存自动激活。
+
+其他 MCP 客户端可运行共享服务并加载 `skills/cairn`：
+
+```sh
+cairn mcp --host mcp --session-id my-task-session
+cairn doctor --target codex
+```
+
+仅 MCP 即可显式记录普通任务和恢复状态。原生生命周期与压缩上下文接入取决于宿主实际提供的事件。`doctor` 区分声明能力和已观察到的事件，检查版本、安装、MCP、已配置上游与 hooks 启动观察状态。缺少取证 hooks 不影响 curated 任务；缺少恢复事件时使用显式 read／resume。严格比赛任务缺少要求的能力时拒绝启动或接管。
+
+## 可选原始取证：captured 与演示
+
+需要原始工具证据时，新建任务明确选择 `evidence_mode: "captured"`。这时 `Observation` 表示一份**原始观测／取证依据**，保存工具输入、结果、来源、范围与执行身份；它不是 Agent 角色。`E1` 等只是当前任务的原始观测编号。结论通过 `evidence`／`against` 引用支持与反证。
+
+默认 curated 不创建 Observation，使用 `basis`／`references` 保留 AI 整理的依据链。两类信息有不同的来源保障，界面与报告会区分；人工提示也保留人工来源。
+
+原完整演示继续保留，**明确使用 captured 模式**：
+
+```sh
+cairn demo
+cairn demo --port 0
+cairn demo --no-ui --delay 0 --json
+```
+
+它创建隔离的临时工作区，以本地模拟价格异常数据和固定 driver 执行真实 stdio MCP：取证 → 阶段记录 → 暂停 → 新会话接管 → 补查 → 完成与导出。无需模型账号；其配置的工具白名单和六次调用预算不适用于普通任务。终端打印看板地址，完成后保持前台，Ctrl+C 关闭。
+
+要交给真实模型，准备新的样例工作区：
+
+```sh
+unset CAIRN_WORKSPACE
+cairn demo --prepare --target codex --root ./cairn-example
+cd cairn-example
+export CAIRN_DB="$PWD/.cairn/state.db"
+codex
+```
+
+让 Agent 读取 `PROMPT.md`；可把 `--target codex` 改为 `pi`／`claude` 并启动对应 CLI。另开终端进入同一目录，执行 `cairn ui --db "$PWD/.cairn/state.db" --port 0`。准备命令不启动模型，账号、审批和调用额度来自宿主。
+
+非空目标目录不会被覆盖。`CAIRN_DB` 只在样例终端设置，避免样例在其他 Git 仓库内时使用父项目数据库；其他工作请开新终端，或执行 `unset CAIRN_DB`。原取证专用链路见 [价格异常完整样例](docs/examples/price-incident.zh-CN.md)，历史真实模型／CLI 验证另见 [验证记录](docs/verification.md)。
+
+## 应急比赛 Profile
+
+普通任务无需此配置。比赛场景先复制仓库中的 [比赛配置模板](profiles/emergency.example.json)，填写主办方正式定义；随后在目标项目指定完成后的配置文件：
+
+```sh
+cairn configure --file /absolute/path/to/official-tools.json
+```
+
+模板尚未配置主办方实际工具。比赛要求 `captured`、原生接入、受控网关以及本队／本关／问题／比赛范围。保留跨关卡持久化的 **30 分钟比赛截止时间**、默认最后 30 秒提交预留、真实当关 `result_ref`、影响面、根因层级、止损／修复／预防。人工提示和历史手工观测不能充当比赛证据。
+
+网关按原参数 Schema 暴露 `cairn_tool_<配置名>`，支持 stdio／Streamable HTTP、连接复用与独立请求取消。普通 curated 如已配置只读上游，可无记录透传；submit／receipt 必须走 captured 的交付校验，不能跳过回执保护。普通模式下这些配置不限制 AI 调用宿主其他工具。
+
+比赛 finish 校验通过后停留在 `ready_for_delivery`；配置的提交工具注入已校验报告并保存真实回执。回执不明先查询核对，不盲目重提。随后等待人工确认：
 
 ```sh
 cairn confirm TASK_ID
 ```
 
-5. Agent 再调用 `cairn_finish {}` 完成任务。
+Agent 再调用 `cairn_finish {}` 完成。本地校验保证引用结构和范围，主办方负责最终归属、评分与接受结果。
 
-提交映射需配置 `reportPath` 和 `receiptPath`，文本报告可设 `reportFormat: "markdown"`。最终引用归属、比赛完成状态和得分由主办方平台判定。
-
-## 核心记录与开局策略
-
-- **目标**：完成条件、约束和预算。
-- **观测**：实际工具参数、原始结果、时间、范围与来源。追加保存。
-- **结论**：支持、反驳与当前判断，历史修订保留。
-- **阶段记录**：摘要、未解决问题和下一步。
-- **人工提示**：保留人工作者和来源。
-
-程序检查引用、范围、成功状态和目标覆盖，不自动证明因果解释正确。Agent 仍需审查反证和推断边界，准确率需另用带标准答案的任务评测。
-
-原版 bootstrap 的“先直接尝试解决”保留在当前会话：目标和约束明确后直接行动，必要时再探索与分解。简单任务直接完成；不再启动独立 bootstrap worker、保活心跳、模型池、轮询 dispatcher 或固定 reason／explore 交接。
-
-## 更新、数据与卸载
+## 更新、卸载与数据
 
 ```sh
-# 在 Cairn 仓库更新全局命令
+# 在 Cairn 仓库更新全局命令。
 npm install
 npm run install:global
 
-# 回到原先安装适配包的项目更新；选择实际使用的宿主
+# 回到原目标项目更新实际使用的适配包。
 cd /path/to/your-project
-cairn update --target pi
-cairn update --target claude
 cairn update --target codex
-
-# 不再需要时选择实际安装的目标
-cairn uninstall --target pi
+cairn uninstall --target codex
 ```
 
-全局命令与宿主内的适配包分别安装；更新全局命令后，还需更新已安装的宿主副本。更新使用安装时相同的 `--scope` 和 `--root`，然后重启宿主会话，重新绑定或恢复任务。安装器合并配置，保留用户设置；用户修改过的受管登记项会报告冲突，卸载保留相关配置和运行时。
+全局命令与宿主适配包独立安装，更新全局命令不会替换已安装的适配副本。沿用原 scope／root，并重启宿主会话。安装器合并配置并记录自身条目，卸载时保留被用户修改的登记项及所需运行时。任务数据单独保留。删除全局命令可执行 `npm uninstall --global cairn`，自定义 prefix 时带回相同 `--prefix DIR`。
 
-数据默认位于 `<workspace>/.cairn/state.db`，`CAIRN_DB` 或 `--db FILE` 可覆盖，`CAIRN_WORKSPACE` 可指定工作区。**已有 TypeScript 1.x SQLite 任务继续保留并可恢复**，已有报告可用于后续校验；旧 16 工具公共接口不再兼容。更早的 Python 服务、dispatcher 与数据库格式没有自动迁移。
+数据库默认 `<workspace>/.cairn/state.db`；`CAIRN_DB`／`--db` 可覆盖，`CAIRN_WORKSPACE` 可选择工作区。已有 TypeScript SQLite 任务保持原语义：没有 `evidenceMode` 字段的历史任务仍按 captured 解释，不会自动转换。新 public general 任务才默认 curated。早期 Python 数据格式不自动迁移，请勿把任务数据提交到 Git。
 
-不再使用时先卸载对应宿主适配包，再执行 `npm uninstall --global cairn` 移除全局命令；自定义过前缀则带上原来的 `--prefix DIR`。安装与任务数据分开管理，卸载不删除任务。原始结果可能包含敏感信息，应将 `.cairn` 保持私有并排除在 Git 之外。
+Bootstrap 保留“在当前会话先直接尝试解决”的策略：理解目标与约束、执行有价值的行动、复核并修正。无需单独 bootstrap worker、保活提示、模型池、轮询 dispatcher 或固定 reason／explore 流程。
 
 ## 开发与验证
 
 ```sh
 npm test
 npm pack --dry-run
-
-# 可选：现有宿主与模型的真实闭环测试
 node scripts/host-smoke.mjs pi
 node scripts/host-smoke.mjs claude
 node scripts/host-smoke.mjs codex
-
-# 真实 CLI 连接本地协议 fixture，不请求外部模型
 node scripts/pi-fixture-smoke.mjs
 node scripts/claude-fixture-smoke.mjs
 ```
 
-真实模型测试使用现有账号，可能消耗额度，日志保留在打印的临时目录。测试中的临时 hooks 信任不替代日常安装的宿主信任流程。
+`npm test` 包括类型检查、构建和确定性测试，不调用真实模型。真实宿主 smoke 使用已配置账号，可能消耗额度；Pi／Claude 协议 fixture 使用本地模型 API 服务，只验证接入链路，不代表真实模型推理效果。
 
-当前 **89 项自动化测试通过**（Node 24／26），包含全局离线安装、离开源码运行、完整 MCP 样例和进程清理。2.0 版本另有 79 项验证基线。Codex 的真实模型闭环、Pi 与 Claude Code 的真实 CLI 本地协议闭环均已通过；Pi 的外部上游返回 429／503，Claude 的现有认证过期，尚未完成它们本轮的真实模型闭环。本次与历史验证分开记录，见 [验证记录](docs/verification.md)。协议与持久化测试不等同于模型排障准确率或任务效率验证。架构细节见 [architecture](docs/architecture.md)，带标准答案的合成案例见 [evaluations](evaluations/README.md)。
+实际测试结果与历史模型运行分别记录于 [验证说明](docs/verification.md)。架构边界见 [architecture](docs/architecture.md)，诊断准确率和任务质量需通过 [评测案例与量表](evaluations/README.md) 另行验证。
 
 ## 背景与许可
 
-Cairn 最初是目标驱动的协作探索引擎，并在腾讯云 AI 渗透测试挑战赛中得到验证。新版将目标、证据与人工提示思想保留为现有 CLI 内的可恢复能力。
+Cairn 最初是一个以目标为导向的探索引擎，曾在腾讯云 AI 渗透测试挑战赛验证。当前版本将目标、证据和人工提示思想融入通用 CLI 插件。
 
-项目采用 [AGPL-3.0](LICENSE) 许可。
+项目采用 [AGPL-3.0](LICENSE) 许可证。

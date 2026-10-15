@@ -6,14 +6,14 @@ import {tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Store} from '../src/core/store.js';
 import {Engine} from '../src/core/engine.js';
-import {Gateway,gatewaySchema,publicInputSchema,valueAt} from '../src/gateway.js';
+import {Gateway,gatewaySchema,publicInputSchema,valueAt,structuredResult} from '../src/gateway.js';
 import type {Session} from '../src/core/types.js';
 
-function setup(){
+function setup(evidenceMode:'captured'|'curated'='captured'){
  const dir=mkdtempSync(join(tmpdir(),'cairn-gateway-catalog-')),audit=join(dir,'audit.jsonl'),store=new Store(':memory:'),engine=new Engine(store),session:Session={host:'pi',sessionId:'fixture',cwd:dir};
  const config=gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/gateway-catalog.mjs'),audit]}},tools:['read','submit','receipt','slow','rpc_error','crash'].map(name=>({name,server:'fixture',upstream:name,role:name==='submit'?'submit':name==='receipt'?'receipt':'read',resultRefPath:'result_ref',scopePaths:{teamId:'team_id'},reportPath:name==='submit'?'payload.report':undefined,receiptPath:['submit','receipt'].includes(name)?'receipt':undefined,timeoutMs:name==='slow'?100:2000}))});
  store.setConfig('gateway',config);
- const task=engine.create(session,{origin:'fixture',goal:'Diagnose measured behavior',criteria:['A supported conclusion'],scope:{teamId:'team'}}),gateway=new Gateway(engine);
+ const task=engine.create(session,{origin:'fixture',goal:'Diagnose measured behavior',criteria:['A supported conclusion'],scope:{teamId:'team'},evidenceMode}),gateway=new Gateway(engine);
  const events=()=>readFileSync(audit,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
  const readyReport=async()=>{
   const observation=await gateway.call(task.id,session,'read',{probe:'measured'}),claim=engine.claim(task.id,session,{text:'A measured cause',status:'supported',supports:[observation.id],refutes:[]});
@@ -145,5 +145,67 @@ test('idempotent close waits for an in-flight connection and releases its proces
   const first=fixture.gateway.close(),second=fixture.gateway.close();assert.equal(first,second);
   await first;assert.ok('error' in await listing);
   assert.ok(fixture.events().some(event=>event.event==='exit'));
+ }finally{await fixture.cleanup();}
+});
+
+test('curated MCP passthrough returns real upstream results without tool events or observations',async()=>{
+ const fixture=setup('curated');
+ try{
+  fixture.store.transaction(()=>{const task=fixture.store.get(fixture.task.id);task.budget.deadline='2000-01-01T00:00:00.000Z';fixture.store.save(task,'fixture.advisory-deadline',{},fixture.engine.at());});
+  const before=fixture.store.get(fixture.task.id),events=fixture.store.events(fixture.task.id);
+  fixture.engine.beforeTool=()=>{throw new Error('Unrecorded calls cannot reserve tool budgets');};
+  fixture.engine.observe=()=>{throw new Error('Unrecorded calls cannot create observations');};
+  const [a,b]=await Promise.all([fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'read',{probe:'private-unrecorded-a'}),fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'read',{probe:'private-unrecorded-b'})]);
+  const valueA=structuredResult(a) as Record<string,unknown>,valueB=structuredResult(b) as Record<string,unknown>;
+  assert.equal(valueA.probe,'private-unrecorded-a');assert.equal(valueB.probe,'private-unrecorded-b');assert.equal(valueA.pid,valueB.pid);
+  const saved=fixture.store.get(fixture.task.id);assert.deepEqual(saved,before);assert.deepEqual(fixture.store.events(fixture.task.id),events);assert.deepEqual(saved.calls,{});assert.deepEqual(saved.observations,[]);
+  assert.doesNotMatch(JSON.stringify(fixture.store.events(fixture.task.id)),/private-unrecorded/);assert.equal(fixture.events().filter(event=>event.event==='start').length,1);
+  await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'rpc_error',{}),/Fixture RPC failure/);
+  assert.deepEqual(fixture.store.get(fixture.task.id),before);assert.deepEqual(fixture.store.events(fixture.task.id),events);
+ }finally{await fixture.cleanup();}
+});
+
+test('unrecorded passthrough requires active ownership and read role without bypassing captured delivery gates',async()=>{
+ const fixture=setup('curated');
+ try{
+  await fixture.gateway.list();const before=fixture.events().filter(event=>event.event==='call').length;
+  await assert.rejects(fixture.gateway.call(fixture.task.id,fixture.session,'read',{probe:'wrong-mode'}),/unrecorded read/);
+  for(const name of ['submit','receipt'])await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,name,{}),/captured mode|delivery checks/);
+  await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'unknown',{}),/configured MCP/);
+  await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,{...fixture.session,cwd:'/wrong-directory'},'read',{probe:'wrong'}),/owns|takeover/);
+  fixture.engine.suspend(fixture.task.id,fixture.session);await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'read',{probe:'paused'}),/suspended/);
+  const next={...fixture.session,sessionId:'next'};fixture.engine.resume(fixture.task.id,next,true);
+  await assert.rejects(fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'read',{probe:'stale'}),/owns|takeover/);
+  assert.equal(fixture.events().filter(event=>event.event==='call').length,before);
+  assert.deepEqual(fixture.store.get(fixture.task.id).calls,{});assert.deepEqual(fixture.store.get(fixture.task.id).observations,[]);
+ }finally{await fixture.cleanup();}
+ const captured=setup();
+ try{await assert.rejects(captured.gateway.callUnrecorded(captured.task.id,captured.session,'read',{probe:'bypass'}),/curated general task/);assert.equal(existsSync(captured.audit),false);}
+ finally{await captured.cleanup();}
+});
+
+test('curated requests preserve shared-transport cancellation isolation without saving failures',async()=>{
+ const fixture=setup('curated');
+ try{
+  const config=structuredClone(fixture.config);config.tools.find(tool=>tool.name==='slow')!.timeoutMs=2000;fixture.store.setConfig('gateway',config);await fixture.gateway.list();
+  const before=fixture.store.get(fixture.task.id),controller=new AbortController();
+  const cancelled=fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'slow',{delayMs:1000},controller.signal);
+  const peer=fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'slow',{delayMs:75});
+  const abort=setTimeout(()=>controller.abort(),25),results=await Promise.allSettled([cancelled,peer]);clearTimeout(abort);
+  assert.equal(results[0]!.status,'rejected');assert.equal(results[1]!.status,'fulfilled');
+  await fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'read',{probe:'after-cancel'});
+  assert.equal(fixture.events().filter(event=>event.event==='start').length,1);assert.deepEqual(fixture.store.get(fixture.task.id),before);
+ }finally{await fixture.cleanup();}
+});
+
+test('unrecorded calls recheck ownership after a slow connection before dispatching',async()=>{
+ const fixture=setup('curated');
+ try{
+  const config=structuredClone(fixture.config);config.servers.fixture!.args.push('250');fixture.store.setConfig('gateway',config);
+  const call=fixture.gateway.callUnrecorded(fixture.task.id,fixture.session,'read',{probe:'should-not-dispatch'}).then(value=>({value}),error=>({error}));
+  for(let attempt=0;attempt<100&&!existsSync(fixture.audit);attempt++)await delay(10);
+  assert.ok(existsSync(fixture.audit));fixture.engine.suspend(fixture.task.id,fixture.session);
+  const result=await call;assert.ok('error' in result);assert.match(String(result.error),/suspended/);
+  assert.equal(fixture.events().filter(event=>event.event==='call').length,0);assert.deepEqual(fixture.store.get(fixture.task.id).calls,{});assert.deepEqual(fixture.store.get(fixture.task.id).observations,[]);
  }finally{await fixture.cleanup();}
 });

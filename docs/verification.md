@@ -1,6 +1,21 @@
 # Verification record
 
-Record date: 2026-10-15 (Asia/Shanghai). Current 2.0 verification is separated from historical checks of the replaced 1.x tool protocol.
+Record date: 2026-10-15 (Asia/Shanghai). Results below identify the evidence mode and distinguish automated integration checks from real model executions.
+
+## Cairn 3.0 goal workflow and progress UI
+
+Verified locally on 2026-10-15 (Asia/Shanghai).
+
+- **124 automated tests passed on Node 26.3.0 and Node 24.19.0**; typecheck and self-contained bundle build passed. The shared skill validator passed.
+- Public five-tool tests cover default curated creation without an upstream or tool whitelist, findings with explanations/file/URL references, visible milestones, suspension, cross-host takeover, stale-owner rejection and completion/export. Calls and observations remain empty throughout.
+- Pi, Claude Code and Codex normalized native events leave curated tools unrestricted and unrecorded. Shared adapter tests cover milestone/reference recovery for all three hosts. Curated hooks skip uncorrelated native plan results, including delayed plans after the same session changes goals. Captured Codex plans require a reserved eligible call belonging to the current task and epoch.
+- Completion checks reject unsupported findings, cross-task report references and conclusions whose declared scope does not cover the goal. Imported inconsistent scope associations are independently rejected by evaluation. Curated checks validate recorded relationships, not external reference contents or causal correctness.
+- General curated tasks have no call/concurrency quota; unobservable quota settings are rejected. Deadlines are advisory. Explicit captured and emergency constraints, receipt reconciliation, report freezing and human confirmation remain covered by regression tests. Repeated unsuccessful finish checks are visible and deduplicated; progress checkpoints preserve the final report summary.
+- ego-browser inspected the installed blue-and-white UI. A separately labelled synthetic curated fixture displayed one running, one completed and one pending milestone, with goal coverage 1/2. A second SQLite connection paused it: SSE changed running to zero and retained blocked work without reloading. Explicit new-session takeover retained findings and did not invent running work. The basis view contained the submitted explanation/file reference and no raw-tool section.
+- The already completed real Codex 2.1 captured example was opened with the new UI: 0 running, 2 completed criteria; milestone timeline distinguished evidence review, pause, takeover, failed completion check and completion. Its six observations and original records were preserved. This UI check is not a new real-model run in curated mode.
+- `docs/images/dashboard-v3.png` is an actual browser screenshot using explicitly labelled synthetic data, not a model reasoning evaluation. The Chinese workflow guide explains the six design questions and provides a free-tool, pause/resume example. Earlier captured examples explicitly opt into captured mode.
+
+These checks do not establish a new real-model closed loop in all three CLIs. Historical live runs and deterministic native-CLI fixtures remain recorded below, with their original limits.
 
 ## Cairn 2.1 global command and complete example
 

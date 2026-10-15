@@ -1,5 +1,7 @@
 # Emergency diagnosis profile
 
+Start with `profile: "emergency"`; this profile requires `evidence_mode: "captured"` (selected automatically if omitted). Ordinary general tasks use AI-curated findings by default and do not require the organizer's tool catalog.
+
 Use the organizer's configured `cairn_tool_*` tools. Each exposes its own parameters; the gateway records evidence and enforces the whitelist and budget. Native diagnostic calls outside the gateway are blocked where host hooks support interception. The profile requires native integration and team/round/issue/match scope; a configured but unavailable upstream must be repaired before work starts.
 
 The match has one 30-minute deadline shared by all rounds. Reserve time for submission and team review. Repeating a task does not reset the clock.

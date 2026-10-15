@@ -5,7 +5,7 @@ import { Engine } from '../core/engine.js';
 import { CairnError } from '../core/types.js';
 import { html, markdown } from '../export.js';
 import { renderPage } from './page.js';
-import { projectTask, summaries } from './view.js';
+import { projectTask, summaries, projectEvent } from './view.js';
 
 export interface UiOptions { port?: number; host?: string; pollMs?: number }
 export async function startUi(engine: Engine, options: UiOptions = {}) {
@@ -59,6 +59,7 @@ export async function startUi(engine: Engine, options: UiOptions = {}) {
       const taskId = decodeURIComponent(match[1]!), task = engine.store.get(taskId);
       if (!match[2]) { json(response, projectTask(engine, task)); return; }
       if (match[2] === 'observations') {
+        if (task.evidenceMode === 'curated') throw new CairnError('not_found', 'This task does not expose raw tool records');
         const observation = task.observations.find(o => o.id === decodeURIComponent(match[3] ?? ''));
         if (!observation) throw new CairnError('not_found', 'Observation does not belong to this task');
         json(response, observation); return;
@@ -68,13 +69,8 @@ export async function startUi(engine: Engine, options: UiOptions = {}) {
         if (!Number.isSafeInteger(after) || after < 0) throw new CairnError('invalid_input', 'Invalid event cursor');
         const rows = after ? engine.store.db.prepare('SELECT seq,kind,at,payload FROM events WHERE task_id=? AND seq>? ORDER BY seq LIMIT 100').all(taskId, after)
           : engine.store.db.prepare('SELECT seq,kind,at,payload FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 100').all(taskId).reverse();
-        const events = rows.map(row => {
-          const payload = JSON.parse(row.payload as string), input = payload.input ?? payload;
-          // Timeline summaries never copy raw command output or whole task snapshots.
-          return { seq: Number(row.seq), kind: row.kind as string, at: row.at as string,
-            subject: input.summary ?? input.tool ?? input.text ?? input.goal ?? input.criterionId ?? payload.phase ?? payload.result?.text ?? '',
-            observationId: row.kind === 'observation.captured' ? payload.id : undefined };
-        });
+        const events = rows.map(row => projectEvent({ seq: Number(row.seq), kind: row.kind as string, at: row.at as string, payload: JSON.parse(row.payload as string) }))
+          .filter(event => (task.evidenceMode ?? 'captured') === 'captured' || !['tool.started', 'observation.captured'].includes(event.kind));
         json(response, { events }); return;
       }
       const format = url.searchParams.get('format') ?? 'markdown';

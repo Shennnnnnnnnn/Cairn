@@ -9,6 +9,7 @@ import { handleNative, normalize } from './hooks.js';
 export default function cairn(pi:any){
  const resources=new Map<string,{store:Store;engine:Engine;runtimes:Map<string,ToolRuntime>}>();
  const registered=new Map<string,any>();
+ const injectedContext=new Map<string,string>();
  let catalogIdentity:string|undefined;
  const session=(ctx:any)=>({host:'pi' as const,sessionId:ctx.sessionManager.getSessionId(),cwd:ctx.cwd});
  const ensure=(ctx:any)=>{
@@ -54,12 +55,16 @@ export default function cairn(pi:any){
   await refresh(ctx);
   const e=ensure(ctx).engine,s=session(ctx),task=e.active(s);
   const owns=task&&task.owner.host===s.host&&task.owner.sessionId===s.sessionId&&e.store.session(s)?.epoch===task.owner.epoch;
-  const guidance=!task?'Cairn is available when useful. Start a goal with cairn_start; native session identity and tool evidence are automatic. Omit session_id.':task.status==='completed'?'The previous goal is completed; cairn_start creates a new goal.':!owns?`This task belongs to another session. Explicitly cairn_resume task_id=${task.id} with takeover=true before changing it.`:task.status==='suspended'?`This task is suspended; explicitly cairn_resume task_id=${task.id} before continuing.`:'Continue from the saved checkpoint. Use cairn_read for evidence details when needed.';
+  const key=JSON.stringify([database(ctx.cwd),s.sessionId,s.cwd]),revision=JSON.stringify([task?.id,task?.revision,task?.status,task?.owner.epoch]);
+  if(injectedContext.get(key)===revision)return;
+  injectedContext.set(key,revision);
+  const guidance=!task?'Cairn is available when useful. Start a goal with cairn_start; native session identity is automatic. General goals save your curated findings, references and progress at checkpoints without recording native tools. Omit session_id.':task.status==='completed'?'The previous goal is completed; cairn_start creates a new goal.':!owns?`This task belongs to another session. Explicitly cairn_resume task_id=${task.id} with takeover=true before changing it.`:task.status==='suspended'?`This task is suspended; explicitly cairn_resume task_id=${task.id} before continuing.`:'Continue from the saved checkpoint. Use cairn_read for evidence details when needed.';
   return {message:{customType:'cairn-context',content:task?`${guidance}\n${JSON.stringify(e.context(task.id))}`:guidance,display:false}};
  });
  pi.on('session_before_compact',(event:any,ctx:any)=>{dispatch(event,ctx);});
  pi.on('session_compact',(event:any,ctx:any)=>{
   const result=dispatch(event,ctx);
+  const s=session(ctx);injectedContext.delete(JSON.stringify([database(ctx.cwd),s.sessionId,s.cwd]));
   if(result.context)pi.sendMessage({customType:'cairn-context',content:result.context,display:false},{triggerTurn:false});
  });
  pi.on('agent_before_settle',(event:any,ctx:any)=>{
@@ -70,7 +75,7 @@ export default function cairn(pi:any){
  pi.on('session_shutdown',async(event:any,ctx:any)=>{
   if(resources.has(database(ctx.cwd)))dispatch(event,ctx);
   await Promise.allSettled([...resources.values()].flatMap(resource=>[...resource.runtimes.values()].map(instance=>instance.close())));
-  for(const resource of resources.values())resource.store.close();resources.clear();catalogIdentity=undefined;
+  for(const resource of resources.values())resource.store.close();resources.clear();injectedContext.clear();catalogIdentity=undefined;
  });
  pi.registerCommand('cairn',{description:'Show Cairn task state or resume a task with /cairn resume <task-id> [takeover]',handler:async(args:string,ctx:any)=>{
   const e=ensure(ctx).engine,s=session(ctx),parts=args.trim().split(/\s+/);

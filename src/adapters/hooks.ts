@@ -1,5 +1,5 @@
 import { Engine } from '../core/engine.js';
-import { CairnError, type Session, type Host, type Capabilities } from '../core/types.js';
+import { CairnError, type Session, type Host, type Capabilities, type ProgressInput } from '../core/types.js';
 import { structuredResult, valueAt, type GatewayConfig } from '../gateway.js';
 // These describe the installed adapter's integration points. They are not proof
 // that a host has trusted or invoked every hook; doctor reports observations separately.
@@ -20,6 +20,21 @@ export function normalize(host:Host,event:any):NativeEvent{
   sessionId:event.sessionId,cwd:event.cwd,callId:event.toolCallId,tool:event.toolName,input:event.input,
   output:event.structuredContent?{structuredContent:event.structuredContent,content:event.content}: {content:event.content,details:event.details},isError:event.isError,aborted:event.aborted??event.outcome==='aborted'};
  return {type:event.hook_event_name,sessionId:event.session_id,cwd:event.cwd,callId:event.tool_use_id,tool:event.tool_name,input:event.tool_input,output:event.tool_response??{error:event.error},isError:event.hook_event_name==='PostToolUseFailure'||event.tool_response?.isError===true||event.tool_response?.is_error===true,stopHookActive:event.stop_hook_active};
+}
+/** Only Codex's known plan contract is interpreted. The caller must already
+ * possess a captured call's task/epoch association; curated hooks never use it.
+ * Other hosts use checkpoint.progress. No hidden reasoning is read. */
+export function nativeProgress(host:Host,event:NativeEvent):ProgressInput[]|undefined{
+ if(host!=='codex'||event.tool!=='update_plan'||event.type!=='PostToolUse'||event.isError)return;
+ const input=event.input as {plan?:unknown}|undefined;
+ if(!input||!Array.isArray(input.plan)||input.plan.length>100)return;
+ const statuses={pending:'pending',in_progress:'running',completed:'completed'} as const;
+ const items:ProgressInput[]=[];
+ for(const [index,value]of input.plan.entries()){
+  if(!value||typeof value!=='object'||typeof value.step!=='string'||!value.step.trim()||typeof value.status!=='string'||!Object.hasOwn(statuses,value.status))return;
+  items.push({key:`codex-plan-${index+1}`,title:value.step,status:statuses[value.status as keyof typeof statuses]});
+ }
+ return items;
 }
 export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context?:string;deny?:string;continue?:string}{
  if(!event.sessionId||!event.cwd)throw new CairnError('invalid_event','Host event needs session id and cwd');
@@ -44,6 +59,13 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
  if(event.type==='PostCompact'||event.type==='PreCompact'||event.type==='RestoreContext')return {context:JSON.stringify(engine.context(task.id))};
  if(event.type==='Stop')return event.aborted||event.stopHookActive?{}:{continue:engine.continuation(task.id,session)};
  if(!event.tool)return {};
+ if(task.evidenceMode==='curated'){
+  // Native tools remain entirely under the host's control: no call reservations,
+  // budget decisions, raw inputs/results, or tool metadata are persisted.
+  // A late plan result cannot be associated with its original task without call
+  // metadata. Use explicit milestone progress instead of guessing that binding.
+  return {};
+ }
  const callId=`${host}:${event.sessionId}:${event.callId??''}`;
  if(!event.callId)return {}; // Never guess a tool identity or deduplicate unrelated calls.
  if(task.status!=='active'&&!(event.type.startsWith('PostToolUse')&&task.calls[callId]))return {};
@@ -61,6 +83,10 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
   const scope={...task.scope};
   for(const [key,path]of Object.entries(mapping?.scopePaths??{})){const v=valueAt(structured,path);if(typeof v==='string')(scope as any)[key]=v;}
   const observation=engine.observe(task.id,session,{callId,tool:event.tool,input:event.input??{},output:event.output??null,source:'hook',status:event.isError?'error':'success',scope,resultRef:typeof ref==='string'?ref:undefined});
+  const progress=nativeProgress(host,event);
+  if(progress&&task.calls[callId]?.epoch===task.owner.epoch&&currentTask?.id===task.id&&observation.eligible){
+   try{engine.recordProgress(task.id,session,progress,'host',true);}catch{}
+  }
   const index=engine.store.get(task.id).observations.findIndex(o=>o.id===observation.id)+1;
   if(currentTask?.id!==task.id)return {context:`Cairn result belongs to previous task ${task.id}, E${index}: ${observation.status}, eligible=${observation.eligible} for that task only. It is not evidence for the current goal.`};
   if(!observation.eligible)return {context:`Cairn audit-only result for task ${task.id}, E${index}: ${observation.status}, eligible=false. This late or interrupted result cannot support current conclusions.`};

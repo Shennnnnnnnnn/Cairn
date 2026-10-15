@@ -13,7 +13,7 @@ function observe(engine:Engine,taskId:string,callId='read'){return engine.observ
 test('minimal start, native tool result and one finish preserve the evidence graph',async(t)=>{
  const {store,engine,runtime}=fixture();t.after(async()=>{await runtime.close();store.close();});
  const catalog=coreCatalog();assert.deepEqual(catalog.find(t=>t.name==='cairn_start')!.inputSchema.required,['goal']);assert.deepEqual(catalog.find(t=>t.name==='cairn_finish')!.inputSchema.required??[],[]);
- const started=await runtime.invoke('cairn_start',{goal:'Verify the marker'}) as any;
+ const started=await runtime.invoke('cairn_start',{goal:'Verify the marker',evidence_mode:'captured'}) as any;
  observe(engine,started.taskId);
  const finished=await runtime.invoke('cairn_finish',{summary:'Marker verified',findings:[{text:'Native read returned marker',evidence:['E1']}]}) as any;
  assert.equal(finished.status,'completed');
@@ -53,7 +53,7 @@ test('same-session epoch changes reject late reserved results and workspace move
 
 test('bounded recovery permits paging the complete task details, raw evidence and audit payload',async(t)=>{
  const {store,engine,runtime}=fixture();t.after(async()=>{await runtime.close();store.close();});
- const start=await runtime.invoke('cairn_start',{goal:'目标'.repeat(1500)+'GOAL_END',constraints:['限制'.repeat(800)+'CONSTRAINT_END']}) as any;
+ const start=await runtime.invoke('cairn_start',{evidence_mode:'captured',goal:'目标'.repeat(1500)+'GOAL_END',constraints:['限制'.repeat(800)+'CONSTRAINT_END']}) as any;
  const obs=engine.observe(start.taskId,session,{callId:'long',tool:'Read',input:{},output:'原文'.repeat(10000)+'RAW_END',source:'hook',status:'success'});
  await runtime.invoke('cairn_checkpoint',{summary:'Checkpoint',findings:[{key:'long',text:'结论'.repeat(1500)+'FINDING_END',evidence:[obs.id]}]});
  const context=await runtime.invoke('cairn_read',{}) as any;assert.ok(JSON.stringify(context).length<16000);
@@ -70,7 +70,7 @@ test('typed tools retain original parameters and concurrent catalog loads do not
  store.setConfig('gateway',gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/upstream.mjs')]}},tools:[{name:'read',server:'fixture',upstream:'read',resultRefPath:'result_ref'}]}));
  const catalogs=await Promise.all([runtime.list(),runtime.list(),runtime.list()]);
  for(const catalog of catalogs){assert.equal(catalog.length,6);assert.equal(new Set(catalog.map(t=>t.name)).size,6);const schema=catalog.at(-1)!.inputSchema;assert.ok(!('tool' in (schema.properties as any??{})));}
- const start=await runtime.invoke('cairn_start',{goal:'Read the configured fixture'}) as any;
+ const start=await runtime.invoke('cairn_start',{goal:'Read the configured fixture',evidence_mode:'captured'}) as any;
  const result=await runtime.invoke('cairn_tool_read',{}) as any;assert.equal(result.evidence.ref,'E1');assert.equal(result.evidence.resultRef,'ref-read');assert.equal(engine.store.get(start.taskId).observations.length,1);
 });
 

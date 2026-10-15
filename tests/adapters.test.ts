@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {Store} from '../src/core/store.js';
 import {Engine} from '../src/core/engine.js';
-import {normalize,handleNative,hookOutput,isCairnTool,observedCapabilities} from '../src/adapters/hooks.js';
+import {normalize,handleNative,hookOutput,isCairnTool,observedCapabilities,nativeProgress} from '../src/adapters/hooks.js';
 import piExtension from '../src/adapters/pi-extension.js';
 import type {Host,Session} from '../src/core/types.js';
 import {resolveSession,ToolRuntime} from '../src/tools.js';
@@ -68,7 +68,7 @@ for(const host of ['pi','claude','codex'] as Host[])test(`${host}: native eviden
  const store=new Store(':memory:'),engine=new Engine(store),session:Session={host,sessionId:'original',cwd:'/w'},runtime=new ToolRuntime(engine,host==='pi'?session:{...session,sessionId:''});
  handleNative(engine,host,{type:'SessionStart',sessionId:session.sessionId,cwd:session.cwd});
  try{
-  const started:any=await runtime.invoke('cairn_start',{goal:'Verify marker',criteria:['Marker exists'],...(host==='pi'?{}:{session_id:session.sessionId})});
+  const started:any=await runtime.invoke('cairn_start',{goal:'Verify marker',criteria:['Marker exists'],evidence_mode:'captured',...(host==='pi'?{}:{session_id:session.sessionId})});
   handleNative(engine,host,{type:'PreToolUse',sessionId:session.sessionId,cwd:session.cwd,tool:'read',callId:'native-1',input:{path:'evidence.txt'}});
   const receipt=handleNative(engine,host,{type:'PostToolUse',sessionId:session.sessionId,cwd:session.cwd,tool:'read',callId:'native-1',input:{path:'evidence.txt'},output:{marker:'verified'}});assert.match(receipt.context!,/Cairn E1/);
   await runtime.invoke('cairn_checkpoint',{summary:'Marker verified',findings:[{key:'marker',text:'Marker exists',evidence:['E1'],covers:['c1']}],questions:[]});
@@ -105,7 +105,7 @@ test('Pi dynamically exposes original upstream arguments and withdraws removed w
  piExtension(pi);const emit=(name:string,extra:any={})=>handlers.get(name)({type:name,...extra},ctx),call=(name:string,input:any)=>tools.get(name).execute('execute',input,undefined,undefined,ctx);
  let configStore:Store|undefined;
  try{
-  await emit('session_start');await call('cairn_start',{goal:'Read upstream'});
+  await emit('session_start');await call('cairn_start',{goal:'Read upstream',evidence_mode:'captured'});
   configStore=new Store(join(root,'.cairn/state.db'));
   configStore.setConfig('gateway',{servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/upstream.mjs')]}},tools:[{name:'metrics',server:'fixture',upstream:'read',resultRefPath:'result_ref'}]});
   await emit('before_agent_start');const dynamic=tools.get('cairn_tool_metrics');assert.ok(dynamic);assert.equal(dynamic.parameters.properties.tool,undefined);assert.equal(dynamic.parameters.properties.arguments,undefined);
@@ -134,4 +134,99 @@ test('suspending Cairn restores ordinary CLI tools without capturing unrelated f
  assert.deepEqual(handleNative(engine,'codex',{type:'PreToolUse',sessionId:'s',cwd:'/w',tool:'Read',callId:'later'}),{});
  handleNative(engine,'codex',{type:'PostToolUse',sessionId:'s',cwd:'/w',tool:'Read',callId:'later',output:'ordinary work'});
  assert.equal(store.get(task.id).observations.length,0);store.close();
+});
+
+for(const host of ['pi','claude','codex'] as Host[])test(`${host}: curated goals leave native tools unrecorded and unrestricted`,()=>{
+ const store=new Store(':memory:'),engine=new Engine(store),s:Session={host,sessionId:'curated',cwd:'/w'};
+ const task=engine.create(s,{origin:'user',goal:'Finish the outcome',criteria:['Outcome reviewed'],evidenceMode:'curated',budget:{deadline:'2000-01-01T00:00:00.000Z'}});
+ const before=store.events(task.id).length;
+ const event={sessionId:s.sessionId,cwd:s.cwd,tool:'native_arbitrary_tool',callId:'native-untracked',input:{sensitive:'raw-input-sentinel'},output:{sensitive:'raw-output-sentinel'}};
+ engine.beforeTool=()=>{throw new Error('Curated hooks must not reserve calls');};
+ engine.observe=()=>{throw new Error('Curated hooks must not capture results');};
+ assert.deepEqual(handleNative(engine,host,{...event,type:'PreToolUse'}),{});
+ assert.deepEqual(handleNative(engine,host,{...event,type:'PostToolUse'}),{});
+ assert.deepEqual(handleNative(engine,host,{...event,type:'PostToolUseFailure',isError:true}),{});
+ const saved=store.get(task.id);assert.deepEqual(saved.calls,{});assert.deepEqual(saved.observations,[]);assert.equal(saved.revision,task.revision);
+ assert.equal(store.events(task.id).length,before);assert.doesNotMatch(JSON.stringify(store.events(task.id)),/raw-input-sentinel|raw-output-sentinel|native_arbitrary_tool/);
+ store.close();
+});
+
+test('captured Codex plan progress requires an eligible reserved call in the current task and epoch',()=>{
+ const store=new Store(':memory:'),engine=new Engine(store),s:Session={host:'codex',sessionId:'plan',cwd:'/w'};
+ const task=engine.create(s,{origin:'user',goal:'Investigate',criteria:['Reviewed'],evidenceMode:'captured'});
+ const event={type:'PostToolUse',sessionId:s.sessionId,cwd:s.cwd,tool:'update_plan',callId:'raw-call-id-sentinel',input:{explanation:'private-explanation-sentinel',plan:[{step:'Read sources',status:'completed'},{step:'Check cause',status:'in_progress'},{step:'Write report',status:'pending'}]},output:{private:'raw-result-sentinel'}};
+ handleNative(engine,'codex',{...event,type:'PreToolUse'});assert.match(handleNative(engine,'codex',event).context!,/Cairn E1/);
+ let saved=store.get(task.id);assert.deepEqual(saved.progress?.map(p=>[p.title,p.status,p.source]),[['Read sources','completed','host'],['Check cause','running','host'],['Write report','pending','host']]);
+ assert.equal(Object.values(saved.calls)[0]!.status,'finished');assert.equal(saved.observations.length,1);
+ const progressEvents=store.events(task.id).filter(e=>e.kind==='progress.updated');assert.doesNotMatch(JSON.stringify(progressEvents),/private-explanation-sentinel|raw-result-sentinel|raw-call-id-sentinel|update_plan/);
+ const revision=saved.revision;handleNative(engine,'codex',event);assert.equal(store.get(task.id).revision,revision,'duplicate semantic plan makes no additional event');
+ const second={...event,callId:'plan-2',input:{plan:[{step:'Read sources',status:'completed'},{step:'Check cause',status:'completed'}]}};
+ handleNative(engine,'codex',{...second,type:'PreToolUse'});handleNative(engine,'codex',second);
+ saved=store.get(task.id);assert.equal(saved.progress?.find(p=>p.key==='codex-plan-3')?.status,'cancelled');
+ const restored=handleNative(engine,'codex',{type:'RestoreContext',sessionId:s.sessionId,cwd:s.cwd});assert.match(restored.context!,/Check cause/);
+ engine.suspend(task.id,s);const next:Session={host:'pi',sessionId:'next',cwd:'/w'};engine.resume(task.id,next,true);
+ assert.equal(store.get(task.id).progress?.find(p=>p.key==='codex-plan-2')?.status,'completed');
+ const fenced=JSON.stringify(store.get(task.id).progress);handleNative(engine,'codex',{...event,input:{plan:[{step:'Stale owner',status:'in_progress'}]}});assert.equal(JSON.stringify(store.get(task.id).progress),fenced);
+ store.close();
+});
+
+test('curated late Codex plans never attach to a different task in the same native session',()=>{
+ const store=new Store(':memory:'),engine=new Engine(store),s:Session={host:'codex',sessionId:'same',cwd:'/w'};
+ const first=engine.create(s,{origin:'user',goal:'First',criteria:['First done'],evidenceMode:'curated'});
+ const event={sessionId:s.sessionId,cwd:s.cwd,tool:'update_plan',callId:'old-plan',input:{plan:[{step:'First task work',status:'in_progress'}]},output:{}};
+ handleNative(engine,'codex',{...event,type:'PreToolUse'});engine.suspend(first.id,s);
+ const second=engine.create(s,{origin:'user',goal:'Second',criteria:['Second done'],evidenceMode:'curated',progress:[{key:'second',title:'Second task work',status:'running'}]});
+ const before=store.get(second.id),events=store.events(second.id);handleNative(engine,'codex',{...event,type:'PostToolUse'});
+ assert.deepEqual(store.get(second.id),before);assert.deepEqual(store.events(second.id),events);assert.equal(store.get(first.id).progress,undefined);
+ assert.deepEqual(store.get(second.id).calls,{});assert.deepEqual(store.get(second.id).observations,[]);assert.doesNotMatch(JSON.stringify(store.events(second.id)),/First task work|old-plan|update_plan/);
+ store.close();
+});
+
+test('captured plan results without a reservation or from an old task cannot update current progress',()=>{
+ const store=new Store(':memory:'),engine=new Engine(store),s:Session={host:'codex',sessionId:'same',cwd:'/w'};
+ const first=engine.create(s,{origin:'user',goal:'First',criteria:['First done'],evidenceMode:'captured'});
+ const event={sessionId:s.sessionId,cwd:s.cwd,tool:'update_plan',callId:'old-plan',input:{plan:[{step:'First task work',status:'in_progress'}]},output:{}};
+ handleNative(engine,'codex',{...event,type:'PreToolUse'});engine.suspend(first.id,s);
+ const second=engine.create(s,{origin:'user',goal:'Second',criteria:['Second done'],evidenceMode:'captured'});
+ handleNative(engine,'codex',{...event,type:'PostToolUse'});assert.equal(store.get(second.id).progress,undefined);assert.equal(store.get(first.id).progress,undefined);
+ handleNative(engine,'codex',{...event,type:'PostToolUse',callId:'no-reservation'});assert.equal(store.get(second.id).progress,undefined);
+ assert.equal(store.get(first.id).observations.length,1);assert.equal(store.get(first.id).observations[0]!.eligible,false);assert.equal(store.get(second.id).observations.length,1);
+ store.close();
+});
+
+test('unknown host plan contracts, failures and forged plan-like names use checkpoint progress fallback',()=>{
+ const event={type:'PostToolUse',sessionId:'s',cwd:'/w',tool:'update_plan',input:{plan:[{step:'A real step',status:'in_progress'}]}};
+ assert.equal(nativeProgress('pi',event),undefined);assert.equal(nativeProgress('claude',{...event,tool:'TaskUpdate'}),undefined);
+ assert.equal(nativeProgress('codex',{...event,isError:true}),undefined);assert.equal(nativeProgress('codex',{...event,type:'PreToolUse'}),undefined);
+ assert.equal(nativeProgress('codex',{...event,tool:'mcp__unrelated__update_plan'}),undefined);
+ for(const plan of [[{step:'A',status:'constructor'}],[{step:'',status:'pending'}],[{step:'A',status:'unknown'}],{step:'A',status:'pending'}])assert.equal(nativeProgress('codex',{...event,input:{plan}}),undefined);
+});
+
+for(const host of ['pi','claude','codex'] as Host[])test(`${host}: curated checkpoint progress and references survive explicit cross-session recovery`,async()=>{
+ const store=new Store(':memory:'),engine=new Engine(store),s:Session={host,sessionId:'curated-root',cwd:'/w'},runtime=new ToolRuntime(engine,s);
+ handleNative(engine,host,{type:'SessionStart',sessionId:s.sessionId,cwd:s.cwd});
+ try{
+  const started:any=await runtime.invoke('cairn_start',{goal:'Review source file',criteria:['Cause checked']});assert.equal(store.get(started.taskId).evidenceMode,'curated');
+  await runtime.invoke('cairn_checkpoint',{summary:'Read the source and found a candidate cause',findings:[{key:'cause',text:'The conversion is duplicated',status:'proposed',basis:'The same mapping is applied at both boundaries',references:['src/mapping.ts:20']}],progress:[{key:'source',title:'Read source',status:'completed'},{key:'verify',title:'Check cause',status:'running'}],questions:['Confirm the output fixture']});
+  const child:Session={host,sessionId:'native-child-context',cwd:'/w'};handleNative(engine,host,{type:'SessionStart',sessionId:child.sessionId,cwd:child.cwd});assert.equal(engine.active(child),undefined);assert.equal(store.get(started.taskId).owner.sessionId,s.sessionId,'a subagent context does not take over the goal');
+  handleNative(engine,host,{type:'Interrupt',sessionId:s.sessionId,cwd:s.cwd});
+  const next:Session={host,sessionId:'curated-next',cwd:'/w'};engine.resume(started.taskId,next,true);
+  const context=handleNative(engine,host,{type:'RestoreContext',sessionId:next.sessionId,cwd:next.cwd}).context!;assert.match(context,/Read source/);assert.match(context,/src\/mapping.ts:20/);assert.match(context,/Confirm the output fixture/);
+  assert.equal(store.get(started.taskId).progress?.find(p=>p.key==='verify')?.status,'blocked');
+  assert.deepEqual(store.get(started.taskId).observations,[]);assert.deepEqual(store.get(started.taskId).calls,{});
+ }finally{await runtime.close();store.close();}
+});
+
+test('Pi injects only changed checkpoints and refreshes the same state after compaction',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'cairn-pi-curated-context-')),handlers=new Map<string,any>(),tools=new Map<string,any>();
+ const pi={on:(name:string,handler:any)=>handlers.set(name,handler),registerTool:(tool:any)=>tools.set(tool.name,tool),registerCommand:()=>{},sendMessage:()=>{}},ctx={cwd:root,sessionManager:{getSessionId:()=> 'native'},ui:{notify:()=>{}}};
+ piExtension(pi);const emit=(name:string,extra:any={})=>handlers.get(name)({type:name,...extra},ctx);
+ try{
+  await emit('session_start');const invoke=(name:string,input:any)=>tools.get(name).execute('execute',input,undefined,undefined,ctx);
+  await invoke('cairn_start',{goal:'A curated task'});assert.match((await emit('before_agent_start')).message.content,/A curated task/);
+  assert.equal(await emit('before_agent_start'),undefined);
+  await emit('tool_call',{toolName:'read',toolCallId:'native-read',input:{path:'anywhere'}});await emit('tool_result',{toolName:'read',toolCallId:'native-read',content:[{type:'text',text:'private'}]});assert.equal(await emit('before_agent_start'),undefined);
+  await invoke('cairn_checkpoint',{summary:'Source reviewed',progress:[{key:'review',title:'Review source',status:'completed'}]});assert.match((await emit('before_agent_start')).message.content,/Source reviewed/);assert.equal(await emit('before_agent_start'),undefined);
+  await emit('session_compact');assert.match((await emit('before_agent_start')).message.content,/Source reviewed/);
+ }finally{await emit('session_shutdown');rmSync(root,{recursive:true});}
 });

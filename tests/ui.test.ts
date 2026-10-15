@@ -13,7 +13,7 @@ import type { Session } from '../src/core/types.js';
 const session: Session = { host: 'codex', sessionId: 'ui-session', cwd: '/workspace' };
 function fixture() {
   const store = new Store(':memory:'), engine = new Engine(store);
-  const task = engine.create(session, { origin: '告警', goal: '核对价格字段', criteria: ['确认错误机制', '圈定影响面'] });
+  const task = engine.create(session, { origin: '告警', goal: '核对价格字段', criteria: ['确认错误机制', '圈定影响面'], evidenceMode: 'captured' });
   return { store, engine, task };
 }
 test('dashboard progress is evidence-backed criterion coverage, and refutations reduce it', () => {
@@ -89,4 +89,20 @@ test('dashboard reports occupied ports and refuses public network binding', asyn
     await assert.rejects(startUi(engine, { port: Number(new URL(first.url).port) }), (error: any) => error.code === 'EADDRINUSE');
     await assert.rejects(startUi(engine, { host: '0.0.0.0', port: 0 }), /loopback/);
   } finally { await first.close(); store.close(); }
+});
+
+
+test('curated dashboard exposes authored milestones and denies residual raw tool records', async () => {
+  const { store, engine, task } = fixture();
+  const observation = engine.observe(task.id, session, { callId: 'secret', tool: 'RAW_TOOL_SENTINEL', input: {}, output: 'RAW_SENTINEL', source: 'hook', status: 'success' });
+  const changed = store.get(task.id); changed.evidenceMode = 'curated';
+  changed.checkpoint = { summary: 'AI 整理了文件依据', questions: [], at: new Date().toISOString() };
+  store.save(changed, 'task.checkpoint', { input: { summary: 'AI 整理了文件依据' } }, changed.checkpoint.at);
+  const dashboard = await startUi(engine, { port: 0 });
+  try {
+    const events = await (await fetch(`${dashboard.url}/api/tasks/${task.id}/events`)).json();
+    assert.ok(events.events.some((e: any) => e.title === '保存阶段进展' && e.summary === 'AI 整理了文件依据'));
+    assert.ok(!JSON.stringify(events).includes('RAW_TOOL_SENTINEL')); assert.ok(!JSON.stringify(events).includes('RAW_SENTINEL'));
+    assert.equal((await fetch(`${dashboard.url}/api/tasks/${task.id}/observations/${observation.id}`)).status, 404);
+  } finally { await dashboard.close(); store.close(); }
 });

@@ -21,7 +21,7 @@ const server=createServer(async(req,res)=>{
   requestCount++;if(requestCount>25)throw new Error('Fixture exceeded request budget');
   const body=JSON.parse(raw),state=task();let operation,args;
   if(phase==='create'){
-   const operations=[['cairn_start',{goal:'Verify marker',criteria:['File contains marker'],session_id:sessionId}],['Read',{file_path:join(root,'evidence.txt')}],['cairn_finish',{outcome:'suspended',summary:'Verified marker; reviewer pending',findings:[{key:'marker',text:'File contains marker',evidence:['E1']}],questions:['Reviewer acceptance pending']}]];
+   const operations=[['cairn_start',{evidence_mode:'captured',goal:'Verify marker',criteria:['File contains marker'],session_id:sessionId}],['Read',{file_path:join(root,'evidence.txt')}],['cairn_finish',{outcome:'suspended',summary:'Verified marker; reviewer pending',findings:[{key:'marker',text:'File contains marker',evidence:['E1']}],questions:['Reviewer acceptance pending']}]];
    [operation,args]=operations[step]??[];
   }else{[operation,args]=[['cairn_resume',{task_id:state?.id,session_id:sessionId,takeover:true}],['cairn_finish',{summary:'Reviewer accepted the saved evidence',questions:[]}]][step]??[];}
   const tool=operation?body.tools?.find(t=>t.name===operation||t.name.endsWith(`__${operation}`)):undefined;
