@@ -1,11 +1,12 @@
 import type { TaskView } from './view.js';
 import { unboundAgentRuns } from '../core/branches.js';
+import { evidenceRelations } from '../core/graph.js';
 
 export type GraphNodeKind = 'origin' | 'goal' | 'branch' | 'agent' | 'review' | 'work' | 'action' | 'observation' | 'basis' | 'claim' | 'criterion';
 export type GraphState = 'origin' | 'goal' | 'running' | 'review' | 'completed' | 'pending' | 'blocked' | 'refuted' | 'cancelled';
 export type GraphActor = 'main' | 'subagent';
 export type GraphNode = { id: string; kind: GraphNodeKind; label: string; state: string; status: GraphState; rank: number; data: any; actor?: GraphActor };
-export type GraphEdge = { from: string; to: string; relation: 'context' | 'branch' | 'handoff' | 'review' | 'stage' | 'basis' | 'supports' | 'refutes' | 'criterion' | 'goal'; state: 'context' | 'running' | 'review' | 'completed' | 'pending' | 'refuted' };
+export type GraphEdge = { from: string; to: string; relation: 'context' | 'branch' | 'handoff' | 'review' | 'stage' | 'basis' | 'supports' | 'refutes' | 'criterion' | 'addresses' | 'goal'; state: 'context' | 'running' | 'review' | 'completed' | 'pending' | 'refuted' };
 export type GraphModel = { nodes: GraphNode[]; edges: GraphEdge[] };
 
 /** The original Cairn graph palette: teal start, rose goal, indigo facts, amber execution. */
@@ -74,7 +75,6 @@ export function projectGraph(task: TaskView): GraphModel {
     for (const claim of task.claims) if (claim.basis || claim.references?.length) {
       add(evidenceRank, 'basis', `basis:${claim.id}`, claim.basis || claim.references?.[0] || 'AI 整理的依据', 'AI 整理 · 引用可核对', 'completed', claim,actorFor(claim.branch));
       connect(branchOrigin(claim.branch), `basis:${claim.id}`, claim.branch?'branch':'context', 'context');
-      connect(`basis:${claim.id}`, `claim:${claim.id}`, 'basis', claim.status === 'refuted' ? 'refuted' : 'completed');
     }
   }
   for (const observation of task.observations) {
@@ -86,14 +86,18 @@ export function projectGraph(task: TaskView): GraphModel {
     const status = claim.status === 'supported' ? 'completed' : claim.status === 'refuted' ? 'refuted' : 'pending';
     add(evidenceRank+1, 'claim', `claim:${claim.id}`, claim.text, claimLabels[claim.status], status, claim,actorFor(claim.branch));
     if(claim.branch&&(!((task.evidenceMode??'captured')==='curated')||(!claim.basis&&!claim.references?.length)))connect(branchOrigin(claim.branch),`claim:${claim.id}`,'branch','context');
-    for (const ref of claim.supports) connect(`obs:${ref}`, `claim:${claim.id}`, 'supports');
-    for (const ref of claim.refutes) connect(`obs:${ref}`, `claim:${claim.id}`, 'refutes', 'refuted');
   }
   for (const criterion of task.criteria) {
     const met = !task.check.unmet.includes(criterion.id);
     add(evidenceRank+2, 'criterion', `criterion:${criterion.id}`, criterion.text, met ? '✓ 目标条件已满足' : '○ 目标条件待满足', 'goal', criterion);
-    for (const ref of criterion.claimIds) connect(`claim:${ref}`, `criterion:${criterion.id}`, 'criterion', met ? 'completed' : 'pending');
-    connect(`criterion:${criterion.id}`, 'goal', 'goal', met ? 'completed' : 'pending');
+  }
+  // Model and UI consume the same evidence topology; layout/review decoration
+  // remains local to this view. An intended criterion is not proven coverage.
+  for(const edge of evidenceRelations(task)){
+    const criterion=edge.relation==='goal'?edge.from.slice('criterion:'.length):edge.to.slice('criterion:'.length);
+    const claim=task.claims.find(claim=>`claim:${claim.id}`===edge.from||`claim:${claim.id}`===edge.to);
+    const state:GraphEdge['state']=edge.relation==='refutes'||edge.relation==='basis'&&claim?.status==='refuted'?'refuted':edge.relation==='addresses'?'pending':edge.relation==='criterion'||edge.relation==='goal'?task.check.unmet.includes(criterion)?'pending':'completed':'completed';
+    edges.push({...edge,state});
   }
   const nodeIds = new Set(nodes.map(n => n.id));
   // Stale or cross-task references never create invented nodes or dangling edges.

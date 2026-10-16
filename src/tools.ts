@@ -35,7 +35,7 @@ const schemas = {
     budget:z.object({deadline:z.iso.datetime().optional(),maxCalls:z.number().int().positive().optional(),maxParallel:z.number().int().min(1).max(32).optional()}).strict().optional(),
   }).strict(),
   cairn_resume:z.object({session_id:text.optional(),task_id:text,takeover:z.boolean().default(false)}).strict(),
-  cairn_read:z.object({view:z.enum(['context','details','evidence','history','tasks','branches']).default('context'),task_id:text.optional(),ref:text.optional(),offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(32768).optional(),revision:z.number().int().nonnegative().optional()}).strict(),
+  cairn_read:z.object({view:z.enum(['context','graph','handoff','details','evidence','history','tasks','branches']).default('context'),task_id:text.optional(),ref:text.optional(),offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(32768).optional(),revision:z.number().int().nonnegative().optional(),snapshot:z.number().int().positive().optional(),since:z.number().int().positive().optional(),checksum:text.optional(),format:z.enum(['full','index']).optional(),question:text.max(4000).optional()}).strict(),
   cairn_update:z.object({branch:branch.partial({title:true}).optional(),progress:progress.partial({title:true}).optional(),finding:finding.extend({key:text.max(200)}).optional()}).strict().refine(value=>Object.keys(value).length===1,'Report exactly one branch, progress item or finding'),
   cairn_checkpoint:z.object(checkpointFields).strict(),
   cairn_finish:z.object({...checkpointFields,summary:checkpointFields.summary.optional(),outcome:z.enum(['completed','suspended']).default('completed')}).strict(),
@@ -43,7 +43,7 @@ const schemas = {
 const descriptions:Record<keyof typeof schemas,string> = {
   cairn_start:'Create a task. goal is required; criteria defaults to that goal. Optional constraints, scope, budget and initial state are accepted. evidence_mode defaults to curated. Generic MCP/Multica and Pi omit session_id; native Claude/Codex supply the startup-hook identity once. Returns task ID and bounded context.',
   cairn_resume:'Bind task_id and restore bounded context. Set takeover=true for a different owner/workspace. Generic MCP/Multica and Pi omit session_id; native Claude/Codex supply the startup-hook identity once per connection.',
-  cairn_read:'Read the bound task, or task_id explicitly. view selects context (default), details, evidence, history, branches or tasks. ref selects a branch key, finding/evidence reference or history event. Indexes use record offsets; large details use character offsets. Continue pages with returned revision and nextOffset.',
+  cairn_read:'Read bound task or explicit task_id. view=context includes the full graph or its immutable reference. graph reads full nodes/edges; format=index gives topology; ref selects a related subgraph; since compares snapshots. handoff requires ref and accepts question. Graph pages use character offsets: continue with snapshot, checksum and nextOffset. Other views: details, evidence, history, branches, tasks; use revision for their paging.',
   cairn_update:'Save exactly ONE branch, progress item or finding. All require key; new branch/progress also needs title. Completed/cancelled branches require summary; delegated completion follows reviewing. Optional agentId must be an exact native ID. Findings accept basis, references and criterion IDs in covers. Omit finding.scope to inherit task scope; otherwise include all task scope key/value pairs. Returns changed, revision and current event receipt; identical content adds no event.',
   cairn_checkpoint:'Save recovery summary (required), optional questions and next. Returns bounded context and validation. Bulk findings/progress/branches support atomic imports or handoffs; use cairn_update for individual changes.',
   cairn_finish:'Validate and finish, or set outcome=suspended to pause. Accepts final summary, findings and recovery fields. Unmet criteria, unresolved branches or known running children keep completion incomplete and return gaps. Retrying a completed task without new content returns its saved status.',
@@ -154,6 +154,11 @@ export class ToolRuntime {
       return {tasks:tasks.slice(offset,offset+limit),total:tasks.length,nextOffset:offset+limit<tasks.length?offset+limit:undefined,binding:this.bound?'bound':'Call cairn_start or cairn_resume with the native session_id once.',upstream:this.catalogStatus};
     }
     const task=input.task_id?this.engine.store.get(input.task_id):this.current().task;
+    if(view==='graph'||view==='handoff'){
+      const page=this.engine.readGraph(task.id,{...input,handoff:view==='handoff'});
+      if(input.revision!==undefined&&input.revision!==page.revision)throw new CairnError('revision_changed','Graph snapshot revision differs from requested revision');
+      return page;
+    }
     if(input.revision!==undefined&&input.revision!==task.revision)throw new CairnError('revision_changed','Task changed while paging; restart reading at offset 0 with its new revision.');
     if(view==='context')return {...this.engine.context(task.id),upstream:this.catalogStatus};
     if(view==='branches'){

@@ -62,9 +62,16 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
   try{
    const bound=engine.store.taskForAgent(session,event.agentId);
    const target=bound??(event.type==='SubagentStart'&&currentTask?.status==='active'&&!seen[`child:${event.agentId}`]?currentTask:undefined);
-   if(target)engine.recordAgentLifecycle(target.id,session,event.agentId,event.type==='SubagentStart'?'started':'returned',event.agentType);
+   if(target){
+    engine.recordAgentLifecycle(target.id,session,event.agentId,event.type==='SubagentStart'?'started':'returned',event.agentType);
+    if(event.type==='SubagentStart'){
+     engine.assertActiveOwner(target.id,session);
+     const {data:_data,...graph}=engine.context(target.id).graph;
+     return {context:`Cairn records this native execution lifecycle automatically; no lifecycle or ID reporting is required. Investigate the delegated question and return findings, basis, file/URL references and uncertainty to the main agent. Do not start/resume/take over/finish the parent goal. Read the provided graph snapshot before investigating.\n${JSON.stringify({role:'helper',parentTaskId:target.id,graph:{...graph,complete:false,delivery:'reference'}})}`};
+    }
+   }
   }catch{return {};}
-  return event.type==='SubagentStart'&&currentTask?.status==='active'?{context:'Cairn records this native execution lifecycle automatically; no lifecycle or ID reporting is required. Investigate the delegated question and return findings, basis, file/URL references and uncertainty to the main agent. Do not start/resume/take over/finish the parent goal.'}:{};
+  return {};
  }
  const task=event.type.startsWith('PostToolUse')&&nativeCallId?engine.store.taskForCall(nativeCallId)??currentTask:currentTask;
  const marker=host==='pi'?'Cairn tools are bound to this native Pi session. Omit session_id; do not invent one.':`Cairn host=${host} session_id=${session.sessionId}. Supply this real session_id only on the first cairn_start or cairn_resume of this MCP connection; subsequent calls are already bound. Never guess a session id.`;

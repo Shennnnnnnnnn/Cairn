@@ -307,7 +307,7 @@ function renderGraph() {
       : `M${a.x + width},${a.y + height / 2} C${a.x + width + 35},${a.y + height / 2} ${b.x - 35},${b.y + height / 2} ${b.x},${b.y + height / 2}`;
     const marker = edge.relation==='handoff'||edge.state==='review'?'arrow-review':edge.state === 'running' ? 'arrow-running' : edge.state === 'refuted' ? 'arrow-red' : edge.state === 'pending' || edge.state === 'context' ? 'arrow-pending' : 'arrow';
     const line = svg('path', { d: path, class: `edge ${edge.state} relation-${edge.relation}`, 'marker-end': `url(#${marker})`, 'data-edge-from': edge.from, 'data-edge-to': edge.to, 'data-relation': edge.relation });
-    line.append(svg('title', {}, { context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', handoff:'子 Agent 返回结果，进入主 Agent 的复核流程',review:'由分支状态生成的主 Agent 复核关系',stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+    line.append(svg('title', {}, { context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', handoff:'子 Agent 返回结果，进入主 Agent 的复核流程',review:'由分支状态生成的主 Agent 复核关系',stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', addresses:'涉及此目标条件，尚未构成完成依据', goal: '目标与验收条件' }[edge.relation])); world.append(line);
     if(edge.relation==='handoff')world.append(svg('text',{x:(a.x+b.x+width)/2,y:(a.y+b.y+height)/2-5,'text-anchor':'middle',class:'handoff-label'},edge.state==='review'?'返回 · 待复核':'返回 · 已复核'));
   }
   for (const node of nodes.values()) {

@@ -1,6 +1,6 @@
 # Verification record
 
-Cairn 4.5.1 — verified on 2026-10-16 (Asia/Shanghai).
+Cairn 4.6 — verified on 2026-10-16 (Asia/Shanghai).
 
 ## Prompt consolidation verification
 
@@ -11,6 +11,13 @@ Cairn 4.5.1 — verified on 2026-10-16 (Asia/Shanghai).
 - Two actual scope_mismatch rejections were repaired without relaxing Core checks; tool calling guidance now explicitly describes scope inheritance and coverage.
 - The skill creator validator, JSON examples, shell syntax and local references were checked. Runtime schemas and persistence semantics remain unchanged; the existing regression suite verifies callable behavior rather than matching prompt wording.
 
+## Full graph context verification
+
+- Complete semantic graph reads retain old findings and full basis text beyond legacy summary limits. Small contexts inline the graph; large contexts expose a checksum-pinned historical snapshot. Source/raw-IO separation, unavailable references and all edge endpoints are explicit.
+- Graph tests cover pinned pages across new writes and takeover, checksum/range checks, helper read-only access without owner binding, related competing findings and ancestry, complete topology indexes, semantic deltas and proof-edge reconstruction, task-scoped snapshots and privacy-mode changes.
+- Native Claude/Codex startup/compaction fixtures verify graph access injection, exact parent identity and suppression of unrelated new-goal context on late child starts. UI and model evidence relations are checked through the shared projection.
+- A live read-only helper received only a graph reference to a consistent copy of the earlier real Codex task, without its original conversation. It read snapshot 40 in three pages (37 nodes, 55 edges, 30,840 UTF-8 bytes), verified the checksum, and recovered the early 4/8 price anomaly, cache-key cause, rejected alternatives and recorded repair checks. Its answer distinguished historical agent-curated findings from newly executed verification; it did not open the referenced business files or rerun their tests. No parent ownership, task state or tool-call records changed. This validates using stored graph context, not a fresh native investigation on all three hosts.
+
 ## Current scope
 
 Cairn manages goals, evidence relationships, immediate semantic updates, recovery and completion checks. The public workflow is start → host work and updates → recovery summary/resume when useful → finish. Users choose the tools and define observable acceptance criteria for their actual problem.
@@ -19,7 +26,7 @@ The domain-specific competition profile and its resources were removed from the 
 
 ## Automated verification
 
-- **204 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
+- **212 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
 - A practical public-interface test created a real local faulty implementation, reproduced its incorrect output through a separate Node process, saved findings, paused, restored from another host, fixed the file and ran actual regression inputs. The final report completed from its goal coverage and references, with no tool-call records.
 - Interface tests verify that removed profile/budget/report fields are rejected, fresh databases contain no match-state table, and captured findings can complete without an external platform reference.
 - Core checks cover contradictory/unsupported findings, scope coverage, reference membership, paging and bounded context, cancellation, interruption, cross-host takeover and stale-owner rejection.
@@ -64,6 +71,9 @@ The domain-specific competition profile and its resources were removed from the 
 - Desktop and 390px browser checks retained the blue-and-white graph and usable replay controls without horizontal overflow. These fixtures exercise UI behavior; they do not claim a new external-model investigation.
 
 ## Installed workflow checks
+
+- The global 4.6.0 command and existing managed Multica MCP/skill were updated in place. Doctor confirmed enabled bindings and the new source-independent runtime; registration IDs, agent settings and remembered database were preserved. The installed shared skill includes graph-context.md. Multica remains MCP-only, so the main agent forwards the handoff rather than relying on a native child hook.
+- An unbound installed stdio MCP client read the real Codex sample's copied graph and handoff in six 4,096-character pages each, with snapshot/checksum validation. The final projection contained 37 nodes, 55 edges and 31,005 UTF-8 bytes; this includes status metadata added after the live helper check above. The copied task hash, 40 events and zero calls/observations remained unchanged. The server ran from the global package outside the checkout.
 
 - The global 4.5 command and managed Multica MCP/skill were updated in place, preserving IDs and remembered database. Multica accurately remains MCP-only; native automatic lifecycle coverage was verified in the separate Codex exercise, not falsely attributed to Multica. The new sample dashboard uses the installed global command on port 51921.
 

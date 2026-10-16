@@ -71,6 +71,16 @@ export class Store {
     if (!row) throw new CairnError('not_found', 'No saved historical state for this task and event');
     return { task: JSON.parse(row.state as string), at: row.at as string };
   }
+  graphState(taskId:string,seq?:number):{task:Task;seq:number;at:string} {
+    const row=this.db.prepare(`SELECT h.state,e.seq,e.at,json_extract(t.state,'$.evidenceMode') AS current_mode
+      FROM tasks t JOIN events e ON e.task_id=t.id JOIN task_history h ON h.event_seq=e.seq
+      WHERE t.id=? ${seq===undefined?'':'AND e.seq=?'} ORDER BY e.seq DESC LIMIT 1`)
+      .get(...(seq===undefined?[taskId]:[taskId,seq]));
+    if(!row)throw new CairnError('not_found','Graph snapshot does not belong to this task or is unavailable');
+    const task:Task=JSON.parse(row.state as string);
+    if(row.current_mode==='curated'){task.evidenceMode='curated';task.observations=[];task.calls={};task.actions=[];}
+    return {task,seq:Number(row.seq),at:row.at as string};
+  }
   list(): Pick<Task, 'id' | 'goal' | 'status' | 'revision' | 'owner'>[] {
     return this.db.prepare('SELECT state FROM tasks ORDER BY rowid DESC').all().map(row => {
       const t: Task = JSON.parse(row.state as string); return { id: t.id, goal: t.goal, status: t.status, revision: t.revision, owner: t.owner };
