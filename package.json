@@ -3,6 +3,8 @@
   "version": "3.1.0",
   "description": "Goal and evidence plugin for Pi, Claude Code and Codex",
   "type": "module",
+  "exports": { ".": { "types": "./dist/types/index.d.ts", "import": "./dist/index.js" } },
+  "types": "./dist/types/index.d.ts",
   "license": "AGPL-3.0-only",
   "engines": {
     "node": ">=24.0.0"

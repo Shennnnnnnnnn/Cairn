@@ -8,6 +8,8 @@ Cairn 3.0 将模型操作收敛为五个工具：**开始、恢复、读取、�
 
 模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存目标记录，并提供蓝白进度看板。普通任务无需配置工具白名单或 MCP 上游。
 
+本轮增加通用 ESM／TypeScript harness 入口、多跳共同前提图、结论修订历史、带租约的分支协作，以及外部反馈重开。五个工具名称保持不变；看板支持人工提示、暂停与重开。参见 [通用 Harness 接入与协作](docs/harness.zh-CN.md) 和 [原版对比及实现记录](docs/optimization-roadmap.zh-CN.md)。
+
 ## 快速开始
 
 需要 **Node.js 24 或更新版本**。先在 Cairn 仓库根目录安装全局命令：
@@ -186,7 +188,7 @@ cairn ui --forget
 
 没有可靠原任务关联的宿主计划事件会跳过，避免迟到结果写进另一个目标。仅 captured Codex 在已有调用保留正确任务／执行代次关联时，才可映射成功的 `update_plan` 结果；Claude／Pi 不保证同步内部计划。普通模式不为此新增工具关联记录。
 
-界面只读且只监听本机回环地址。Agent 继续在原 CLI 工作；关闭看板不会停止任务。目标覆盖率可以随结论修订而下降。空白时检查看板和 CLI 是否使用同一数据库与工作区。
+界面只监听本机回环地址，提供受同源、CSRF token 与 revision 保护的提示、暂停和反馈重开操作。Agent 继续在原 CLI 工作；关闭看板不会停止任务。目标覆盖率可以随结论修订而下降。空白时检查看板和 CLI 是否使用同一数据库与工作区。
 
 ```sh
 cairn task list
@@ -218,7 +220,7 @@ cairn export TASK_ID --format html --out evidence.html
 
 接管递增执行代次，旧会话不能再修改或完成该目标。暂停时正在执行的进度项变为阻塞；恢复后按实际情况显式更新为执行中。恢复包含目标、依据、引用、进度和未解决问题，原生聊天历史仍由宿主保存。
 
-**子 Agent 适合独立子任务或需要新上下文的检查。** 主 Agent 汇总并审阅子任务结果，再保存主目标的阶段记录。子 Agent 的新上下文不会自动获得主目标身份或写权限；持久交接到另一原生会话时，仍需要 Adapter 的显式 resume／takeover。无需建立新的 worker 池或固定 reason／explore 交接流程。
+**子 Agent 适合独立子任务或需要新上下文的检查。** 主 Agent 汇总并审阅子任务结果，再保存主目标的阶段记录。子 Agent 的新上下文不会自动获得主目标身份或写权限；需要共享写入时，Owner 可显式开放 delegated 分支，Worker 以租约认领并提交待审核发现，详见 [协作流程](docs/harness.zh-CN.md)。主目标持久交接到另一原生会话时，仍需要 Adapter 的显式 resume／takeover。无需建立新的 worker 池或固定 reason／explore 交接流程。
 
 恢复摘要控制在 **16 KiB 以内**，带总量和截断标记；持久记录不随摘要截断而删除。`cairn_read` 的 evidence 视图按结论 key／ID 读取整理依据，details 读取完整任务，history 读取事件历史。分页与完整恢复格式见 [架构说明](docs/architecture.md#persistence-and-compact-restoration)。
 

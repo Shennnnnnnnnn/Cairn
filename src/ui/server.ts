@@ -2,7 +2,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { Engine } from '../core/engine.js';
-import { CairnError } from '../core/types.js';
+import { CairnError, publicTask } from '../core/types.js';
 import { html, markdown } from '../export.js';
 import { renderPage } from './page.js';
 import { projectTask, summaries, projectEvent } from './view.js';
@@ -13,6 +13,7 @@ export async function startUi(engine: Engine, options: UiOptions = {}) {
   if (!['127.0.0.1', 'localhost', '::1'].includes(host)) throw new CairnError('invalid_host', 'The evidence dashboard binds only to loopback addresses');
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new CairnError('invalid_port', 'Port must be an integer from 0 to 65535');
   const clients = new Map<ServerResponse, number>();
+  const csrfToken=randomBytes(32).toString('base64url');
   const sequence = () => Number(engine.store.db.prepare('SELECT COALESCE(MAX(seq),0) AS seq FROM events').get()!.seq);
   const send = (response: ServerResponse, event: string, seq: number) => response.write(`id: ${seq}\nevent: ${event}\ndata: ${JSON.stringify({ sequence: seq })}\n\n`);
   const json = (response: ServerResponse, value: unknown, status = 200) => {
@@ -28,7 +29,7 @@ export async function startUi(engine: Engine, options: UiOptions = {}) {
   timer.unref();
   const heartbeat = setInterval(() => { for (const response of clients.keys()) response.write(': connection alive\n\n'); }, 15000);
   heartbeat.unref();
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
@@ -39,13 +40,32 @@ export async function startUi(engine: Engine, options: UiOptions = {}) {
     if (request.headers.origin && request.headers.origin !== `http://${request.headers.host}` || request.headers['sec-fetch-site'] === 'cross-site') {
       json(response, { error: 'Cross-origin access is not allowed' }, 403); return;
     }
-    if (request.method !== 'GET') { response.setHeader('Allow', 'GET'); json(response, { error: 'Dashboard is read-only' }, 405); return; }
     try {
       const url = new URL(request.url ?? '/', `http://${request.headers.host}`);
+      const mutation=/^\/api\/tasks\/([^/]+)\/(hints|suspend|reopen)$/.exec(url.pathname);
+      if(request.method==='POST'&&mutation){
+        if(request.headers['x-cairn-csrf']!==csrfToken){json(response,{error:'Invalid local CSRF token'},403);return;}
+        if(request.headers['content-type']?.split(';')[0]?.trim()!=='application/json'){json(response,{error:'Use application/json'},415);return;}
+        let bytes=0;const chunks:Buffer[]=[];
+        for await(const chunk of request){bytes+=chunk.length;if(bytes>32768){json(response,{error:'Request body too large'},413);return;}chunks.push(Buffer.from(chunk));}
+        const input=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        if(!input||typeof input!=='object'||Array.isArray(input))throw new CairnError('invalid_input','Expected a JSON object');
+        const taskId=decodeURIComponent(mutation[1]!),task=engine.store.get(taskId);
+        if(!Number.isSafeInteger(input.revision)||input.revision!==task.revision){json(response,{error:'Task changed; refresh before applying this action'},409);return;}
+        const required=(key:string)=>{if(typeof input[key]!=='string'||!input[key].trim()||input[key].length>8000)throw new CairnError('invalid_input',`${key} must be nonempty and at most 8000 characters`);return input[key] as string;};
+        if(mutation[2]==='hints')json(response,engine.addHint(taskId,required('text'),'human',input.revision));
+        else if(mutation[2]==='suspend')json(response,engine.suspendByHuman(taskId,input.revision));
+        else {
+          if(input.invalidate!==undefined&&(!Array.isArray(input.invalidate)||input.invalidate.length>100||input.invalidate.some((ref:unknown)=>typeof ref!=='string'||!ref.trim())))throw new CairnError('invalid_input','invalidate must contain finding keys or IDs');
+          engine.reopen(taskId,task.owner,required('reason'),{invalidate:input.invalidate,expectedRevision:input.revision,author:'human'});json(response,projectTask(engine,engine.store.get(taskId)));
+        }
+        return;
+      }
+      if(request.method!=='GET'){response.setHeader('Allow','GET');json(response,{error:'Method not allowed'},405);return;}
       if (url.pathname === '/') {
         const nonce = randomBytes(18).toString('base64');
         response.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`);
-        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end(renderPage(nonce)); return;
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end(renderPage(nonce,csrfToken)); return;
       }
       if (url.pathname === '/favicon.ico') { response.writeHead(204); response.end(); return; }
       if (url.pathname === '/api/tasks') { json(response, { tasks: summaries(engine), sequence: sequence() }); return; }
@@ -78,8 +98,8 @@ export async function startUi(engine: Engine, options: UiOptions = {}) {
       const extension = { markdown: 'md', html: 'html', json: 'json' }[format]!;
       response.setHeader('Content-Disposition', `attachment; filename="cairn-${task.id.replace(/[^a-z0-9_-]/gi, '')}.${extension}"`);
       response.writeHead(200, { 'Content-Type': format === 'json' ? 'application/json; charset=utf-8' : format === 'html' ? 'text/html; charset=utf-8' : 'text/markdown; charset=utf-8' });
-      response.end(format === 'json' ? JSON.stringify(task, null, 2) : format === 'html' ? html(task) : markdown(task));
-    } catch (error) { json(response, { error: (error as Error).message }, (error as CairnError).code === 'not_found' ? 404 : 400); }
+      response.end(format === 'json' ? JSON.stringify(publicTask(task), null, 2) : format === 'html' ? html(task) : markdown(task));
+    } catch (error) { json(response, { error: (error as Error).message }, (error as CairnError).code === 'not_found' ? 404 : (error as CairnError).code==='revision_conflict'?409:400); }
   });
   try {
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => { server.off('error', reject); resolve(); }); });

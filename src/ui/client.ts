@@ -50,6 +50,12 @@ async function request<T>(path: string): Promise<T> {
   const response = await fetch(path, { cache: 'no-store' });
   const result = await response.json(); if (!response.ok) throw new Error(result.error ?? `请求失败 (${response.status})`); return result;
 }
+async function mutate(action:'hints'|'suspend'|'reopen',input:Record<string,unknown>={}){
+  if(!current)return;
+  const response=await fetch(`/api/tasks/${encodeURIComponent(current.id)}/${action}`,{method:'POST',headers:{'Content-Type':'application/json','X-Cairn-CSRF':document.querySelector<HTMLMetaElement>('meta[name="cairn-csrf"]')!.content},body:JSON.stringify({...input,revision:current.revision})});
+  const result=await response.json();if(!response.ok)throw new Error(result.error??'操作失败');
+}
+let hintDraft='',reopenDraft='';
 function showError(error?: unknown) { const banner = byId('error'); banner.hidden = !error; if (error) banner.textContent = `暂时无法更新：${(error as Error).message}`; }
 function renderTasks() {
   const query = byId<HTMLInputElement>('search').value.trim().toLowerCase(), filter = byId<HTMLSelectElement>('filter').value;
@@ -80,7 +86,7 @@ function applyMode(){
 }
 function selectTask(id: string) {
   overviewMode=false;applyMode();
-  if (selectedTask !== id) { selectedTask = id; selectedNode = 'origin'; needsFit = true; current = undefined; rawCache.clear(); }
+  if (selectedTask !== id) { selectedTask = id; selectedNode = 'origin'; needsFit = true; current = undefined; hintDraft='';reopenDraft='';rawCache.clear(); }
   history.replaceState(null, '', `#${encodeURIComponent(id)}`); renderTasks(); void refresh();
 }
 async function refresh() {
@@ -109,14 +115,16 @@ function renderCurrent() {
   const task = current!;
   text('task-id', `${task.id.slice(0, 19).toUpperCase()} · ${task.profile === 'emergency' ? '应急比赛' : '通用任务'}`);
   text('goal', task.goal); text('phase', task.phase.label); byId('phase').className = `phase ${task.phase.key}`;
-  text('owner', `${task.owner.host} · ${task.owner.epoch > 1 ? `接管 ${task.owner.epoch - 1} 次` : '主会话'}`);
+  text('owner', `${task.owner.host} · ${task.owner.epoch > 1 ? `执行代次 ${task.owner.epoch}` : '主会话'}`);
   text('created', `创建于 ${new Date(task.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}`);
   text('updated', `最近更新 ${formatTime(task.updatedAt)}`);
+  byId('pause-task').hidden=task.status!=='active';
   tick(); renderGraph(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); void renderDetails();
 }
 function tick() {
   if (!current) return;
   const deadline = current.budget.deadline, now = Date.now();
+  if(current.workItems.some(item=>item.lease&&item.status==='running'&&Date.parse(item.lease.expiresAt)<=now))void refresh();
   byId('clock-stat').hidden = !deadline || current.status === 'completed';
   text('clock-label', current.profile === 'emergency' ? '比赛剩余时间' : '提醒剩余时间');
   const clock = byId('clock'); clock.classList.toggle('expired', !!deadline && Date.parse(deadline) <= now);
@@ -142,7 +150,7 @@ function renderGraph() {
       : `M${a.x + width},${a.y + height / 2} C${a.x + width + 35},${a.y + height / 2} ${b.x - 35},${b.y + height / 2} ${b.x},${b.y + height / 2}`;
     const marker = edge.state === 'running' ? 'arrow-running' : edge.state === 'refuted' ? 'arrow-red' : edge.state === 'pending' || edge.state === 'context' ? 'arrow-pending' : 'arrow';
     const line = svg('path', { d: path, class: `edge ${edge.state} relation-${edge.relation}`, 'marker-end': `url(#${marker})`, 'data-edge-from': edge.from, 'data-edge-to': edge.to, 'data-relation': edge.relation });
-    line.append(svg('title', {}, { context: '背景与记录', stage: '任务包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+    line.append(svg('title', {}, { context: '背景与记录', stage: '任务包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', goal: '目标与验收条件',dependency:'共同前提（已声明的依赖）' }[edge.relation])); world.append(line);
   }
   for (const node of nodes.values()) {
     const palette = graphPalette[node.status], group = svg('g', { class: `node status-${node.status}${selectedNode === node.id ? ' selected' : ''}`, transform: `translate(${node.x},${node.y})`, role: 'button', tabindex: '0', 'aria-label': `${graphKindLabels[node.kind]}：${node.label}，${node.state}`, 'data-node-id': node.id, 'data-node-kind': node.kind, 'data-node-status': node.status });
@@ -198,11 +206,12 @@ function reference(parent: HTMLElement, id: string, kind: 'obs' | 'claim') {
 async function renderDetails() {
   const task = current; if (!task) return;
   const generation = ++detailGeneration, panel = byId('details'); panel.replaceChildren();
-  if (selectedNode.startsWith('work:')) { const item = task.workItems.find(i => `work:${i.key}` === selectedNode); if (item) { text('detail-kind', '执行阶段'); panel.append(create('div', `detail-tag ${item.status}`, item.statusLabel), create('h2', '', item.title)); if (item.detail) panel.append(create('div', 'detail-text', item.detail)); metadata(panel, '最近更新', formatTime(item.updatedAt)); metadata(panel, '来源', item.source === 'agent' ? 'Agent 报告' : item.source === 'host' ? '宿主事件' : '历史任务记录'); panel.append(create('div', 'notice', '这是最近保存的阶段状态，不代表宿主进程实时存活。')); return; } }
+  if (selectedNode.startsWith('work:')) { const item = nodes.get(selectedNode)?.data as TaskView['workItems'][number] | undefined; if (item) { text('detail-kind', '执行阶段'); panel.append(create('div', `detail-tag ${item.status}`, item.statusLabel), create('h2', '', item.title)); if (item.detail) panel.append(create('div', 'detail-text', item.detail)); metadata(panel, '最近更新', formatTime(item.updatedAt)); if(item.delegated){metadata(panel,'协作分支',item.branchStatus??'open');if(item.lease){metadata(panel,'认领会话',item.lease.actor.sessionId);metadata(panel,'租约到期',new Date(item.lease.expiresAt).toLocaleString());}if(item.branchCheckpoint){panel.append(create('div','detail-text',item.branchCheckpoint.summary));for(const question of item.branchCheckpoint.questions)panel.append(create('p','note',`未解决：${question}`));if(item.branchCheckpoint.next)panel.append(create('p','note',`下一步：${item.branchCheckpoint.next}`));}} if(item.from?.length)metadata(panel,'共同前提',item.from.join('、')); metadata(panel, '来源', item.source === 'agent' ? 'Agent 报告' : item.source === 'host' ? '宿主事件' : '历史任务记录'); panel.append(create('div', 'notice', '这是最近保存的阶段状态，不代表宿主进程实时存活。')); return; } }
   const node = nodes.get(selectedNode) ?? nodes.get('origin')!; if (!node) return;
   text('detail-kind', graphKindLabels[node.kind]);
   panel.append(create('div', 'detail-tag', node.state), create('h2', '', node.kind === 'origin' || node.kind === 'goal' ? task.goal : node.label));
   if (node.kind === 'origin' || node.kind === 'goal') {
+    if(task.conclude)metadata(panel,'探索收尾',task.conclude.status==='saved'?'已保存阶段结果':'已请求保存 · 等待宿主响应');
     if(task.checkpoint){
       heading(panel,'最新进展');panel.append(create('div','detail-text',task.checkpoint.summary));
       metadata(panel,'检查点时间',formatTime(task.checkpoint.at));
@@ -228,7 +237,9 @@ async function renderDetails() {
   if (node.kind === 'claim' || node.kind === 'basis') {
     if (node.kind === 'basis') panel.append(create('div', 'detail-text', node.data.text));
     metadata(panel, '结论修订', node.data.revision); metadata(panel, '当前状态', statuses[node.data.status] ?? node.data.status);
-    metadata(panel, '依据来源', node.data.provenance === 'agent' ? 'AI 整理' : '采集记录与 Agent 解释');
+    metadata(panel, '依据来源', ({agent:'AI 整理',captured:'采集记录与 Agent 解释',subagent:'子 Agent 待审核',human:'外部人工反馈'} as Record<string,string>)[node.data.provenance]??'历史记录');
+    if(node.data.from?.length)metadata(panel,'共同前提',node.data.from.join('、'));
+    if(node.data.history?.length){const history=create('details','event-details');history.append(create('summary','',`修订历史 · ${node.data.history.length} 次`));for(const revision of node.data.history){const entry=create('section','report-section');entry.append(create('strong','',`v${revision.revision} · ${statuses[revision.status]??revision.status}`),create('p','',revision.text));if(revision.updatedAt)entry.append(create('small','note',new Date(revision.updatedAt).toLocaleString()));if(revision.basis)entry.append(create('p','note',revision.basis));if(revision.from?.length)entry.append(create('p','note',`当时前提：${revision.from.join('、')}`));history.append(entry);}panel.append(history);}
     if (node.data.basis) { heading(panel, '整理的依据'); panel.append(create('div', 'detail-text', node.data.basis)); }
     if (node.data.references?.length) { heading(panel, '文件与链接引用'); for (const ref of node.data.references) sourceReference(panel, ref); }
     if (node.data.supports.length) { heading(panel, '支持的原始观测'); node.data.supports.forEach((id: string) => reference(panel, id, 'obs')); }
@@ -307,6 +318,7 @@ function renderEvents() {
 function renderReport() {
   const task = current!, panel = byId('report-panel'); panel.replaceChildren(create('h2', 'panel-title', '诊断与交付报告'));
   if (!task.report) { panel.append(create('p', 'note', '尚未保存报告。Agent 记录检查点或完成任务时，会按结论及其证据生成报告引用。')); return; }
+  if(task.reportCheck?.warnings?.length)panel.append(create('div','notice',`引用检查提示：${task.reportCheck.warnings.join('；')}`));
   if(task.reportCheck&&!task.reportCheck.ok)panel.append(create('div','notice',`报告仍需补齐：${task.reportCheck.issues.join('；')}`));
   const section = (title: string, value: string | undefined) => { if (!value) return; const block = create('section', 'report-section'); block.append(create('h3', '', title), create('p', '', value)); panel.append(block); };
   section('结论摘要', task.report.summary); section('影响面', task.report.impact?.text);
@@ -334,13 +346,18 @@ function renderSidebar(){
   text('hint-count',current!.hints.length);
   const hints=byId('hints-panel');hints.replaceChildren();
   for(const hint of current!.hints){const card=create('div','hint-card');card.append(create('p','',hint.text),create('small','',`人工提示 · ${hint.author}`));hints.append(card);}
-  if(!current!.hints.length)hints.append(create('p','note','暂无人工提示。在 CLI 中补充的 Hint 会同步到这里。'));
+  if(!current!.hints.length)hints.append(create('p','note','暂无人工提示，可在这里补充新的背景信息。'));
+  const form=create('form','human-form'),label=create('label','','给 Agent 的提示'),input=create('textarea','search');input.id='hint-text';input.maxLength=8000;input.required=true;input.value=hintDraft;input.placeholder='补充背景、优先级或验证结果…';label.htmlFor=input.id;input.oninput=()=>{hintDraft=input.value;};const save=create('button','button primary','保存提示');save.type='submit';form.append(label,input,save);form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await mutate('hints',{text:input.value});hintDraft='';await refresh();}catch(error){showError(error);}finally{save.disabled=false;}};hints.append(form);
+  if(current!.status==='completed'&&current!.profile==='general'&&!current!.delivered){
+    const reopen=create('form','human-form'),label=create('label','','外部验证反馈'),reason=create('textarea','search');reason.id='reopen-reason';reason.maxLength=8000;reason.required=true;reason.value=reopenDraft;reason.placeholder='说明未通过的验证，以及需要继续检查的内容…';label.htmlFor=reason.id;reason.oninput=()=>{reopenDraft=reason.value;};const button=create('button','button','按反馈重开任务');button.type='submit';reopen.append(label,reason,button);reopen.onsubmit=async event=>{event.preventDefault();button.disabled=true;try{await mutate('reopen',{reason:reason.value});reopenDraft='';await refresh();}catch(error){showError(error);}finally{button.disabled=false;}};hints.append(reopen);
+  }
   const logs=byId('log-panel');logs.replaceChildren();for(const event of timeline.filter(e=>e.category!=='advanced').slice(-12).reverse())logs.append(eventElement(event,true));
   if(!timeline.length)logs.append(create('p','note','尚无任务事件。'));
   switchInspector(activeInspector);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => { button.onclick = () => switchView(button.dataset.view!); });
 byId<HTMLInputElement>('search').oninput = renderTasks; byId<HTMLSelectElement>('filter').onchange = renderTasks;
+byId('pause-task').onclick=async()=>{const button=byId<HTMLButtonElement>('pause-task');button.disabled=true;try{await mutate('suspend');await refresh();}catch(error){showError(error);}finally{button.disabled=false;}};
 byId('show-goal').onclick = () => inspect('goal');
 byId('snapshot').onclick=()=>{if(current)location.href=`/api/tasks/${encodeURIComponent(current.id)}/export?format=html`;};
 byId('back-to-list').onclick=()=>{overviewMode=true;selectedTask='';current=undefined;detailGeneration++;history.replaceState(null,'',location.pathname);applyMode();void refresh();};

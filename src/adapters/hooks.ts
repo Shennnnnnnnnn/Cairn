@@ -56,8 +56,8 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
  }
  if(!task)return {};
  if(event.type==='Interrupt'||event.type==='Settled'&&event.aborted){try{engine.suspend(task.id,session);}catch{}return {};}
- if(event.type==='PostCompact'||event.type==='PreCompact'||event.type==='RestoreContext')return {context:JSON.stringify(engine.context(task.id))};
- if(event.type==='Stop')return event.aborted||event.stopHookActive?{}:{continue:engine.continuation(task.id,session)};
+ if(event.type==='PostCompact'||event.type==='PreCompact'||event.type==='RestoreContext')return {context:[event.type==='PreCompact'&&host==='pi'?engine.concludeGuidance(task.id,session):undefined,JSON.stringify(engine.context(task.id))].filter(Boolean).join('\n')};
+ if(event.type==='Stop')return event.aborted||event.stopHookActive?{}:{continue:engine.concludeGuidance(task.id,session)??engine.continuation(task.id,session)};
  if(!event.tool)return {};
  if(task.evidenceMode==='curated'){
   // Native tools remain entirely under the host's control: no call reservations,

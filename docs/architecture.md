@@ -1,4 +1,4 @@
-# Cairn 3.0 plugin architecture
+# Cairn harness architecture
 
 Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
 
@@ -62,13 +62,13 @@ Generic MCP database selection uses `--db`, then `CAIRN_DB`, then `userHome()/.c
 
 No identity is guessed from recent activity or a database row. Read-only inspection can address another task; editing requires the active bound owner, matching cwd and execution epoch. A new child-agent context is not automatically bound to its parent's goal.
 
-Subagents can conduct independent checks or work in fresh context using the host's native mechanism. The primary owner reviews the results and saves the canonical checkpoint. Another durable native session can become the owner only through explicit resume/takeover. A child context is not a portable substitute for a new native session, its lifecycle hooks or task fencing.
+Subagents can conduct independent checks using the host's native mechanism. An owner can explicitly delegate a progress item; a separate session claims a token-bearing lease and submits only proposed findings. The owner reviews and merges the branch, then explicitly promotes conclusions. Claim, heartbeat, expiry, release and epoch fencing are transactional. Leases are coordination state, never evidence. Another durable native session can become the owner only through explicit resume/takeover. A child context is not a portable substitute for a new native session, its lifecycle hooks or task fencing.
 
-Takeover increments the epoch and settles the previous owner's in-flight bookkeeping. Old owners cannot mutate or finish the task. In captured mode late observations remain audit-only. Suspension turns running progress items into blocked work, retains their meaning and suppresses continuation prompts. Resumption does not assume a previously running process is still alive. Completed tasks are immutable; repeating a content-free finish returns their recorded result.
+Takeover increments the epoch and settles the previous owner's in-flight bookkeeping. Old owners cannot mutate or finish the task. In captured mode late observations remain audit-only. Suspension turns running progress items into blocked work, retains their meaning and suppresses continuation prompts. Resumption does not assume a previously running process is still alive. Ordinary edits to completed tasks are rejected; a content-free finish is idempotent. Explicit reopen preserves the previous completion snapshot, appends attributed feedback, increments the owner epoch and clears criterion coverage for renewed verification. Delivered and emergency tasks remain frozen.
 
 ## Persistence and compact restoration
 
-`Engine` operates on goals, findings, optional observations, work progress, human hints and checkpoints. `Store` commits a projection and an append-only event atomically using SQLite `BEGIN IMMEDIATE`. WAL and a busy timeout support hooks, MCP and dashboard processes sharing the database. Claim revisions and task milestones remain in the event ledger.
+`Engine` operates on goals, findings, optional observations, work progress, human hints and checkpoints. `Store` commits a projection and an append-only event atomically using SQLite `BEGIN IMMEDIATE`. WAL and a busy timeout support hooks, MCP and dashboard processes sharing the database. Claim revisions and task milestones remain in the event ledger. New revisions also retain previous Claim snapshots for the current-view history inspector.
 
 `Engine.context` returns at most 16 KiB with goal, constraints, relevant/recent findings, basis/reference pointers, progress, criterion gaps, latest checkpoint, open questions, next step, owner and budget policy. Totals and truncation indicators distinguish omitted history from absent information. It contains neither private reasoning nor a full host transcript.
 
@@ -106,15 +106,15 @@ One gateway reuses a client and cached paginated catalog per server. Concurrent 
 
 ## Blue-and-white progress UI
 
-`cairn ui` starts an optional read-only loopback HTTP server against the shared database. SSE invalidates compact projections after a committed audit sequence changes. Dashboard traffic creates no model calls or task audit events.
+`cairn ui` starts an optional loopback HTTP server against the shared database. SSE invalidates compact projections after a committed audit sequence changes. Read-only dashboard traffic creates no model calls or task audit events. Human mutations append their own attributed events.
 
 The CLI can remember one UI database with `cairn ui --db FILE --remember`; `cairn ui --forget` clears that preference and exits. Selection is explicit `--db`, then `CAIRN_DB`, then the saved UI database, then the workspace database. The versioned preference is atomically saved under `userHome()/.cairn/ui.json` with private file permissions. This affects only the UI path; task/MCP/hook selection is unchanged. When no port is specified, the CLI tries port 8000 and falls back to a free port only on an address-in-use error. Explicit port failures remain visible. Failed startup does not replace a remembered preference.
 
-The relationship graph is the default main view; there is no separate progress board. It includes starting context, authored work stages, evidence, conclusions, completion criteria and the goal. Teal origin and rose goal colors preserve roles; indigo completed/result nodes, amber running work and pale dashed pending work preserve the earlier UI's status semantics. Goal nodes retain their role color and display satisfaction separately. Labels supplement color. Work stages form an explicit branch from the starting context, without fabricated causal links to findings.
+The relationship graph is the default main view; there is no separate progress board. It includes starting context, authored work stages, evidence, conclusions, completion criteria and the goal. Teal origin and rose goal colors preserve roles; indigo completed/result nodes, amber running work and pale dashed pending work preserve the earlier UI's status semantics. Goal nodes retain their role color and display satisfaction separately. Labels supplement color. Explicit findings/progress.from values express joint prerequisites. The engine resolves same-batch aliases to canonical IDs and checks the whole graph for cycles before commit. The graph uses longest-path ranks, with criterion and goal nodes after exploration. Records without declared dependencies retain contextual start edges. No dependency is invented from plan order. HTML exports share the same graph projection.
 
 The graph displays stored, reported state, not live process liveness. `active` does not mean a process is running. Paused/stale work is not shown as executing; missing telemetry does not mean idle. Goal coverage comes from core validation and may decrease after revised findings. Raw observations are labelled as original evidence where present; curated conclusions display basis/references and agent provenance. The timeline emphasizes human-readable milestone summaries and expandable detail, with captured evidence events filterable separately. Phase labels describe persisted state, not a fixed execution pipeline.
 
-The server has no browser mutation endpoints. Host/origin checks, no CORS permission and nonce CSP protect local data from cross-site access. Closing the UI does not stop the host. Bootstrap remains a direct useful first attempt in the ongoing host session, without a second model runtime.
+Host/origin checks, no CORS permission and nonce CSP protect local data. Only hints, suspend and reopen have POST routes; each requires the per-server CSRF token, JSON with a bounded body and an atomically checked task revision. Lease credentials are removed from read-only projections and exports. Closing the UI does not stop the host. Bootstrap remains a direct useful first attempt in the ongoing host session, without a second model runtime.
 
 ## Emergency profile
 
@@ -123,3 +123,16 @@ Emergency requires captured evidence, native integration, an official configured
 Validated finish remains active as `ready_for_delivery`. The typed submit injects the saved report and records/reconciles the real receipt. `cairn confirm TASK_ID` records human team confirmation outside model tools; a subsequent finish completes. Core entry points enforce these invariants independently of Stop hook behavior.
 
 Official tool names and exact result/scope/receipt mappings remain organizer integration inputs. The example profile is an unconfigured template. Local checks do not replace the organizer's authoritative reference ownership and scoring.
+
+
+## Embedding and reference validation
+
+The ESM package exports `createHarness({database, session?, now?, validateReference?})`, `Engine`, `Store`, domain types and pure `evaluateTask`. The embedded tool catalog/invocation path shares `ToolRuntime` with both MCP and native tools. It has no runtime npm dependencies; bundles and public declarations ship in `dist`. Closing the harness closes upstream clients and SQLite idempotently.
+
+Tool connections pin the epoch obtained at binding. A same-session old connection cannot silently share a refreshed database binding after suspension/reopen; it must explicitly resume. Direct Engine integrations can pass the returned owner epoch in Session for equivalent fencing. Resuming a suspended task also advances the epoch so delayed captured results cannot become eligible again.
+
+Local references are checked for existence, with advisory warnings by default and strict completion blocking when requested. A host can replace this check for remote workspaces. URL contents are never fetched by this validator. This adds no claim of content correctness or model quality.
+
+Stop can issue a bounded conclude request for unsaved running work; a subsequent checkpoint/finish marks it saved. Pi can inject the request before compaction. Other native hooks retain only their supported output contracts. Explicit cancellation, lost ownership and expired captured budgets suppress further requests. This is best-effort host guidance, without an external process watchdog.
+
+Protocol examples and operational limits: [harness guide](harness.zh-CN.md).

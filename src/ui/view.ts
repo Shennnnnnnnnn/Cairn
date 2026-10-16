@@ -1,8 +1,8 @@
 import type { Engine } from '../core/engine.js';
-import type { Task, Observation, Check } from '../core/types.js';
+import { publicTask, type Task, type Observation, type Check, type ProgressItem } from '../core/types.js';
 
 export type ObservationIndex = Omit<Observation, 'input' | 'output' | 'receipt'> & { ref: string };
-export type WorkItem = {
+export type WorkItem = Omit<ProgressItem,'source'> & {
   key: string; title: string; status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled';
   detail?: string; source: 'agent' | 'host' | 'criterion' | 'action'; updatedAt: string; statusLabel: string;
 };
@@ -22,7 +22,7 @@ const stageDetails:Record<string,string> = {
   'Removed from the current plan':'已从当前计划移除。',
   'Previous session stopped; resume this step explicitly if still needed':'已由新会话接管；需要继续时重新开始此阶段。',
 };
-function projectWork(task: Task, updatedAt: string): { items: WorkItem[]; source: TaskView['progressSource'] } {
+export function projectWork(task: Task, updatedAt: string, now=Date.now()): { items: WorkItem[]; source: TaskView['progressSource'] } {
   const stages = task.progress;
   let items: WorkItem[], source: TaskView['progressSource'];
   if (stages?.length) {
@@ -38,16 +38,19 @@ function projectWork(task: Task, updatedAt: string): { items: WorkItem[]; source
   } else { items = []; source = 'none'; }
   // A saved running state is not evidence that an agent process is alive. Stopped tasks
   // retain unfinished work without presenting it as currently executing.
-  return { source, items: items.map(item => task.status !== 'active' && item.status === 'running'
+  return { source, items: items.map(item => item.lease&&(item.lease.epoch!==task.owner.epoch||Date.parse(item.lease.expiresAt)<=now)
+    ? {...item,status:'blocked',statusLabel:'租约已过期 · 可重新认领'}
+    : item.branchStatus==='submitted'?{...item,statusLabel:'待主会话审核'}:task.status !== 'active' && item.status === 'running'
     ? { ...item, status: task.status === 'suspended' ? 'blocked' : 'pending', statusLabel: task.status === 'suspended' ? '已暂停 · 等待恢复' : '阶段未单独确认' }
     : item) };
 }
 export function projectTask(engine: Engine, task: Task): TaskView {
+  task=publicTask(task);
   const check = engine.evaluate(task), reportCheck = task.report ? engine.evaluateReport(task, task.report) : undefined;
   const progress = { satisfied: task.criteria.length - check.unmet.length, total: task.criteria.length };
   const latest = engine.store.db.prepare('SELECT at FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1').get(task.id);
   const updatedAt = latest?.at as string ?? task.checkpoint?.at ?? task.createdAt;
-  const work = projectWork(task, updatedAt);
+  const work = projectWork(task, updatedAt,engine.now().getTime());
   // Historical criteria use current validated coverage, never the presence of a link alone.
   for (const item of work.items.filter(i => i.source === 'criterion')) {
     const met = !check.unmet.includes(item.key.slice('criterion:'.length));
@@ -89,13 +92,14 @@ const titles: Record<string, string> = {
   'task.created': '开始目标', 'task.resumed': '接管并恢复', 'task.suspended': '暂停任务', 'task.completed': '已完成', 'task.checkpoint': '保存阶段进展',
   'tool.started': '开始历史工具调用', 'observation.captured': '保存原始观测', 'claim.revised': '更新结论', 'criterion.updated': '更新目标条件', 'action.updated': '更新行动进展',
   'hint.added': '补充人工提示', 'report.saved': '保存报告', 'delivery.recorded': '收到交付回执', 'team.confirmed': '队伍确认', 'continuation.suggested': '提醒未完成事项',
+  'task.reopened':'外部反馈重开目标','branch.claim':'分支已认领','branch.heartbeat':'续租分支','branch.release':'释放分支','branch.checkpoint':'提交分支发现','branch.merge':'主会话审核分支','conclude.requested':'请求保存探索结果',
 };
 /** Timeline projections allow only authored summaries and lifecycle metadata, never raw tool results. */
 export function projectEvent(row: { seq: number; kind: string; at: string; payload: any }): TimelineEvent {
   const payload = row.payload ?? {}, input = payload.input ?? payload;
   const value = (v: unknown) => typeof v === 'string' ? v : '';
   let title = titles[row.kind] ?? '更新任务记录', status = '', detail = '', summary = '';
-  const advanced = ['tool.started', 'observation.captured', 'claim.revised', 'criterion.updated', 'action.updated', 'report.saved'].includes(row.kind);
+  const advanced = ['tool.started', 'observation.captured', 'claim.revised', 'criterion.updated', 'action.updated', 'report.saved','branch.heartbeat'].includes(row.kind);
   if (row.kind === 'task.finished' || row.kind === 'task.checked') {
     status = value(payload.phase);
     title = ({ completed: '已完成', suspended: '暂停任务', incomplete: '完成检查未通过', ready_for_delivery: '报告已就绪，待交付', awaiting_confirmation: '等待队伍确认' } as Record<string, string>)[status] ?? '完成检查';
@@ -103,7 +107,7 @@ export function projectEvent(row: { seq: number; kind: string; at: string; paylo
     detail = Array.isArray(payload.validation?.issues) ? payload.validation.issues.filter((s: unknown) => typeof s === 'string').join('\n') : '';
   } else if (row.kind === 'task.resumed') { summary = payload.takeover ? '新会话接管目标，继续已有结论与未解决问题。' : '继续当前会话保存的目标与进展。'; }
   else if (row.kind === 'tool.started' || row.kind === 'observation.captured') { summary = value(input.tool ?? payload.tool); status = value(payload.status); }
-  else summary = value(input.summary ?? input.text ?? input.goal ?? payload.result?.text ?? payload.summary);
+  else summary = value(input.summary ?? input.text ?? input.goal ?? input.reason ?? input.key ?? payload.result?.text ?? payload.summary);
   if (row.kind === 'task.checkpoint' || row.kind === 'task.finished' || row.kind === 'task.checked') {
     const lines = [Array.isArray(input.questions) && input.questions.length ? `未解决问题\n${input.questions.filter((s: unknown) => typeof s === 'string').join('\n')}` : '', value(input.next) ? `下一步\n${input.next}` : '', detail].filter(Boolean);
     detail = lines.join('\n\n');

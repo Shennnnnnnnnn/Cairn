@@ -61,7 +61,7 @@ export default function cairn(pi:any){
   const guidance=!task?'Cairn is available when useful. Start a goal with cairn_start; native session identity is automatic. General goals save your curated findings, references and progress at checkpoints without recording native tools. Omit session_id.':task.status==='completed'?'The previous goal is completed; cairn_start creates a new goal.':!owns?`This task belongs to another session. Explicitly cairn_resume task_id=${task.id} with takeover=true before changing it.`:task.status==='suspended'?`This task is suspended; explicitly cairn_resume task_id=${task.id} before continuing.`:'Continue from the saved checkpoint. Use cairn_read for evidence details when needed.';
   return {message:{customType:'cairn-context',content:task?`${guidance}\n${JSON.stringify(e.context(task.id))}`:guidance,display:false}};
  });
- pi.on('session_before_compact',(event:any,ctx:any)=>{dispatch(event,ctx);});
+ pi.on('session_before_compact',(event:any,ctx:any)=>{const result=dispatch(event,ctx);if(result.context)pi.sendMessage({customType:'cairn-conclude',content:result.context,display:false},{triggerTurn:false});});
  pi.on('session_compact',(event:any,ctx:any)=>{
   const result=dispatch(event,ctx);
   const s=session(ctx);injectedContext.delete(JSON.stringify([database(ctx.cwd),s.sessionId,s.cwd]));

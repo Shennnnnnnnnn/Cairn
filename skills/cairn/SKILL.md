@@ -22,6 +22,8 @@ Use the host's normal plan when available. Only captured-mode Codex plan events 
 
 Stable finding keys permit revisions. Explicitly declare `status: "supported"` when an uncertain finding is established; editing text alone does not promote it. Use `covers: ["c1"]` to associate established conclusions with criteria; a new supported finding defaults to the only criterion. Curated hypotheses and refutations remain in the exploration history and do not themselves satisfy a criterion.
 
+Use optional findings/progress `from` for actual joint prerequisites, not plan order. Sources can be finding keys, Claim IDs or progress keys; ambiguous names require `claim:ID` or `work:agent:KEY` / `work:host:KEY`. Dependencies must exist in the task or the same batch and form a DAG. Revisions retain prior snapshots. Local reference existence produces advisory warnings by default; `reference_policy: "strict"` blocks missing local paths. Neither mode verifies content.
+
 ## Finish or pause
 
 For a short task, call `cairn_finish` directly with the final summary and findings. For example, after using the host's tools:
@@ -41,7 +43,9 @@ Resume returns bounded goal/progress/findings/questions/source pointers. Check t
 
 ## Delegation and optional capture
 
-Use subagents for independent work when useful. A child context is not automatically an independent native CLI session or the owner of this goal. Keep the main agent responsible for the root goal; merge child results into its findings. A new native session still uses explicit resume/takeover. Do not create a mandatory coordinator/worker loop to refresh context.
+Use subagents only within the user's authorized workflow. A child context is not automatically an independent native CLI session or the owner of this goal. Keep the main agent responsible for the root goal. For durable shared branches, the owner sets progress.delegated=true; a separate connection claims it with cairn_resume progress_key, maintains its lease and submits proposed findings. The owner reviews, merges and explicitly promotes them. Read [references/harness.md](references/harness.md) when delegating branches or reopening a task. Do not take over the root task merely to join a branch, or create a mandatory coordinator/worker loop to refresh context.
+
+After an external verification failure, explicitly reopen a completed general goal with cairn_resume.reopen_reason and optional invalidate finding keys. Reconfirm completion coverage; do not silently abandon its evidence graph. Delivered/emergency tasks remain frozen. Old connections must explicitly resume after the task epoch changes. User interruption remains authoritative; conclude requests ask for a best-effort save and do not authorize restarting an interrupted task.
 
 Only when the user requests automatic evidence capture, start with `evidence_mode: "captured"`. This mode stores native tool results where hooks cover them and supports configured `cairn_tool_*` gateways, E# references and optional enforced call limits. A supported captured finding requires eligible original observations; curated basis alone cannot bypass these checks. For the competition profile read [references/emergency.md](references/emergency.md).
 

@@ -1,5 +1,18 @@
 # Verification record
 
+## 通用 Harness、原版思想恢复与人工协作
+
+验证日期：2026-10-16（Asia/Shanghai），Node.js 24.19.0。
+
+- `npm test` 完整通过 **186 项测试**，包含 TypeScript 检查、独立 bundle 和 ESM／类型声明构建。原有 captured／curated、网关回执、报告冻结、安装与跨宿主恢复测试保持通过。
+- 新增回归覆盖：同批无序多源依赖、歧义引用、间接环路原子回滚、动态图超过五层、规范引用重试幂等；Claim 历史与完成快照、反馈重开和重新验收；受限分支提案、主会话审核与显式认可、过期／回收／暂停／接管后的 token 失效；长键可审核且不会跨分支碰撞；分支问题与下一步恢复。
+- 同 native session 的旧工具连接固定绑定 epoch，人工暂停恢复或 reopen 后不能自动获得新写入权。相同 Owner 恢复暂停任务时，旧 captured 调用仍为 audit-only。
+- 人工 HTTP 操作实际验证 loopback 监听、同源／Host 约束、CSRF、JSON 类型、请求大小、revision 冲突、Hint／暂停／重开以及 SSE 更新；初次沙箱禁止监听的环境错误在允许回环监听后重跑通过。
+- 隔离的全局打包安装测试实际导入 ESM harness，返回相同五工具，确认安装包携带类型声明且无需运行时 npm 依赖。
+- ego-browser 使用独立 SQLite 与明确标注的模拟任务，验证多跳图、结论修订展开、页面 Hint 提交、暂停后运行节点归零、已完成任务按反馈重开后目标条件变为待满足。浏览器测试空间和临时 HTTP 服务已清理。
+- `docs/images/harness-graph.png` 是上述真实浏览器截图，内容为模拟数据；它不代表新的真实模型推理质量评测。没有重新声称验证全部宿主真实模型的闭环表现。
+- 共享 skill 的 `quick_validate.py` 通过；13 个新增／更新 JSON 示例和本地文档链接检查通过；`git diff --check` 通过。SDK 引用验证与 conclude 引导的实际限制见 [接入指南](harness.zh-CN.md)。
+
 Record date: 2026-10-15 (Asia/Shanghai). Results below identify the evidence mode and distinguish automated integration checks from real model executions.
 
 ## Cairn 3.1 MCP defaults and Multica installer

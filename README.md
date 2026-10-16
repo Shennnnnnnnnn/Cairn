@@ -8,6 +8,8 @@ Cairn 3.0 gives the model five operations: **start, resume, read, checkpoint and
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn keeps the goal and its progress in SQLite, with an optional blue-and-white dashboard. No upstream gateway or tool whitelist is required for an ordinary task.
 
+The shared five-tool protocol now supports multi-hop joint prerequisites, finding revision history, delegated branch leases and reopening completed general goals after external feedback. The package also exports a typed `createHarness` entry point for embedding in custom hosts. See the [harness integration guide](docs/harness.zh-CN.md) and [implementation comparison](docs/optimization-roadmap.zh-CN.md).
+
 ## Quick start
 
 Requires **Node.js 24 or newer**. Run once from the Cairn repository root:
@@ -138,7 +140,7 @@ Open the printed loopback URL. Without `--port`, Cairn tries `8000` and chooses 
 
 The dashboard displays the most recently committed progress. An `active` task or a zero tool count does not prove that a process is currently alive. Curated tasks deliberately have no tool-call telemetry and use explicit checkpoint progress. Native plan results without a reliable original task association are skipped, so a delayed event cannot change another goal.
 
-The dashboard is read-only and loopback-only. Closing it does not stop the agent. Use the same database/workspace as the host. Goal coverage can decrease if a supporting conclusion is revised or refuted.
+The dashboard is loopback-only. Human hint, pause and reopen writes require the local CSRF token, same origin and a current task revision. Closing it does not stop the agent. Use the same database/workspace as the host. Goal coverage can decrease if a supporting conclusion is revised or refuted.
 
 ```sh
 cairn task list
@@ -166,7 +168,7 @@ Resume in a new session or another CLI using `cairn_resume`:
 
 Takeover increments the execution epoch. Old sessions cannot change or complete the task. Running progress items become blocked on suspension, and the resumed agent explicitly updates them as work continues. Native chat history stays with the host; Cairn restores the goal, findings, references, progress, open questions and next step.
 
-Subagents are useful for independent checks or a fresh working context. The main agent remains responsible for reviewing their outputs and saving a goal checkpoint. A child context does not automatically acquire the main task's identity or write access. A durable handoff to another native session still uses the adapter's explicit resume/takeover flow. Cairn adds no worker pool or fixed reason/explore pipeline.
+Subagents are useful for independent checks or a fresh working context. The main agent remains responsible for reviewing their outputs and saving a goal checkpoint. A child context does not automatically acquire the main task's identity or write access. For shared work, the owner can explicitly delegate progress and a separate Worker can claim a fenced lease, submit proposals and wait for owner review; see the [branch workflow](docs/harness.zh-CN.md). A durable handoff of the entire goal still uses explicit resume/takeover. Cairn adds no worker pool or fixed reason/explore pipeline.
 
 Recovery context is bounded to **16 KiB**, with totals and explicit truncation indicators. Persisted records remain complete. `cairn_read {"view":"evidence","ref":"project-name"}` reads a curated finding by key or ID; omit `ref` for the index. History uses record pagination, while large details and event payloads use character offsets. Use `view: "details"` and a returned `revision` to detect concurrent changes, or `view: "history", ref: "event:123"` for a specific audit event.
 

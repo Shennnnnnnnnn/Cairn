@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
 import { Engine } from './core/engine.js';
 import { Gateway, publicInputSchema } from './gateway.js';
-import { CairnError, type Session, type CheckpointInput } from './core/types.js';
+import { CairnError, publicTask, type Session, type CheckpointInput } from './core/types.js';
 
 const text = z.string().trim().min(1);
 const scope = z.object({ workspaceId:text.optional(), issueId:text.optional(), teamId:text.optional(), roundId:text.optional(), matchId:text.optional() }).strict();
@@ -12,8 +12,9 @@ const finding = z.object({
   evidence:z.array(text).max(100).optional(), against:z.array(text).max(100).optional(),
   basis:text.max(16000).optional(),references:z.array(text.max(4000)).max(100).optional(),
   covers:z.array(text).max(100).optional(), scope:scope.optional(),
+  from:z.array(text).max(100).optional(),
 }).strict();
-const progress=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','completed','blocked','cancelled']),detail:text.max(4000).optional()}).strict();
+const progress=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','completed','blocked','cancelled']),detail:text.max(4000).optional(),from:z.array(text).max(100).optional(),delegated:z.boolean().optional()}).strict();
 const draft = z.object({
   summary:text.max(16000).optional(),
   impact:z.object({text,scope,observationIds:z.array(text)}).strict().optional(),
@@ -31,18 +32,19 @@ const schemas = {
     criteria:z.array(text.max(4000)).min(1).max(100).optional(), constraints:z.array(text.max(2000)).max(50).default([]),
     profile:z.enum(['general','emergency']).default('general'), scope:scope.optional(),
     evidence_mode:z.enum(['curated','captured']).optional(),progress:z.array(progress).max(100).optional(),
+    reference_policy:z.enum(['advisory','strict']).optional(),
     budget:z.object({deadline:z.iso.datetime().optional(),maxCalls:z.number().int().positive().optional(),maxParallel:z.number().int().min(1).max(32).optional(),submitReserveMs:z.number().int().min(0).max(1800000).optional()}).strict().optional(),
   }).strict(),
-  cairn_resume:z.object({session_id:text.optional(),task_id:text,takeover:z.boolean().default(false)}).strict(),
+  cairn_resume:z.object({session_id:text.optional(),task_id:text,takeover:z.boolean().default(false),reopen_reason:text.max(8000).optional(),invalidate:z.array(text).max(100).optional(),progress_key:text.max(200).optional(),lease_seconds:z.number().int().min(10).max(900).optional()}).strict(),
   cairn_read:z.object({view:z.enum(['context','details','evidence','history','tasks']).default('context'),task_id:text.optional(),ref:text.optional(),offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(32768).optional(),revision:z.number().int().nonnegative().optional()}).strict(),
-  cairn_checkpoint:z.object(checkpointFields).strict(),
+  cairn_checkpoint:z.object({...checkpointFields,summary:checkpointFields.summary.optional(),task_id:text.optional(),progress_key:text.max(200).optional(),branch_action:z.enum(['claim','heartbeat','release','checkpoint','merge']).optional(),lease_token:text.optional(),lease_seconds:z.number().int().min(10).max(900).optional()}).strict(),
   cairn_finish:z.object({...checkpointFields,summary:checkpointFields.summary.optional(),outcome:z.enum(['completed','suspended']).default('completed')}).strict(),
 };
 const descriptions:Record<keyof typeof schemas,string> = {
-  cairn_start:'Start a persistent goal. General tasks default to curated evidence: use any host tools freely; Cairn records no calls/results and imposes no call/concurrency quota. Preserve initial tool guidance in constraints. Optional progress items describe meaningful work. Completion depends on goal criteria and findings with basis/file/URL references. Deadline is advisory here. Explicit evidence_mode=captured enables optional automatic capture; emergency requires it. Generic cairn mcp and Pi bind session identity automatically: omit session_id. Native Claude/Codex adapters supply the real startup-hook session_id once.',
-  cairn_resume:'Restore a saved goal and bind this connection. Supply task_id; generic cairn mcp and Pi omit session_id because it is already bound. Native Claude/Codex adapters supply the real startup-hook session_id once. Moving to a different owner requires explicit takeover=true. Returns bounded recovery context.',
+  cairn_start:'Start a persistent goal. General tasks default to curated evidence: use any host tools freely; Cairn records no calls/results and imposes no call/concurrency quota. Preserve initial tool guidance in constraints. reference_policy=strict blocks completion on missing local file references; the default advisory policy returns warnings and does not check URL contents. Optional progress items describe meaningful work. Completion depends on goal criteria and findings with basis/file/URL references. Deadline is advisory here. Explicit evidence_mode=captured enables optional automatic capture; emergency requires it. Generic cairn mcp and Pi bind session identity automatically: omit session_id. Native Claude/Codex adapters supply the real startup-hook session_id once.',
+  cairn_resume:'Restore a saved goal and bind this connection. Supply task_id; generic cairn mcp and Pi omit session_id because it is already bound. Native Claude/Codex adapters supply the real startup-hook session_id once. Moving to a different owner requires explicit takeover=true. Returns bounded recovery context. For a completed general task, reopen_reason explicitly reopens it; optional invalidate lists affected finding keys. To join delegated work without taking over the goal, supply progress_key; returns a private leaseToken for subsequent branch checkpoints.',
   cairn_read:'Read bounded context, task details, curated findings by key/id, optional captured evidence by E1/result_ref, paginated history, or saved tasks. Defaults to bound task. Large records use character offsets; indexes/history use record offsets. Supply revision when continuing details pages to detect changes.',
-  cairn_checkpoint:'Save meaningful progress and findings together. In default curated mode, findings use basis (what supports the conclusion) and references (file paths/URLs); nothing is automatically verified or captured. covers associates supported findings with c1 etc. Optional progress items update work status by readable key. Captured mode also supports actual E1/result_ref links. Preserve unresolved questions and update only at milestones; no tool-by-tool bookkeeping or private reasoning.',
+  cairn_checkpoint:'Save meaningful progress and findings together. In default curated mode, findings use basis (what supports the conclusion) and references (file paths/URLs); local reference existence is checked according to reference_policy; content is not verified and tool calls are not captured. covers associates supported findings with c1 etc. Optional progress items update work status by readable key. Captured mode also supports actual E1/result_ref links. Preserve unresolved questions and update only at milestones; no tool-by-tool bookkeeping or private reasoning. findings/progress.from lists joint prerequisites by finding key, claim ID or progress key; dependencies must be acyclic. The owner may set progress.delegated=true. Workers supply task_id, progress_key, lease_token and branch_action=heartbeat|release|checkpoint; only proposed findings are accepted. The owner uses branch_action=merge to review submitted work, then explicitly promotes its findings in a normal checkpoint.',
   cairn_finish:'Finish in one call with summary and evidence-backed findings, or suspend with unresolved questions. References and goal coverage are validated, with report citations generated automatically. Failed checks keep the task active and return gaps. Emergency delivery and human confirmation remain mandatory. Retrying a completed finish without new content returns its status.',
 };
 export interface ToolDefinition { name:string; description:string; inputSchema:Record<string,unknown>; readOnly?:boolean; role?:string }
@@ -72,6 +74,7 @@ export class ToolRuntime {
   constructor(readonly engine:Engine,readonly baseSession:Session,gateway?:Gateway) {
     this.bound=baseSession.sessionId?{...baseSession}:undefined;
     this.boundTask=this.bound?engine.active(this.bound)?.id:undefined;
+    if(this.bound&&this.boundTask)this.bound.epoch??=engine.store.session(this.bound)?.epoch;
     this.gateway=gateway??new Gateway(engine);
   }
   async list():Promise<ToolDefinition[]> {
@@ -118,22 +121,40 @@ export class ToolRuntime {
       const parsed=(schemas[name as keyof typeof schemas] as z.ZodType<any>).parse(input??{});
       if(name==='cairn_start') {
         const session=resolveSession(this.bound??this.baseSession,parsed);
-        const {session_id,evidence_mode,...goal}=parsed;
+        const {session_id,evidence_mode,reference_policy,...goal}=parsed;
         if(goal.profile==='emergency'){
           await this.list();
           if(!this.catalogStatus.ok)throw new CairnError('upstream_unavailable',`Cannot start a strict task while upstream tools are unavailable: ${this.catalogStatus.error}`);
         }
-        const task=this.engine.create(session,{...goal,evidenceMode:evidence_mode??(goal.profile==='emergency'?'captured':'curated'),criteria:goal.criteria??[goal.goal]});
-        this.bound=session;this.boundTask=task.id;return this.engine.context(task.id);
+        const task=this.engine.create(session,{...goal,evidenceMode:evidence_mode??(goal.profile==='emergency'?'captured':'curated'),referencePolicy:reference_policy,criteria:goal.criteria??[goal.goal]});
+        this.bound={...session,epoch:task.owner.epoch};this.boundTask=task.id;return this.engine.context(task.id);
       }
       if(name==='cairn_resume') {
         const session=resolveSession(this.bound??this.baseSession,parsed);
-        const task=this.engine.resume(parsed.task_id,session,parsed.takeover);
-        this.bound=session;this.boundTask=task.id;return this.engine.context(task.id);
+        if(parsed.progress_key){
+          if(parsed.takeover||parsed.reopen_reason||parsed.invalidate)throw new CairnError('invalid_input','Branch claims cannot take over or reopen a goal');
+          const result=this.engine.branch(parsed.task_id,session,parsed.progress_key,'claim',undefined,undefined,parsed.lease_seconds);
+          this.bound={...session,epoch:result.context.owner.epoch};this.boundTask=parsed.task_id;return result;
+        }
+        if(parsed.invalidate&&!parsed.reopen_reason)throw new CairnError('invalid_input','invalidate requires reopen_reason');
+        const task=parsed.reopen_reason?this.engine.reopen(parsed.task_id,session,parsed.reopen_reason,{takeover:parsed.takeover,invalidate:parsed.invalidate}):this.engine.resume(parsed.task_id,session,parsed.takeover);
+        this.bound={...session,epoch:task.owner.epoch};this.boundTask=task.id;return this.engine.context(task.id);
       }
       if(name==='cairn_read')return this.read(parsed);
+      if(name==='cairn_checkpoint'&&(parsed.progress_key||parsed.branch_action)){
+        if(!parsed.progress_key)throw new CairnError('invalid_input','Branch operations require progress_key');
+        const session=this.session(),taskId=parsed.task_id??this.current().task.id;
+        const {task_id,progress_key,branch_action,lease_token,lease_seconds,...checkpoint}=parsed;
+        const result=this.engine.branch(taskId,session,progress_key,branch_action??'checkpoint',lease_token,checkpoint as CheckpointInput,lease_seconds);
+        if(branch_action==='claim'){this.boundTask=taskId;this.bound={...session,epoch:result.context.owner.epoch};}
+        return result;
+      }
       const {task,session}=this.current();
-      if(name==='cairn_checkpoint')return this.engine.checkpoint(task.id,session,parsed as CheckpointInput);
+      if(name==='cairn_checkpoint'){
+        if(parsed.task_id&&parsed.task_id!==task.id)throw new CairnError('task_binding_changed','Checkpoint task_id does not match this connection');
+        if(parsed.lease_token||parsed.lease_seconds)throw new CairnError('invalid_input','Lease fields require progress_key');
+        return this.engine.checkpoint(task.id,session,parsed as CheckpointInput);
+      }
       return this.engine.finish(task.id,session,parsed);
     }
     await this.list();
@@ -153,7 +174,7 @@ export class ToolRuntime {
       const tasks=this.engine.store.list(),limit=Math.min(input.limit??20,50);
       return {tasks:tasks.slice(offset,offset+limit),total:tasks.length,nextOffset:offset+limit<tasks.length?offset+limit:undefined,binding:this.bound?'bound':'Call cairn_start or cairn_resume with the native session_id once.',upstream:this.catalogStatus};
     }
-    const task=input.task_id?this.engine.store.get(input.task_id):this.current().task;
+    const task=publicTask(input.task_id?this.engine.store.get(input.task_id):this.current().task);
     if(input.revision!==undefined&&input.revision!==task.revision)throw new CairnError('revision_changed','Task changed while paging; restart reading at offset 0 with its new revision.');
     if(view==='context')return {...this.engine.context(task.id),upstream:this.catalogStatus};
     if(view==='details'){
@@ -163,7 +184,7 @@ export class ToolRuntime {
     }
     if(view==='evidence') {
       if(task.evidenceMode==='curated'){
-        const items=task.claims.filter(c=>c.basis||c.references?.length).map(c=>({id:c.id,key:c.key,text:c.text,status:c.status,basis:c.basis,references:c.references??[],source:'agent' as const}));
+        const items=task.claims.filter(c=>c.basis||c.references?.length).map(c=>({id:c.id,key:c.key,text:c.text,status:c.status,basis:c.basis,references:c.references??[],source:c.provenance??'agent'}));
         if(input.ref){
           const item=items.find(c=>c.id===input.ref||c.key===input.ref);if(!item)throw new CairnError('not_found','Curated finding not found; use its key or id. This task stores no original tool records.');
           const serialized=JSON.stringify(item),limit=input.limit??16384;

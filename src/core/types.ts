@@ -1,5 +1,5 @@
 export type Host = 'pi' | 'claude' | 'codex' | 'mcp';
-export interface Session { host: Host; sessionId: string; cwd: string }
+export interface Session { host: Host; sessionId: string; cwd: string; epoch?: number }
 export interface Owner extends Session { epoch: number }
 export interface Capabilities { capture: boolean; preTool: boolean; restore: boolean; stop: boolean }
 export interface Scope { workspaceId?: string; issueId?: string; teamId?: string; roundId?: string; matchId?: string }
@@ -7,8 +7,13 @@ export type EvidenceMode = 'curated' | 'captured';
 export interface Budget { deadline?: string; maxCalls?: number; maxParallel?: number; submitReserveMs?: number }
 export interface ProgressInput {
   key: string; title: string; status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled'; detail?: string;
+  from?: string[]; delegated?: boolean;
 }
-export interface ProgressItem extends ProgressInput { source: 'agent' | 'host'; updatedAt: string }
+export interface BranchLease { token: string; actor: Session; epoch: number; expiresAt: string }
+export interface ProgressItem extends ProgressInput {
+  source: 'agent' | 'host'; updatedAt: string;
+  branchStatus?: 'open' | 'claimed' | 'submitted' | 'merged'; lease?: BranchLease; branchCheckpoint?: Checkpoint;
+}
 export interface Criterion { id: string; text: string; claimIds: string[] }
 export interface Observation {
   id: string; callId: string; tool: string; input: unknown; output: unknown;
@@ -21,7 +26,8 @@ export interface Claim {
   id: string; text: string; status: 'proposed' | 'supported' | 'refuted' | 'inconclusive';
   supports: string[]; refutes: string[]; scope: Scope; revision: number;
   key?: string; updatedAt?: string;
-  basis?: string; references?: string[]; provenance?: 'agent' | 'captured'; relatedCriteria?: string[];
+  basis?: string; references?: string[]; provenance?: 'agent' | 'captured' | 'subagent' | 'human'; relatedCriteria?: string[];
+  from?: string[]; branchKey?: string; history?: Omit<Claim, 'history'>[];
 }
 export interface Action {
   id: string; purpose: string; stopCondition: string;
@@ -40,7 +46,7 @@ export interface CheckpointInput {
   summary: string;
   findings?: {
     key?: string; text: string; status?: Claim['status']; evidence?: string[]; against?: string[];
-    covers?: string[]; scope?: Scope; basis?: string; references?: string[];
+    covers?: string[]; scope?: Scope; basis?: string; references?: string[]; from?: string[];
   }[];
   progress?: ProgressInput[];
   questions?: string[]; next?: string;
@@ -56,12 +62,20 @@ export interface Task {
   calls: Record<string, { status: 'running' | 'finished'; tool: string; startedAt: string; epoch?:number }>;
   report?: Report; delivery?: { key: string; receipt: unknown; recordedAt: string }; confirmedAt?: string;
   checkpoint?: Checkpoint;
+  conclude?: { status: 'requested' | 'saved'; at: string; revision: number };
   /** Older records omit evidenceMode and retain captured semantics. */
   evidenceMode?: EvidenceMode; progress?: ProgressItem[];
+  referencePolicy?: 'advisory' | 'strict';
   lastCheck?: { revision: number; fingerprint: string };
   continuation?: { revision: number; count: number }; interrupted: boolean;
 }
-export interface Check { ok: boolean; issues: string[]; unmet: string[] }
+export interface Check { ok: boolean; issues: string[]; unmet: string[]; warnings?: string[] }
 export class CairnError extends Error {
   constructor(public code: string, message: string) { super(message); this.name = 'CairnError'; }
+}
+/** Lease credentials are never part of read-only projections or exports. */
+export function publicTask(task: Task): Task {
+  const result=structuredClone(task);
+  for(const item of result.progress??[])if(item.lease)Reflect.deleteProperty(item.lease,'token');
+  return result;
 }

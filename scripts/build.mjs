@@ -1,12 +1,15 @@
 import { build } from 'esbuild';
 import { mkdir, cp, writeFile, chmod, rm, readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 const root=resolve(import.meta.dirname,'..'),dist=join(root,'dist');
 const {version}=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
 await rm(dist,{recursive:true,force:true});await mkdir(dist,{recursive:true});
 const options={bundle:true,platform:'node',format:'esm',target:'node24',banner:{js:'import {createRequire as __cairnCreateRequire} from "node:module"; const require=__cairnCreateRequire(import.meta.url);'},logLevel:'warning'};
 await build({entryPoints:[join(root,'src/ui/client.ts')],outfile:join(dist,'ui-client.js'),bundle:true,platform:'browser',format:'iife',target:'es2022',logLevel:'warning'});
 await build({...options,entryPoints:[join(root,'src/cli.ts')],outfile:join(dist,'cairn.mjs')});
+await build({...options,entryPoints:[join(root,'src/index.ts')],outfile:join(dist,'index.js')});
+execFileSync(process.execPath,[join(root,'node_modules/typescript/bin/tsc'),'--declaration','--emitDeclarationOnly','--outDir',join(dist,'types'),'--rootDir',join(root,'src'),'--target','ES2023','--module','NodeNext','--moduleResolution','NodeNext','--strict','--skipLibCheck',join(root,'src/index.ts')],{stdio:'inherit'});
 await build({...options,entryPoints:[join(root,'src/adapters/pi-extension.ts')],outfile:join(dist,'pi-extension.mjs')});
 const json=async(path,value)=>{await mkdir(resolve(path,'..'),{recursive:true});await writeFile(path,JSON.stringify(value,null,2)+'\n');};
 for(const host of ['pi','claude','codex']){

@@ -8,7 +8,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Store } from './core/store.js';
 import { Engine } from './core/engine.js';
-import { CairnError, type Host, type Session } from './core/types.js';
+import { CairnError, publicTask, type Host, type Session } from './core/types.js';
 import { database } from './paths.js';
 import { startMcp } from './mcp.js';
 import { normalize, handleNative, hookOutput, observedCapabilities } from './adapters/hooks.js';
@@ -71,13 +71,13 @@ async function demonstration(v:{root?:string;port?:string;delay?:string;prepare?
 export async function main(argv=process.argv.slice(2)){
  const command=argv[0]??'help';
  if(['--version','-v','version'].includes(command)){process.stdout.write(`${VERSION}\n`);return;}
- const {values:v,positionals}=parseArgs({args:argv.slice(1),allowPositionals:true,options:{target:{type:'string'},agent:{type:'string'},'workspace-id':{type:'string'},adopt:{type:'boolean'},scope:{type:'string'},root:{type:'string'},host:{type:'string'},port:{type:'string'},remember:{type:'boolean'},forget:{type:'boolean'},prepare:{type:'boolean'},'no-ui':{type:'boolean'},delay:{type:'string'},'session-id':{type:'string'},db:{type:'string'},file:{type:'string'},input:{type:'string'},'task-id':{type:'string'},format:{type:'string'},out:{type:'string'},'takeover':{type:'boolean'},'json':{type:'boolean'}}});
+ const {values:v,positionals}=parseArgs({args:argv.slice(1),allowPositionals:true,options:{target:{type:'string'},agent:{type:'string'},'workspace-id':{type:'string'},adopt:{type:'boolean'},scope:{type:'string'},root:{type:'string'},host:{type:'string'},port:{type:'string'},remember:{type:'boolean'},forget:{type:'boolean'},prepare:{type:'boolean'},'no-ui':{type:'boolean'},delay:{type:'string'},'session-id':{type:'string'},db:{type:'string'},file:{type:'string'},input:{type:'string'},'task-id':{type:'string'},format:{type:'string'},out:{type:'string'},'takeover':{type:'boolean'},'json':{type:'boolean'},reason:{type:'string'},author:{type:'string'},invalidate:{type:'string'}}});
  if((v.remember||v.forget)&&!['ui','mcp'].includes(command))throw new CairnError('invalid_input','--remember and --forget are only available for cairn ui or cairn mcp');
  if(v.remember&&v.forget)throw new CairnError('invalid_input','Use either --remember or --forget');
  if((v.agent||v['workspace-id']||v.adopt)&&(!['install','update','uninstall','doctor'].includes(command)||v.target!=='multica'))throw new CairnError('invalid_input','--agent, --workspace-id and --adopt require --target multica on an installation or doctor command');
  const output=(value:unknown)=>process.stdout.write(JSON.stringify(value??{ok:true},null,2)+'\n');
  if(command==='help'||command==='--help'){
-  process.stdout.write(`Cairn ${VERSION} — goals and evidence for Pi, Claude Code and Codex\n\nNode >=24 required. Install globally from the repository with npm run install:global.\n\n  cairn --version\n  cairn demo [--port 8000] [--delay 1500] [--no-ui] [--json]\n  cairn demo --prepare [--target pi|claude|codex] [--root NEW_DIR]\n  cairn install|update|uninstall --target pi|claude|codex [--scope project|user] [--root DIR]\n  cairn install --target multica --agent NAME [--workspace-id ID] [--adopt]\n  cairn update|uninstall|doctor --target multica\n  cairn doctor [--target pi|claude|codex] [--scope project|user] [--root DIR]\n  cairn ui                         # open the remembered dashboard or current workspace\n  cairn ui --db FILE --remember    # remember a dashboard database once\n  cairn ui --forget                # clear the remembered database and exit\n  cairn ui [--port 8000] [--db FILE]\n  cairn mcp                        # generic MCP, automatic connection identity\n  cairn mcp --db FILE --remember   # remember the generic MCP database\n  cairn mcp --forget               # clear the generic MCP preference and exit\n  cairn mcp --host pi|claude|codex [--session-id ID] [--db FILE]\n  cairn hook --host claude|codex     # native hook JSON on stdin\n  cairn configure --file whitelist.json\n  cairn task list|show|resume|suspend|hint [ID] --host HOST --session-id ID [--takeover]\n  cairn call TOOL --input args.json --host HOST --session-id ID\n  cairn confirm TASK_ID            # human team confirmation after platform receipt\n  cairn export TASK_ID [--format json|markdown|html] [--out FILE]\n\nTask database defaults to <workspace>/.cairn/state.db. CAIRN_DB overrides it.\nUI database: --db > CAIRN_DB > remembered dashboard > workspace database.\nGeneric MCP: --db > CAIRN_DB > remembered MCP database > workspace database.\nNative adapters keep real host identity and workspace database selection.\nWithout --port, UI tries 8000 and selects a free port if occupied.\nDemo always creates a separate workspace/database and uses labelled simulated data.\n`);return;
+  process.stdout.write(`Cairn ${VERSION} — goals and evidence for Pi, Claude Code and Codex\n\nNode >=24 required. Install globally from the repository with npm run install:global.\n\n  cairn --version\n  cairn demo [--port 8000] [--delay 1500] [--no-ui] [--json]\n  cairn demo --prepare [--target pi|claude|codex] [--root NEW_DIR]\n  cairn install|update|uninstall --target pi|claude|codex [--scope project|user] [--root DIR]\n  cairn install --target multica --agent NAME [--workspace-id ID] [--adopt]\n  cairn update|uninstall|doctor --target multica\n  cairn doctor [--target pi|claude|codex] [--scope project|user] [--root DIR]\n  cairn ui                         # open the remembered dashboard or current workspace\n  cairn ui --db FILE --remember    # remember a dashboard database once\n  cairn ui --forget                # clear the remembered database and exit\n  cairn ui [--port 8000] [--db FILE]\n  cairn mcp                        # generic MCP, automatic connection identity\n  cairn mcp --db FILE --remember   # remember the generic MCP database\n  cairn mcp --forget               # clear the generic MCP preference and exit\n  cairn mcp --host pi|claude|codex [--session-id ID] [--db FILE]\n  cairn hook --host claude|codex     # native hook JSON on stdin\n  cairn configure --file whitelist.json\n  cairn task list|show|resume [ID] --host HOST --session-id ID [--takeover]\n  cairn task hint ID \"提示内容\" [--author human]\n  cairn task suspend ID            # human pause; invalidates worker leases\n  cairn task reopen ID --reason \"外部验证反馈\" [--invalidate finding-key]\n  cairn call TOOL --input args.json --host HOST --session-id ID\n  cairn confirm TASK_ID            # human team confirmation after platform receipt\n  cairn export TASK_ID [--format json|markdown|html] [--out FILE]\n\nTask database defaults to <workspace>/.cairn/state.db. CAIRN_DB overrides it.\nUI database: --db > CAIRN_DB > remembered dashboard > workspace database.\nGeneric MCP: --db > CAIRN_DB > remembered MCP database > workspace database.\nNative adapters keep real host identity and workspace database selection.\nWithout --port, UI tries 8000 and selects a free port if occupied.\nDemo always creates a separate workspace/database and uses labelled simulated data.\n`);return;
  }
  if(command==='demo'){await demonstration(v);return;}
  if(command==='demo-tools'){
@@ -161,7 +161,7 @@ export async function main(argv=process.argv.slice(2)){
   }
   if(command==='confirm'){engine.confirm(positionals[0]??'');output({confirmed:positionals[0]});return;}
   if(command==='export'){
-   const task=store.get(positionals[0]??v['task-id']??'');
+   const task=publicTask(store.get(positionals[0]??v['task-id']??''));
    if(v.format&&!['json','markdown','html'].includes(v.format))throw new CairnError('invalid_input','Unknown export format');
    const content=v.format==='html'?html(task):v.format==='markdown'?markdown(task):JSON.stringify(task,null,2)+'\n';
    if(v.out){writeFileSync(resolve(v.out),content,{mode:0o600});output({path:resolve(v.out)});}else process.stdout.write(content);return;
@@ -170,12 +170,16 @@ export async function main(argv=process.argv.slice(2)){
    const [operation,taskId]=positionals;
    if(operation==='list')output(store.list());else if(operation==='show')output(engine.context(taskId??''));
    else if(operation==='resume'){if(!session.sessionId)throw new CairnError('session_required','--session-id is required');output(engine.resume(taskId??'',session,v.takeover));}
-   else if(operation==='suspend')output(engine.finish(taskId??'',session,{outcome:'suspended'}));
+   else if(operation==='suspend')output(session.sessionId?engine.finish(taskId??'',session,{outcome:'suspended'}):engine.suspendByHuman(taskId??''));
+   else if(operation==='reopen'){
+    const task=store.get(taskId??'');
+    if(!v.reason)throw new CairnError('invalid_input','Supply --reason for external verification feedback');
+    const reopened=engine.reopen(task.id,session.sessionId?session:task.owner,v.reason,{takeover:!!v.takeover,invalidate:v.invalidate?[v.invalidate]:[],author:'human'});output(engine.context(reopened.id));
+   }
    else if(operation==='hint'){
-    if(!v.input)throw new CairnError('invalid_input','Supply --input FILE containing text and author');
-    const hint=JSON.parse(readFileSync(v.input,'utf8'));
+    const hint=v.input?JSON.parse(readFileSync(v.input,'utf8')):{text:positionals.slice(2).join(' '),author:v.author??'human'};
     if(typeof hint.text!=='string'||!hint.text.trim()||typeof hint.author!=='string'||!hint.author.trim())throw new CairnError('invalid_input','Hint text and human author are required');
-    output(engine.hint(taskId??'',session,hint.text,hint.author));
+    output(engine.addHint(taskId??'',hint.text,hint.author));
    }else throw new CairnError('invalid_input','Unknown task operation');return;
   }
   if(command==='doctor'){
