@@ -1,10 +1,19 @@
 # Verification record
 
-Cairn 4.5 — verified on 2026-10-15 (Asia/Shanghai).
+Cairn 4.5.1 — verified on 2026-10-16 (Asia/Shanghai).
+
+## Prompt consolidation verification
+
+- Shared SKILL.md is the canonical behavior policy. On-demand references add task examples or branch/host details, and six tool descriptions retain calling rules. Recovery/adapter context no longer repeats a separate delegation policy. Current instruction surfaces no longer require milestone-based state saving; historical verification notes retain their original provenance.
+- Before/after UTF-8 sizes: shared skill 8,946 → 4,191 bytes; references 9,870 → 4,860 bytes. Tool descriptions were shortened by about half; these byte counts are not a measured token or billing reduction.
+- A live read-only main/subagent run used the revised skill, independently reconciled the two synthetic fixtures, separately saved semantic branch transitions and completed the Cairn goal. Ten main assertions and nine review checks passed. Generic CLI reporting is accurately labelled agent-authored; no native lifecycle coverage is claimed in this acceptance run.
+- Actual application-level task messages were saved before dispatch and published verbatim with SHA-256 hashes. They exclude host policies and private reasoning. A task-specific one-helper requirement belongs only to this acceptance input, not to the general skill.
+- Two actual scope_mismatch rejections were repaired without relaxing Core checks; tool calling guidance now explicitly describes scope inheritance and coverage.
+- The skill creator validator, JSON examples, shell syntax and local references were checked. Runtime schemas and persistence semantics remain unchanged; the existing regression suite verifies callable behavior rather than matching prompt wording.
 
 ## Current scope
 
-Cairn manages goals, evidence relationships, meaningful milestones, recovery and completion checks. The public workflow is start → host tools → checkpoint/resume when useful → finish. Users choose the tools and define observable acceptance criteria for their actual problem.
+Cairn manages goals, evidence relationships, immediate semantic updates, recovery and completion checks. The public workflow is start → host work and updates → recovery summary/resume when useful → finish. Users choose the tools and define observable acceptance criteria for their actual problem.
 
 The domain-specific competition profile and its resources were removed from the implementation and public interfaces. There is no shared match clock, external submission/receipt orchestration, team confirmation command or fixed incident-report structure. Reports contain a free-form summary and evidence references. Ordinary task deadlines and optional captured evidence remain explicit choices.
 

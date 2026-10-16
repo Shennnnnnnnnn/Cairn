@@ -64,7 +64,7 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
    const target=bound??(event.type==='SubagentStart'&&currentTask?.status==='active'&&!seen[`child:${event.agentId}`]?currentTask:undefined);
    if(target)engine.recordAgentLifecycle(target.id,session,event.agentId,event.type==='SubagentStart'?'started':'returned',event.agentType);
   }catch{return {};}
-  return event.type==='SubagentStart'&&currentTask?.status==='active'?{context:'Cairn automatically records this native execution lifecycle. No lifecycle/ID reporting is required from you. The parent goal remains owned by the main agent. Investigate only the delegated question and return findings, basis and file/link references. Do not resume/take over or finish the parent goal. The main agent records reviewing before inspecting your result and completed after review.'}:{};
+  return event.type==='SubagentStart'&&currentTask?.status==='active'?{context:'Cairn records this native execution lifecycle automatically; no lifecycle or ID reporting is required. Investigate the delegated question and return findings, basis, file/URL references and uncertainty to the main agent. Do not start/resume/take over/finish the parent goal.'}:{};
  }
  const task=event.type.startsWith('PostToolUse')&&nativeCallId?engine.store.taskForCall(nativeCallId)??currentTask:currentTask;
  const marker=host==='pi'?'Cairn tools are bound to this native Pi session. Omit session_id; do not invent one.':`Cairn host=${host} session_id=${session.sessionId}. Supply this real session_id only on the first cairn_start or cairn_resume of this MCP connection; subsequent calls are already bound. Never guess a session id.`;
@@ -84,7 +84,7 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
   // Native tools remain entirely under the host's control: no call reservations,
   // budget decisions, raw inputs/results, or tool metadata are persisted.
   // A late plan result cannot be associated with its original task without call
-  // metadata. Use explicit milestone progress instead of guessing that binding.
+  // metadata. Use explicit semantic updates instead of guessing that binding.
   return {};
  }
  const callId=`${host}:${event.sessionId}:${event.callId??''}`;

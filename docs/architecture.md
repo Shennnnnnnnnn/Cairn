@@ -1,4 +1,4 @@
-# Cairn 4.5 plugin architecture
+# Cairn 4.5.1 plugin architecture
 
 Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
 
@@ -13,9 +13,9 @@ Cairn preserves goals, curated evidence and recoverable progress inside existing
 | `cairn_read` | Read bounded context, findings/references, optional captured observations, full details, history or tasks |
 | `cairn_update` | Immediately save one branch/progress/finding change, with a compact idempotent receipt |
 | `cairn_checkpoint` | Save recovery summary, questions and next action |
-| `cairn_finish` | Save milestone content and validate completion, or suspend with gaps |
+| `cairn_finish` | Validate the final outcome, or suspend with gaps |
 
-The model does not separately maintain claim IDs, criterion links and report citations. A small task uses start → host tools → finish. Longer tasks add checkpoints at useful milestones. Initial tool guidance is goal/constraint input, rather than a framework-specific tool registry requirement.
+The model does not separately maintain claim IDs, criterion links and report citations. A small task uses start → host tools → finish. Longer tasks save semantic updates when they occur and recovery summaries before handoff or compaction. Initial tool guidance is goal/constraint input, rather than a framework-specific tool registry requirement.
 
 Finding `key` values identify intentional revisions. `covers` associates supported findings with c# criteria; a new supported finding covers the sole criterion automatically. Finding statuses are `proposed`, `supported`, `refuted` and `inconclusive`. Work progress is separate: `{key,title,status,detail?}` uses `pending`, `running`, `completed`, `blocked` and `cancelled`. Updating a work item does not prove its corresponding goal condition.
 
@@ -35,7 +35,7 @@ Curated findings store:
 
 Supported findings need a recorded basis or references. The core validates their structure, recorded state and report/criterion relationships. It does not resolve file/link content, attest that a cited file was read, or establish causal correctness. References remain explicitly agent-curated. A model declaration of `supported` is not independent verification.
 
-No `tool.started`, raw observation or tool-call metadata is stored for curated host tools. Pre/post hooks do not reserve a quota, block native tools, retain inputs/results or create E# aliases. Curated progress comes from explicit milestones, not uncorrelated host plan events. Goal/checkpoint/resume/finish events still form a persistent task history.
+No `tool.started`, raw observation or tool-call metadata is stored for curated host tools. Pre/post hooks do not reserve a quota, block native tools, retain inputs/results or create E# aliases. Curated business state comes from explicit semantic updates, not uncorrelated host plan events. Goal/checkpoint/resume/finish events still form a persistent task history.
 
 ### Captured: explicit raw evidence
 
@@ -81,7 +81,7 @@ Official references: [Codex subagents](https://learn.chatgpt.com/docs/agent-conf
 
 ## Persistence and compact restoration
 
-`Engine` operates on goals, findings, optional observations, work progress, human hints and checkpoints. `Store` commits a projection and an append-only event atomically using SQLite `BEGIN IMMEDIATE`. WAL and a busy timeout support hooks, MCP and dashboard processes sharing the database. Each event also commits a historical domain-state frame in `task_history`, using a nested savepoint so direct Store writes remain atomic too. Frames omit raw observation IO and retain the evidence index. The read-only replay API projects these states using their event time, pages frame metadata at a fixed head, and scopes lookups to the requested task. The UI keeps historical playback separate from live SSE updates. Legacy databases import only known creation/current-head baselines and disclose missing intermediate frames; no model or tool is rerun to manufacture history. Claim revisions and task milestones remain in the event ledger.
+`Engine` operates on goals, findings, optional observations, work progress, human hints and checkpoints. `Store` commits a projection and an append-only event atomically using SQLite `BEGIN IMMEDIATE`. WAL and a busy timeout support hooks, MCP and dashboard processes sharing the database. Each event also commits a historical domain-state frame in `task_history`, using a nested savepoint so direct Store writes remain atomic too. Frames omit raw observation IO and retain the evidence index. The read-only replay API projects these states using their event time, pages frame metadata at a fixed head, and scopes lookups to the requested task. The UI keeps historical playback separate from live SSE updates. Legacy databases import only known creation/current-head baselines and disclose missing intermediate frames; no model or tool is rerun to manufacture history. Claim revisions and task changes remain in the event ledger.
 
 `Engine.context` returns at most 16 KiB with goal, constraints, relevant/recent findings, basis/reference pointers, progress, criterion gaps, latest checkpoint, open questions, next step, owner and budget policy. Totals and truncation indicators distinguish omitted history from absent information. It contains neither private reasoning nor a full host transcript.
 
@@ -125,7 +125,7 @@ The CLI can remember one UI database with `cairn ui --db FILE --remember`; `cair
 
 The relationship graph is the default main view; there is no separate progress board. It includes starting context, authored work stages, evidence, conclusions, completion criteria and the goal. Teal origin and rose goal colors preserve roles; indigo completed/result nodes, amber running work and pale dashed pending work preserve the earlier UI's status semantics. Goal nodes retain their role color and display satisfaction separately. Labels supplement color. Work stages form an explicit branch from the starting context, without fabricated causal links to findings.
 
-The graph displays stored, reported state, not live process liveness. `active` does not mean a process is running. Paused/stale work is not shown as executing; missing telemetry does not mean idle. Goal coverage comes from core validation and may decrease after revised findings. Raw observations are labelled as original evidence where present; curated conclusions display basis/references and agent provenance. The timeline emphasizes human-readable milestone summaries and expandable detail, with captured evidence events filterable separately. Phase labels describe persisted state, not a fixed execution pipeline.
+The graph displays stored, reported state, not live process liveness. `active` does not mean a process is running. Paused/stale work is not shown as executing; missing telemetry does not mean idle. Goal coverage comes from core validation and may decrease after revised findings. Raw observations are labelled as original evidence where present; curated conclusions display basis/references and agent provenance. The timeline emphasizes human-readable change summaries and expandable detail, with captured evidence events filterable separately. Phase labels describe persisted state, not a fixed execution pipeline.
 
 The server has no browser mutation endpoints. Host/origin checks, no CORS permission and nonce CSP protect local data from cross-site access. Closing the UI does not stop the host. Bootstrap remains a direct useful first attempt in the ongoing host session, without a second model runtime.
 
@@ -138,3 +138,9 @@ Native SubagentStart associates a new execution with the active parent goal and 
 An unassociated run is shown as a native execution node connected to the parent context, never an invented investigation branch. Native execution counters are separate from semantic branch counters. Exact native ID association can merge it into a branch; routing aliases, matching names and counts are not treated as proof. Binding changes commit at association time and do not rewrite past frames. The main agent reports semantic states such as review start, accepted findings, blocked hypotheses and goal coverage. MCP-only hosts report uncovered states explicitly. Host execution lifecycle and semantic acceptance are deliberately independent.
 
 The native event contract was checked against [official Codex hooks documentation](https://learn.chatgpt.com/docs/hooks). Host/plugin hooks still require their native trust flow in normal use. The isolated automated Codex exercise enables only reviewed Cairn hooks; it preserves the model workspace sandbox.
+
+## Prompt responsibilities
+
+The shared SKILL.md owns behavioral policy: goal/evidence semantics, immediate updates, delegation/review and recovery. References supply scenario-specific examples or branch/host details on demand. Tool descriptions contain calling conditions, input/output conventions and validation behavior; they do not repeat the work method. Native hooks inject identity, saved state and role-specific boundaries. The recovery packet contains current facts and a pointer to the skill rather than a second delegation policy.
+
+Exact application-level prompts used in the read-only acceptance run are published separately from the skill. They are example inputs with provenance, not additional standing instructions. Host system/developer policies and private reasoning are not exported.

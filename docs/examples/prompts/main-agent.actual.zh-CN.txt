@@ -1,0 +1,13 @@
+使用 Cairn 共享 skill `/Users/shen/.codex/worktrees/f463/Cairn/skills/cairn/SKILL.md` 完成一次只读数据核对。
+
+任务：检查 `/private/tmp/cairn-live-state-oNLlN4/fixtures/catalog.json` 和 `fixtures/requests.json`。核对四个 SKU 的南北区价格、组合唯一性、请求顺序，以及原样本是否足以证明缓存重复命中。结果必须注明实际读取的依据与验证范围，不修改示例项目。
+
+完成条件：给出准确的八项报价与组合数量；区分原样本实际覆盖和仍需额外验证的行为；主会话独立复核助手结果并在 Cairn 中完成验收。
+
+本次只读验收要求实际委派一个独立核对助手，用于检查主／子提示词链路；这不是通用任务的固定助手数要求。主会话继续做独立核对。请先读取共享 skill，仅在需要参数或场景细节时读对应参考。
+
+Cairn 的 MCP 工具未暴露在这个验收子任务中，可使用真实 CLI 入口替代：`/opt/homebrew/bin/node /Users/shen/.codex/worktrees/f463/Cairn/dist/cairn.mjs call TOOL --host mcp --session-id prompt-acceptance-main --root /private/tmp/cairn-prompt-acceptance-mlho4z2x --db /private/tmp/cairn-prompt-acceptance-mlho4z2x/state.db --input /private/tmp/cairn-prompt-acceptance-mlho4z2x/input.json`。每次按需写 input.json 再调用，使用 curated 默认模式。不要伪称具备原生生命周期接入。本次只验证共享指令的使用和主／子协作；缺少原生事件的状态按 skill 上报。
+
+实发提示词留存：真正调用 spawn_agent 之前，把将作为 message 参数发送的完整字符串原样写入 `/private/tmp/cairn-prompt-acceptance-mlho4z2x/child-sent.txt`；用同一正文创建只读子 Agent，fork_turns=none。禁止根据其结果事后还原正文。保留真实助手标识和问题边界。结束时写 `/private/tmp/cairn-prompt-acceptance-mlho4z2x/result.json`，包含 taskId、childId、childPromptFile、各项核对事实、实际工具/断言结果与状态。
+
+你只拥有 `/private/tmp/cairn-prompt-acceptance-mlho4z2x` 内的产物；仓库和报价示例均只读。你不是独自在代码库工作，不要改动或撤销他人的文件。不执行 git、安装、联网、消息外发或其他项目操作。子 Agent 也遵守同样边界，且只返回核对结果，不接管或更新主目标。不要读取 `/private/tmp/cairn-prompt-acceptance-mlho4z2x` 之外的凭据、宿主系统提示词或历史会话。

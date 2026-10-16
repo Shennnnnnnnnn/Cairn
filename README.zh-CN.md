@@ -4,7 +4,7 @@
 
 **为 Pi、Claude Code、Codex 保留目标、证据链和可恢复的进度。**
 
-Cairn 4.5 提供六个工具：**开始、恢复、读取、即时更新、恢复摘要、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，每次有意义的状态变化立即保存，保留结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
+Cairn 4.5.1 提供六个工具：**开始、恢复、读取、即时更新、恢复摘要、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，每次有意义的状态变化立即保存，保留结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
 
 模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存目标记录，并提供蓝白进度看板。普通任务无需配置工具白名单或 MCP 上游。
 
@@ -261,7 +261,7 @@ cairn export TASK_ID --format html --out evidence.html
 
 接管递增执行代次，旧会话不能再修改或完成该目标。暂停时正在执行的进度项变为阻塞；恢复后按实际情况显式更新为执行中。恢复包含目标、依据、引用、进度和未解决问题，原生聊天历史仍由宿主保存。
 
-**子 Agent 适合独立子任务或需要新上下文的检查。** 主 Agent 汇总并审阅子任务结果，再保存主目标的阶段记录。子 Agent 的新上下文不会自动获得主目标身份或写权限；持久交接到另一原生会话时，仍需要 Adapter 的显式 resume／takeover。无需建立新的 worker 池或固定 reason／explore 交接流程。
+**子 Agent 适合独立子任务或需要新上下文的检查。** 主 Agent 在复核开始和接受结果时分别即时保存业务状态。子 Agent 的新上下文不会自动获得主目标身份或写权限；持久交接到另一原生会话时，仍需要 Adapter 的显式 resume／takeover。无需建立新的 worker 池或固定 reason／explore 交接流程。
 
 恢复摘要控制在 **16 KiB 以内**，带总量和截断标记；持久记录不随摘要截断而删除。`cairn_read` 的 evidence 视图按结论 key／ID 读取整理依据，details 读取完整任务，history 读取事件历史。分页与完整恢复格式见 [架构说明](docs/architecture.md#persistence-and-compact-restoration)。
 
@@ -397,3 +397,5 @@ Cairn 将目标、证据、人工提示和恢复状态保存在通用 CLI 工作
 项目采用 [AGPL-3.0](LICENSE) 许可证。
 
 新版完整演示见[即时状态与原生生命周期实跑](docs/examples/immediate-state.zh-CN.md)：实际修复离线报价串价，并按自然时间回放自动生命周期、业务复核和完成。
+
+提示词的职责划分及本次实际发送正文见[主／子 Agent 实发提示词](docs/examples/actual-agent-prompts.zh-CN.md)。

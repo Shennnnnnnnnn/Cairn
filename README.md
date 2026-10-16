@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 **Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-Cairn 4.5 provides **start, resume, read, update, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then immediately saves each meaningful state change, conclusion, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
+Cairn 4.5.1 provides **start, resume, read, update, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then immediately saves each meaningful state change, conclusion, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn keeps the goal and its progress in SQLite, with an optional blue-and-white dashboard. No upstream gateway or tool whitelist is required for an ordinary task.
 
@@ -94,7 +94,7 @@ Use `cairn_update` immediately for each branch, progress or finding change. `cai
 }
 ```
 
-Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelled`. They describe reported work; they are separate from the goal's completion conditions. Checkpoint summaries describe the current milestone and do not overwrite an existing report summary. An explicit finish `summary` or `report.summary` sets the final report summary.
+Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelled`. They describe reported work; they are separate from the goal's completion conditions. Checkpoint summaries describe the recovery state and do not overwrite an existing report summary. An explicit finish `summary` or `report.summary` sets the final report summary.
 
 | Fixed tool | Purpose |
 | --- | --- |
@@ -143,7 +143,7 @@ cairn ui --forget  # clear the saved dashboard and exit
 
 UI database precedence is `--db` → `CAIRN_DB` → saved dashboard → current workspace. The setting is UI-specific; MCP, hooks and task commands keep their existing parameter/environment selection. Preferences live in `.cairn/ui.json` under the user home, or under `CAIRN_CONFIG_HOME` when set.
 
-Open the printed loopback URL. Without `--port`, Cairn tries `8000` and chooses a free port if occupied; explicit ports remain strict. The **relationship graph is the main view**; there is no separate progress board. It connects the starting context, recorded work, evidence, conclusions, completion criteria and goal. Teal marks the start, rose marks goals, indigo marks completed work/results, amber marks running work, and pale dashed nodes mark pending work. Labels distinguish role and status; goal nodes retain their role color when satisfied. Select a node for its details. Zoom, pan, fit, fullscreen and vertical/horizontal layouts remain available. The timeline highlights milestones with expandable details; captured tool events can be filtered separately.
+Open the printed loopback URL. Without `--port`, Cairn tries `8000` and chooses a free port if occupied; explicit ports remain strict. The **relationship graph is the main view**; there is no separate progress board. It connects the starting context, recorded work, evidence, conclusions, completion criteria and goal. Teal marks the start, rose marks goals, indigo marks completed work/results, amber marks running work, and pale dashed nodes mark pending work. Labels distinguish role and status; goal nodes retain their role color when satisfied. Select a node for its details. Zoom, pan, fit, fullscreen and vertical/horizontal layouts remain available. The timeline highlights saved changes with expandable details; captured tool events can be filtered separately.
 
 Select **▷ 回放** to play the graph on a **continuous recorded-time timeline**. At 1×, one recorded second takes one playback second; choose 5×, 10×, 30× or 60× to speed up. The playhead, elapsed/total duration and proportionally placed record markers follow actual save intervals. Seek to any time: the graph holds the latest known state at or before that time, without inventing unrecorded operations. Previous/next jump between recorded changes. Pause, restart and return live remain available; state loading briefly buffers playback.
 
@@ -266,7 +266,7 @@ After installing the host or Multica integration, run `cairn ui` and give the ag
 
 For a local startup defect:
 
-> Use Cairn to fix the startup failure in `/absolute/path/to/project`. The actual error is [paste error]; the expected result is a working development server and homepage. You may read source, reproduce locally and modify the relevant implementation and tests. Reproduce the failure, establish the cause from inspected files/results, implement the fix and verify the original path plus relevant regressions. Preserve useful findings and source references, update the graph at milestones, and finish only when the criteria hold. Report the actual changes, checks/results and remaining limits.
+> Use Cairn to fix the startup failure in `/absolute/path/to/project`. The actual error is [paste error]; the expected result is a working development server and homepage. You may read source, reproduce locally and modify the relevant implementation and tests. Reproduce the failure, establish the cause from inspected files/results, implement the fix and verify the original path plus relevant regressions. Preserve useful findings and source references, save each meaningful state change immediately, and finish only when the criteria hold. Report the actual changes, checks/results and remaining limits.
 
 Cairn preserves the goal, findings, references and handoff state. The host agent performs the actual diagnosis, edits, calculations or research. Completion is based on goal coverage and recorded evidence relationships; source truth and causal correctness still require review.
 
@@ -312,3 +312,5 @@ Cairn preserves goals, evidence, human context and recovery state across support
 Licensed under [AGPL-3.0](LICENSE).
 
 See the [Chinese immediate-state and native lifecycle example](docs/examples/immediate-state.zh-CN.md) for a real Codex run with continuous recorded-time replay.
+
+See the [actual main/subagent prompt messages](docs/examples/actual-agent-prompts.zh-CN.md) from the prompt consolidation acceptance run.
