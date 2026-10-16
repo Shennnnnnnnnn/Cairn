@@ -13,7 +13,7 @@ function solve(engine:Engine,taskId:string,session=s){const o=evidence(engine,ta
 test('complete requires supported criteria and cited evidence',()=>{
  const {store,engine,task}=setup();assert.equal(engine.check(task.id).ok,false);assert.throws(()=>engine.complete(task.id,s),/report/i);
  solve(engine,task.id);assert.equal(engine.check(task.id).ok,true);engine.complete(task.id,s);assert.equal(store.get(task.id).status,'completed');
- assert.throws(()=>engine.hint(task.id,s,'again','user'),/completed/);store.close();
+ engine.hint(task.id,s,'again','user');assert.equal(store.get(task.id).status,'completed');assert.equal(store.get(task.id).review!.pending.length,1);store.close();
 });
 test('manual registration cannot claim another task evidence and empty support is rejected',()=>{
  const {store,engine,task}=setup();assert.throws(()=>engine.claim(task.id,s,{text:'guess',status:'supported',supports:[],refutes:[]}),/need supporting/);
@@ -31,7 +31,7 @@ test('reports cannot cite unrelated evidence while omitting the evidence for com
 test('takeover fences the old CLI and keeps late results ineligible',()=>{
  const {store,engine,task}=setup(),newSession:Session={host:'codex',sessionId:'s2',cwd:'/workspace'};
  assert.throws(()=>engine.resume(task.id,newSession),/takeover/);engine.resume(task.id,newSession,true);
- assert.throws(()=>engine.hint(task.id,s,'old','user'),/no longer owns/);
+ assert.throws(()=>engine.checkpoint(task.id,s,{summary:'stale owner'}),/no longer owns/);
  const late=evidence(engine,task.id,s);assert.equal(late.eligible,false);
  assert.throws(()=>engine.claim(task.id,newSession,{text:'late',status:'supported',supports:[late.id],refutes:[]}),/late/);
  assert.equal(store.get(task.id).owner.epoch,2);store.close();

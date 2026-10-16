@@ -1,12 +1,13 @@
 import type { TaskView } from './view.js';
 import { unboundAgentRuns } from '../core/branches.js';
+import { explorationTopology, needsReview } from '../core/exploration.js';
 import { evidenceRelations } from '../core/graph.js';
 
-export type GraphNodeKind = 'origin' | 'goal' | 'branch' | 'agent' | 'review' | 'work' | 'action' | 'observation' | 'basis' | 'claim' | 'criterion';
+export type GraphNodeKind = 'origin' | 'goal' | 'branch' | 'agent' | 'review' | 'work' | 'action' | 'observation' | 'basis' | 'claim' | 'criterion' | 'fact' | 'exploration' | 'global-review' | 'hint';
 export type GraphState = 'origin' | 'goal' | 'running' | 'review' | 'completed' | 'pending' | 'blocked' | 'refuted' | 'cancelled';
 export type GraphActor = 'main' | 'subagent';
 export type GraphNode = { id: string; kind: GraphNodeKind; label: string; state: string; status: GraphState; rank: number; data: any; actor?: GraphActor };
-export type GraphEdge = { from: string; to: string; relation: 'context' | 'branch' | 'handoff' | 'review' | 'stage' | 'basis' | 'supports' | 'refutes' | 'criterion' | 'addresses' | 'goal'; state: 'context' | 'running' | 'review' | 'completed' | 'pending' | 'refuted' };
+export type GraphEdge = { from: string; to: string; relation: 'context' | 'branch' | 'handoff' | 'review' | 'stage' | 'basis' | 'supports' | 'refutes' | 'criterion' | 'addresses' | 'goal' | 'input' | 'produces' | 'explores' | 'revises'; revision?:number; state: 'context' | 'running' | 'review' | 'completed' | 'pending' | 'refuted' };
 export type GraphModel = { nodes: GraphNode[]; edges: GraphEdge[] };
 
 /** The original Cairn graph palette: teal start, rose goal, indigo facts, amber execution. */
@@ -21,7 +22,7 @@ export const graphPalette = {
   refuted: { fill: '#fff1f2', stroke: '#fda4af', text: '#be123c', muted: '#e11d48' },
   cancelled: { fill: '#f8fafc', stroke: '#e2e8f0', text: '#94a3b8', muted: '#94a3b8' },
 } satisfies Record<GraphState, { fill: string; stroke: string; text: string; muted: string }>;
-export const graphKindLabels: Record<GraphNodeKind, string> = { origin: '起点', goal: '任务目标', branch: '排查分支', agent: '宿主执行会话', review: '复核汇总', work: '执行阶段', action: '历史行动', observation: '原始观测', basis: 'AI 整理的依据', claim: '假设与结论', criterion: '目标条件' };
+export const graphKindLabels: Record<GraphNodeKind, string> = { origin: '起点', goal: '任务目标', branch: '排查分支', agent: '宿主执行会话', review: '复核汇总', work: '执行阶段', action: '历史行动', observation: '原始观测', basis: 'AI 整理的依据', claim: '假设与结论', criterion: '目标条件', fact:'来源事实版本', exploration:'探索', 'global-review':'全局复核', hint:'人工反馈' };
 
 /** Project only saved relationships. Plan order does not imply dependency or causality. */
 export function projectGraph(task: TaskView): GraphModel {
@@ -41,7 +42,7 @@ export function projectGraph(task: TaskView): GraphModel {
   const branchOrigin = (key?:string) => key&&branches.has(key)?`branch:${key}`:'origin';
   const actorFor = (key?:string): GraphActor => key&&branches.get(key)?.executor==='subagent'?'subagent':'main';
   add(0, 'origin', 'origin', task.origin, '起点 · 已知背景', 'origin', task);
-  add(evidenceRank+3, 'goal', 'goal', task.goal, task.status === 'completed' ? '✓ 目标已完成' : task.check.ok ? '✓ 条件已满足 · 待完成检查' : task.status === 'suspended' ? '目标尚未完成 · 任务已暂停' : '目标尚未完成', 'goal', task);
+  add(evidenceRank+3, 'goal', 'goal', task.goal, task.status === 'completed' ? task.review&&task.review.generation>task.review.acknowledged?'历史已完成 · 新反馈待复核':'✓ 目标已完成' : task.check.ok ? '✓ 条件已满足 · 待完成检查' : task.status === 'suspended' ? '目标尚未完成 · 任务已暂停' : '目标尚未完成', 'goal', task);
   for(const [index,run]of unboundAgentRuns(task).entries()){
     const ended=run.status==='returned',stale=run.epoch!==task.owner.epoch||run.host!==task.owner.host;
     const nodeId=`agent:${run.epoch}:${run.attempt}:${run.agentId}`;
@@ -83,8 +84,9 @@ export function projectGraph(task: TaskView): GraphModel {
     connect('origin', `obs:${observation.id}`, 'context', 'context');
   }
   for (const claim of task.claims) {
-    const status = claim.status === 'supported' ? 'completed' : claim.status === 'refuted' ? 'refuted' : 'pending';
-    add(evidenceRank+1, 'claim', `claim:${claim.id}`, claim.text, claimLabels[claim.status], status, claim,actorFor(claim.branch));
+    const stale=needsReview(task,claim);
+    const status = stale ? 'blocked' : claim.status === 'supported' ? 'completed' : claim.status === 'refuted' ? 'refuted' : 'pending';
+    add(evidenceRank+1, 'claim', `claim:${claim.id}`, claim.text, stale?'来源事实已变更 · 待重新验证':claimLabels[claim.status], status, {...claim,needsReview:stale},actorFor(claim.branch));
     if(claim.branch&&(!((task.evidenceMode??'captured')==='curated')||(!claim.basis&&!claim.references?.length)))connect(branchOrigin(claim.branch),`claim:${claim.id}`,'branch','context');
   }
   for (const criterion of task.criteria) {
@@ -99,6 +101,25 @@ export function projectGraph(task: TaskView): GraphModel {
     const state:GraphEdge['state']=edge.relation==='refutes'||edge.relation==='basis'&&claim?.status==='refuted'?'refuted':edge.relation==='addresses'?'pending':edge.relation==='criterion'||edge.relation==='goal'?task.check.unmet.includes(criterion)?'pending':'completed':'completed';
     edges.push({...edge,state});
   }
+  const topology=explorationTopology(task);
+  for(const {id,fact}of topology.versions)add(evidenceRank,'fact',id,fact.text,`来源 r${fact.revision} · 已被修订`,'blocked',fact,actorFor(task.claims.find(claim=>claim.id===fact.id)?.branch));
+  for(const {id,derivation,current}of topology.attempts){
+    const branch=branches.get(derivation.branch),status:GraphState=!current?'completed':branch?.status==='running'?'running':branch?.status==='completed'?'completed':branch?.status==='cancelled'?'cancelled':branch?.status==='reviewing'||branch?.status==='awaiting_review'?'review':'pending';
+    add(evidenceRank,'exploration',id,branch?.question??branch?.title??derivation.branch,`${current?'本轮探索':'历史探索'} · 第 ${derivation.attempt} 次` ,status,{...derivation,current},actorFor(derivation.branch));
+  }
+  for(const edge of topology.edges)edges.push({...edge,state:edge.relation==='revises'?'pending':edge.relation==='explores'?'context':'completed'});
+  for(const hint of task.hints){add(0,'hint',`hint:${hint.id}`,hint.text,`人工反馈 · ${hint.author}`,'origin',hint);connect(`hint:${hint.id}`,task.review?'global-review':'goal','context','context');}
+  if(task.review){const pending=task.review.generation>task.review.acknowledged;add(evidenceRank+2,'global-review','global-review',pending?'新证据与反馈待复核':'全局复核已完成',pending?`${task.review.pending.length} 项变化待复核`:'已复核到所读快照',pending?'review':'completed',task.review,'main');connect('global-review','goal','review',pending?'review':'completed');}
+  // Place the source -> exploration -> result chain in semantic order. Branch
+  // membership and review decoration never imply dependency.
+  if(topology.attempts.length){
+    const map=new Map(nodes.map(node=>[node.id,node]));
+    for(let i=0;i<nodes.length;i++){let changed=false;for(const edge of topology.edges.filter(edge=>edge.relation==='input'||edge.relation==='produces')){const a=map.get(edge.from),b=map.get(edge.to);if(a&&b&&b.rank<=a.rank){b.rank=a.rank+1;changed=true;}}if(!changed)break;}
+    for(const edge of edges.filter(edge=>edge.relation==='basis')){const a=map.get(edge.from),b=map.get(edge.to);if(a&&b&&a.kind==='basis')a.rank=b.rank-1;}
+    const end=Math.max(evidenceRank+2,...nodes.filter(node=>['claim','exploration','fact'].includes(node.kind)).map(node=>node.rank))+1;
+    for(const node of nodes)if(node.kind==='global-review')node.rank=end;else if(node.kind==='criterion')node.rank=end+(task.review?1:0);else if(node.kind==='goal')node.rank=end+(task.review?2:1);
+  }
+  if(task.review&&!topology.attempts.length)for(const node of nodes)if(node.kind==='criterion'||node.kind==='goal')node.rank++;
   const nodeIds = new Set(nodes.map(n => n.id));
   // Stale or cross-task references never create invented nodes or dangling edges.
   const validEdges = edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to));

@@ -1,0 +1,9 @@
+这是用户明确授权的原任务续查，不是上一轮自主开启下一阶段。上一轮“不开下一阶段”仅约束上一轮执行；现在请处理新外部反馈，保持原目标、证据和已完成历史。
+
+目标 task_id=task_d1eabba4-eb6f-464b-987d-388ef3756a11。请读取共享 Cairn skill 的探索／反馈协议及原任务完整图，查阅已追加的署名反馈与 feedback-before.log、feedback-case.mjs。反馈来自独立样例验收者，并非模型伪造；它已通过 Cairn feedback 命令追加，当前仍应保留 completed。
+
+你是新的真实 Codex 主会话。使用 cairn_resume 的 reopen={reason} 和 takeover=true 明确重开这个任务，不能另建目标。保留旧完成、原复现及回归，不覆盖旧日志。先实际重现新失败，再根据图中的事实决定探索方向，把新来源、探索、产出即时保存；分支 from 固定已保存的事实，结果显式 producedBy。
+
+核对旧验收结论的适用范围。若新证据改变既有解释，应真实修订并处理所有来源变更引起的下游待验证项；不要为了演示而伪造错误或改写历史测试结果。实际修复调用者修改返回对象会污染后续请求的问题，运行原 reproduce.mjs、原 regression.test.mjs、新 feedback-case.mjs 及必要回归。不要修改这三份既有检查来掩盖失败。
+
+使用完整图和 snapshot-fenced review 复核新增证据及人工反馈，不能仅靠 review 清除 stale 结论。更新 report.md，说明首次完成范围、外部反馈、新的依据、改动和真实结果。关闭或取消无关分支，再通过 Cairn 完成同一目标。你自主决定是否需要子 Agent。最终回复 task_id、epoch 和实际检查结果。

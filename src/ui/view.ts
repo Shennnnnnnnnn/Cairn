@@ -74,7 +74,7 @@ export function projectTask(engine: Engine, task: Task, historicalAt?: string): 
   };
   const nativeRunning=(task.agentRuns??[]).some(run=>run.epoch===task.owner.epoch&&run.host===task.owner.host&&run.status==='running');
   let phase = { key: 'investigating', label: nativeRunning?'宿主记录执行中':workCounts.running || branchCounts.running ? 'Agent 报告执行中' : branchCounts.review ? '分支待汇总' : '目标推进中' };
-  if (task.status === 'completed') phase = { key: 'completed', label: '已完成' };
+  if (task.status === 'completed') phase = { key: 'completed', label: task.review&&task.review.generation>task.review.acknowledged?'已完成 · 新反馈待复核':'已完成' };
   else if (task.status === 'suspended') phase = { key: 'suspended', label: '已暂停' };
   else if (task.budget.deadline && Date.parse(task.budget.deadline) <= (historicalAt ? Date.parse(historicalAt) : engine.now().getTime())) phase = { key: 'expired', label: '提醒时间已到' };
   else if (task.report && check.ok) phase = { key: 'reporting', label: reportCheck?.ok ? '报告待完成' : '报告待补齐' };
@@ -99,6 +99,7 @@ export interface ReplayState { task: TaskView; events: TimelineEvent[]; seq: num
 const titles: Record<string, string> = {
   'task.created': '开始目标', 'task.resumed': '接管并恢复', 'task.suspended': '暂停任务', 'task.completed': '已完成', 'task.checkpoint': '保存阶段进展',
   'tool.started': '开始历史工具调用', 'observation.captured': '保存原始观测', 'claim.revised': '更新结论', 'criterion.updated': '更新目标条件', 'action.updated': '更新行动进展',
+  'task.reopened':'任务重开', 'task.reviewed':'复核新证据与反馈',
   'hint.added': '补充人工提示', 'report.saved': '保存报告', 'continuation.suggested': '提醒未完成事项',
   'agent.started': '助手开始执行', 'agent.returned': '助手执行结束，待汇总',
   'branch.updated': '分支状态变化', 'progress.updated': '执行状态变化', 'finding.updated': '结论变化',
@@ -115,6 +116,9 @@ export function projectEvent(row: { seq: number; kind: string; at: string; paylo
     summary = value(input.summary);
     detail = Array.isArray(payload.validation?.issues) ? payload.validation.issues.filter((s: unknown) => typeof s === 'string').join('\n') : '';
   } else if (row.kind === 'task.resumed') { summary = payload.takeover ? '新会话接管目标，继续已有结论与未解决问题。' : '继续当前会话保存的目标与进展。'; }
+  else if(row.kind==='task.reopened'){summary=value(payload.reason);detail='保留原完成记录，更新执行代次后继续探索。';}
+  else if(row.kind==='task.reviewed'){summary=value(payload.summary);detail=`已复核快照 ${payload.snapshot}，后续新信息仍需另行复核。`;}
+  else if(row.kind==='hint.added'){summary=value(input.text);detail=`提供者：${value(input.author)} · 人工反馈，不自动作为事实或重开任务。`;}
   else if(row.kind==='task.suspended'&&input.source==='host'){summary='宿主会话结束或被中断，已自动保存未完成工作，等待显式恢复。';}
   else if (row.kind === 'tool.started' || row.kind === 'observation.captured') { summary = value(input.tool ?? payload.tool); status = value(payload.status); }
   else if (row.kind === 'agent.started' || row.kind === 'agent.returned') { summary = `${value(payload.type) || '子 Agent'} · ${value(payload.agentId)}`; }

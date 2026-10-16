@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ReplayClock, replayIndexAt, replayTimeline } from '../src/ui/replay-clock.js';
+import { ReplayClock, replayDueOffset, replayIndexAt, replayTimeline } from '../src/ui/replay-clock.js';
 
 const origin = Date.parse('2026-10-15T12:59:50.153Z');
 const at = (offset: number) => ({ at: new Date(origin + offset).toISOString() });
@@ -72,4 +72,16 @@ test('empty and single-instant histories have no invented playback duration', ()
     assert.equal(clock.position, 0); assert.equal(axis.durationMs, 0);
     assert.equal(replayIndexAt(axis, 0), records.length - 1);
   }
+});
+
+
+test('a due final record is loaded even when a fast clock reaches the end during rendering',()=>{
+ const axis=replayTimeline([at(0),at(703_825),at(703_826)]);let now=0;
+ const clock=new ReplayClock(axis.durationMs,()=>now);clock.setRate(60);clock.seek(703_825);clock.play();
+ now=1;assert.equal(clock.position,703_826);
+ assert.equal(replayDueOffset(axis,1,clock.position),703_826,'load the completion frame before stopping');
+ assert.equal(replayDueOffset(axis,2,clock.position),undefined,'only stop once the final record is displayed');
+ assert.equal(replayDueOffset(axis,0,clock.position),703_825,'lagged reads still visit due transitions');
+ const tied=replayTimeline([at(0),at(10),at(10)]);
+ assert.equal(replayIndexAt(tied,replayDueOffset(tied,0,10)!),2);
 });

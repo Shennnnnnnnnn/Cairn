@@ -17,12 +17,16 @@ function signature(node: GraphNode) {
   const d=node.data;
   switch(node.kind){
     case 'origin':return [d.origin];
-    case 'goal':return [node.label,node.state,d.status,d.check?.ok];
-    case 'branch':return [node.label,node.status,d.executor,d.assignee,d.agentId,d.parent,d.question,d.rationale,d.summary,d.epoch,d.attempt,d.activitySource,d.activityStatus];
+    case 'goal':return [node.label,node.state,d.status,d.check?.ok,d.reopened,d.review?.generation,d.review?.acknowledged];
+    case 'branch':return [node.label,node.status,d.executor,d.assignee,d.agentId,d.parent,d.question,d.rationale,d.summary,d.epoch,d.attempt,d.activitySource,d.activityStatus,d.sourceFacts];
     case 'review':return [node.label,node.status,d.summary];
     case 'agent':return [node.status,d.agentId,d.epoch,d.attempt,d.status,d.type];
     case 'basis':return [d.basis,d.references?.slice().sort(),d.provenance,d.scope,d.branch];
-    case 'claim':return [d.text,d.status,d.supports.slice().sort(),d.refutes.slice().sort(),d.scope,d.branch,d.relatedCriteria?.slice().sort()];
+    case 'claim':return [d.text,d.status,d.supports.slice().sort(),d.refutes.slice().sort(),d.scope,d.branch,d.relatedCriteria?.slice().sort(),d.derivation,d.needsReview];
+    case 'fact':return [d.id,d.revision,d.text,d.basis,d.references];
+    case 'exploration':return [node.status,d.branch,d.epoch,d.attempt,d.inputs,d.current];
+    case 'global-review':return [d.generation,d.acknowledged,d.pending,d.last?.summary];
+    case 'hint':return [d.text,d.author,d.key];
     case 'criterion':return [node.label,node.state,d.claimIds.slice().sort()];
     case 'work':return [node.label,node.status,d.detail,d.branch,d.source];
     case 'action':return [d.purpose,d.status,d.stopCondition,d.observationIds];
@@ -63,7 +67,7 @@ export function compareCheckpoint(current: TaskView, previous?: TaskView, option
       // single returned result does not become two apparent operations.
       if(node.kind==='review')continue;
       const change=before?'updated':'added';
-      const label=node.kind==='branch'?branchTransition(node,before):node.kind==='agent'?(node.data.status==='returned'?'宿主自动记录子 Agent 返回':'宿主自动记录子 Agent 启动'):node.kind==='goal'&&current.status==='completed'?'主目标验收完成':`${before?'更新':'新增'}${graphKindLabels[node.kind]}`;
+      const label=node.kind==='branch'?branchTransition(node,before):node.kind==='agent'?(node.data.status==='returned'?'宿主自动记录子 Agent 返回':'宿主自动记录子 Agent 启动'):node.kind==='goal'&&current.status==='completed'&&previous?.status!=='completed'?'主目标验收完成':node.kind==='goal'&&previous?.status==='completed'&&current.status==='active'?'任务重开，继续探索':`${before?'更新':'新增'}${graphKindLabels[node.kind]}`;
       const reviewId=node.kind==='branch'?`review:${node.data.key}`:undefined;
       changes.push({nodeId:node.id,relatedIds:reviewId&&present.has(reviewId)?[reviewId]:[],kind:node.kind,...(node.actor?{actor:node.actor}:{}),title:node.label,change,label,...(before?{before:before.state}:{}),after:node.state});
     }

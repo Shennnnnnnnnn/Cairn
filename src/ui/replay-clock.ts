@@ -54,3 +54,9 @@ export class ReplayClock {
     this.offset = this.position; this.anchor = this.now(); this.speed = rate;
   }
 }
+
+/** A due saved state must be loaded before treating the clock as finished. */
+export function replayDueOffset(timeline:ReplayTimeline,displayedIndex:number,positionMs:number):number|undefined {
+  const next=timeline.offsets[displayedIndex+1];
+  return next!==undefined&&positionMs>=next?next:undefined;
+}

@@ -1,6 +1,14 @@
 # Verification record
 
-Cairn 4.6 — verified on 2026-10-16 (Asia/Shanghai).
+Cairn 4.7 — verified on 2026-10-16 (Asia/Shanghai).
+
+## Exploration, review and feedback verification
+
+- Ten focused tests exercise explicit multi-source fact → exploration → output relationships, version-pinned sources, intended membership without invented production, unsupported/foreign/scoped source rejection, cyclic derivation rollback, transitive invalidation, distinct retry attempts and preserved prior source bodies.
+- Snapshot-fenced review clears only visible evidence generations, is idempotent and cannot repair stale derivations. External attributed feedback is append-only in active, suspended and completed tasks without owner binding; immutable keys prevent conflicting retries. Feedback alone does not reopen a task.
+- Explicit reopen preserves the prior completed history and advances the owner epoch. Different owners require takeover. Already-bound MCP connections are fenced even when the native session ID is reused. Unknown old child returns do not acquire the reopened goal.
+- Pi, Claude, Codex and generic MCP use the same six-tool contract. Model/UI share the exploration topology, while source bodies are represented once in graph nodes and inputs reference their versioned nodes. New UI states, timeline events and replay changes distinguish feedback, global review and reopening. Both layouts are checked for node overlap after feedback/reopen. Browser replay exposed a real end-boundary race where the playhead reached the end before loading the final completion frame. The scheduler now loads due records before stopping; a new regression covers a 1 ms final gap, delayed rendering and tied timestamps. Installed ego-browser playback at 60× reached 31/31 with the completed goal, and seeking the real source-change frame restored exactly three stale conclusions, the old source version and attributed feedback.
+- A new real Codex exercise completed the initial regional-quote repair, then an independent tester reproduced a caller-mutation failure and appended attributed feedback. A second real Codex session explicitly reopened the same task. Narrowing the original explanation actually invalidated three downstream findings; the historical source node and blocked conclusions were checked in ego-browser and a pixel screenshot. Both real main sessions chose zero helpers. Final checks passed the original 4-case reproduction, original five regressions, external caller-mutation case and six new mutation regressions; an independent terminal reran all four. The same task completed in epoch 2 with 31 events/history frames over 703,826 ms, no pending review/stale supported derivations and zero calls/observations. Three existing check files and the first completion snapshot hash stayed unchanged. This uses synthetic business data, not a production fix.
 
 ## Prompt consolidation verification
 
@@ -26,7 +34,7 @@ The domain-specific competition profile and its resources were removed from the 
 
 ## Automated verification
 
-- **212 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
+- **223 tests passed on Node 26.3.0 and Node 24.19.0**, including typecheck and self-contained bundle build.
 - A practical public-interface test created a real local faulty implementation, reproduced its incorrect output through a separate Node process, saved findings, paused, restored from another host, fixed the file and ran actual regression inputs. The final report completed from its goal coverage and references, with no tool-call records.
 - Interface tests verify that removed profile/budget/report fields are rejected, fresh databases contain no match-state table, and captured findings can complete without an external platform reference.
 - Core checks cover contradictory/unsupported findings, scope coverage, reference membership, paging and bounded context, cancellation, interruption, cross-host takeover and stale-owner rejection.
@@ -71,6 +79,9 @@ The domain-specific competition profile and its resources were removed from the 
 - Desktop and 390px browser checks retained the blue-and-white graph and usable replay controls without horizontal overflow. These fixtures exercise UI behavior; they do not claim a new external-model investigation.
 
 ## Installed workflow checks
+
+- The global 4.7.0 package and existing managed Multica integration were updated with the same server/skill IDs and remembered database. The new exploration reference and shared skill match their recorded remote hashes; doctor confirms enabled bindings and accurately reports MCP-only native lifecycle coverage for Multica.
+- An unbound client using the installed stdio MCP read the final real task graph and handoff in ten 4,096-character pages each, verifying snapshot/checksum continuity. It found 33 nodes/57 edges, accepted validation and an empty review queue. The 31 events and zero calls/observations remained unchanged.
 
 - The global 4.6.0 command and existing managed Multica MCP/skill were updated in place. Doctor confirmed enabled bindings and the new source-independent runtime; registration IDs, agent settings and remembered database were preserved. The installed shared skill includes graph-context.md. Multica remains MCP-only, so the main agent forwards the handoff rather than relying on a native child hook.
 - An unbound installed stdio MCP client read the real Codex sample's copied graph and handoff in six 4,096-character pages each, with snapshot/checksum validation. The final projection contained 37 nodes, 55 edges and 31,005 UTF-8 bytes; this includes status metadata added after the live helper check above. The copied task hash, 40 events and zero calls/observations remained unchanged. The server ran from the global package outside the checkout.

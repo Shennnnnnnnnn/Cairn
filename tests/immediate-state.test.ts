@@ -54,7 +54,7 @@ test('all hosts persist individual semantic changes with compact, idempotent rec
 
 test('update catalog enforces one entity and the native adapters exempt only actual Cairn updates',()=>{
   const schema=coreCatalog().find(t=>t.name==='cairn_update')!.inputSchema;
-  assert.deepEqual(schema.oneOf,[{required:['branch']},{required:['progress']},{required:['finding']}]);
+  assert.deepEqual(schema.oneOf,[{required:['branch']},{required:['progress']},{required:['finding']},{required:['review']},{required:['feedback']}]);
   for(const [host,name] of [['pi','cairn_update'],['codex','mcp__cairn__cairn_update'],['claude','mcp__plugin_cairn_cairn__cairn_update']] as [Host,string][]){
     assert.equal(isCairnTool(host,name),true);assert.equal(isCairnTool(host,`foreign_${name}`),false);
   }

@@ -13,10 +13,10 @@ const finding = z.object({
   evidence:z.array(text).max(100).optional(), against:z.array(text).max(100).optional(),
   basis:text.max(16000).optional(),references:z.array(text.max(4000)).max(100).optional(),
   covers:z.array(text).max(100).optional(), scope:scope.optional(),
-  branch:text.max(200).optional(),
+  branch:text.max(200).optional(),producedBy:text.max(200).optional(),
 }).strict();
 const progress=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','completed','blocked','cancelled']),detail:text.max(4000).optional(),branch:text.max(200).optional()}).strict();
-const branch=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','awaiting_review','reviewing','completed','blocked','cancelled']),executor:z.enum(['main','subagent']).optional(),parent:text.max(200).nullable().optional(),question:text.max(4000).optional(),rationale:text.max(4000).optional(),assignee:text.max(200).optional(),agentId:text.max(500).nullable().optional(),summary:text.max(8000).optional()}).strict();
+const branch=z.object({key:text.max(200),title:text.max(2000),status:z.enum(['pending','running','awaiting_review','reviewing','completed','blocked','cancelled']),executor:z.enum(['main','subagent']).optional(),parent:text.max(200).nullable().optional(),question:text.max(4000).optional(),rationale:text.max(4000).optional(),assignee:text.max(200).optional(),agentId:text.max(500).nullable().optional(),summary:text.max(8000).optional(),from:z.array(text.max(500)).min(1).max(100).optional()}).strict();
 const draft = z.object({
   summary:text.max(16000).optional(),
 }).strict();
@@ -34,26 +34,26 @@ const schemas = {
     evidence_mode:z.enum(['curated','captured']).optional(),progress:z.array(progress).max(100).optional(),branches:z.array(branch).max(100).optional(),
     budget:z.object({deadline:z.iso.datetime().optional(),maxCalls:z.number().int().positive().optional(),maxParallel:z.number().int().min(1).max(32).optional()}).strict().optional(),
   }).strict(),
-  cairn_resume:z.object({session_id:text.optional(),task_id:text,takeover:z.boolean().default(false)}).strict(),
+  cairn_resume:z.object({session_id:text.optional(),task_id:text,takeover:z.boolean().default(false),reopen:z.object({reason:text.max(8000)}).strict().optional()}).strict(),
   cairn_read:z.object({view:z.enum(['context','graph','handoff','details','evidence','history','tasks','branches']).default('context'),task_id:text.optional(),ref:text.optional(),offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(32768).optional(),revision:z.number().int().nonnegative().optional(),snapshot:z.number().int().positive().optional(),since:z.number().int().positive().optional(),checksum:text.optional(),format:z.enum(['full','index']).optional(),question:text.max(4000).optional()}).strict(),
-  cairn_update:z.object({branch:branch.partial({title:true}).optional(),progress:progress.partial({title:true}).optional(),finding:finding.extend({key:text.max(200)}).optional()}).strict().refine(value=>Object.keys(value).length===1,'Report exactly one branch, progress item or finding'),
+  cairn_update:z.object({branch:branch.partial({title:true}).optional(),progress:progress.partial({title:true}).optional(),finding:finding.extend({key:text.max(200)}).optional(),review:z.object({snapshot:z.number().int().positive(),summary:text.max(8000)}).strict().optional(),feedback:z.object({task_id:text,text:text.max(8000),author:text.max(200),key:text.max(200).optional()}).strict().optional()}).strict().refine(value=>Object.keys(value).length===1,'Report exactly one branch, progress item, finding, review or feedback'),
   cairn_checkpoint:z.object(checkpointFields).strict(),
   cairn_finish:z.object({...checkpointFields,summary:checkpointFields.summary.optional(),outcome:z.enum(['completed','suspended']).default('completed')}).strict(),
 };
 const descriptions:Record<keyof typeof schemas,string> = {
   cairn_start:'Create a task. goal is required; criteria defaults to that goal. Optional constraints, scope, budget and initial state are accepted. evidence_mode defaults to curated. Generic MCP/Multica and Pi omit session_id; native Claude/Codex supply the startup-hook identity once. Returns task ID and bounded context.',
-  cairn_resume:'Bind task_id and restore bounded context. Set takeover=true for a different owner/workspace. Generic MCP/Multica and Pi omit session_id; native Claude/Codex supply the startup-hook identity once per connection.',
+  cairn_resume:'Bind task_id and restore context. reopen={reason} explicitly reopens a completed task and advances its epoch; feedback alone never reopens it. Set takeover=true for a different owner/workspace. Generic MCP/Multica and Pi omit session_id; native Claude/Codex supply the startup-hook identity once per connection.',
   cairn_read:'Read bound task or explicit task_id. view=context includes the full graph or its immutable reference. graph reads full nodes/edges; format=index gives topology; ref selects a related subgraph; since compares snapshots. handoff requires ref and accepts question. Graph pages use character offsets: continue with snapshot, checksum and nextOffset. Other views: details, evidence, history, branches, tasks; use revision for their paging.',
-  cairn_update:'Save exactly ONE branch, progress item or finding. All require key; new branch/progress also needs title. Completed/cancelled branches require summary; delegated completion follows reviewing. Optional agentId must be an exact native ID. Findings accept basis, references and criterion IDs in covers. Omit finding.scope to inherit task scope; otherwise include all task scope key/value pairs. Returns changed, revision and current event receipt; identical content adds no event.',
+  cairn_update:'Save exactly ONE branch, progress item, finding, review or feedback. branch/progress/finding require key; new branch/progress also needs title. Completed/cancelled branches require summary; delegated completion follows reviewing. branch.from selects supported finding keys/IDs or origin as versioned exploration inputs; finding.producedBy names that exploration. Optional agentId must be an exact native ID. Findings accept basis, references and criterion IDs in covers. Omit finding.scope to inherit task scope; otherwise include all task scope key/value pairs. Returns changed, revision and current event receipt; identical content adds no event. review={snapshot,summary} acknowledges evidence through that saved graph snapshot. feedback={task_id,text,author,key?} appends attributed external input without owner binding in any task status; keys are immutable.',
   cairn_checkpoint:'Save recovery summary (required), optional questions and next. Returns bounded context and validation. Bulk findings/progress/branches support atomic imports or handoffs; use cairn_update for individual changes.',
-  cairn_finish:'Validate and finish, or set outcome=suspended to pause. Accepts final summary, findings and recovery fields. Unmet criteria, unresolved branches or known running children keep completion incomplete and return gaps. Retrying a completed task without new content returns its saved status.',
+  cairn_finish:'Validate and finish, or set outcome=suspended to pause. Accepts final summary, findings and recovery fields. Unmet criteria, pending global review, stale derivations, unresolved branches or known running children keep completion incomplete and return gaps. Retrying a completed task without new content returns its saved status.',
 };
 
 export interface ToolDefinition { name:string; description:string; inputSchema:Record<string,unknown>; readOnly?:boolean }
 export function coreCatalog():ToolDefinition[] {
   return Object.entries(schemas).map(([name,schema]) => {
     const inputSchema=z.toJSONSchema(schema,{io:'input'}) as Record<string,unknown>;delete inputSchema.$schema;
-    if(name==='cairn_update')inputSchema.oneOf=['branch','progress','finding'].map(key=>({required:[key]}));
+    if(name==='cairn_update')inputSchema.oneOf=['branch','progress','finding','review','feedback'].map(key=>({required:[key]}));
     return {name,description:descriptions[name as keyof typeof schemas],inputSchema,readOnly:name==='cairn_read'};
   });
 }
@@ -68,6 +68,7 @@ export function resolveSession(base:Session,input:{session_id?:string}):Session 
 export class ToolRuntime {
   private bound?:Session;
   private boundTask?:string;
+  private boundEpoch?:number;
   private loading?:Promise<ToolDefinition[]>;
   private validators=new Map<string,ReturnType<AjvJsonSchemaValidator['getValidator']>>();
   private dynamic:ToolDefinition[]=[];
@@ -77,6 +78,7 @@ export class ToolRuntime {
   constructor(readonly engine:Engine,readonly baseSession:Session,gateway?:Gateway) {
     this.bound=baseSession.sessionId?{...baseSession}:undefined;
     this.boundTask=this.bound?engine.active(this.bound)?.id:undefined;
+    this.boundEpoch=this.bound?engine.active(this.bound)?.owner.epoch:undefined;
     this.gateway=gateway??new Gateway(engine);
   }
   async list():Promise<ToolDefinition[]> {
@@ -113,7 +115,8 @@ export class ToolRuntime {
     const session=this.session(),task=this.engine.active(session);
     if(!task)throw new CairnError('no_task','Start or resume a Cairn goal in this session first.');
     if(this.boundTask&&this.boundTask!==task.id)throw new CairnError('task_binding_changed','This connection belongs to a different task. Explicitly resume the intended task before writing.');
-    this.boundTask=task.id;
+    if(this.boundEpoch!==undefined&&this.boundEpoch!==task.owner.epoch)throw new CairnError('stale_owner','This connection no longer owns this task (older execution epoch); explicitly resume with takeover when changing owner');
+    this.boundTask=task.id;this.boundEpoch??=task.owner.epoch;
     return {task,session};
   }
   async invoke(name:string,input:unknown,signal?:AbortSignal):Promise<unknown> {
@@ -123,14 +126,15 @@ export class ToolRuntime {
         const session=resolveSession(this.bound??this.baseSession,parsed);
         const {session_id,evidence_mode,...goal}=parsed;
         const task=this.engine.create(session,{...goal,evidenceMode:evidence_mode??'curated',criteria:goal.criteria??[goal.goal]});
-        this.bound=session;this.boundTask=task.id;return this.engine.context(task.id);
+        this.bound=session;this.boundTask=task.id;this.boundEpoch=task.owner.epoch;return this.engine.context(task.id);
       }
       if(name==='cairn_resume') {
         const session=resolveSession(this.bound??this.baseSession,parsed);
-        const task=this.engine.resume(parsed.task_id,session,parsed.takeover);
-        this.bound=session;this.boundTask=task.id;return this.engine.context(task.id);
+        const task=parsed.reopen?this.engine.reopen(parsed.task_id,session,parsed.reopen.reason,parsed.takeover):this.engine.resume(parsed.task_id,session,parsed.takeover);
+        this.bound=session;this.boundTask=task.id;this.boundEpoch=task.owner.epoch;return this.engine.context(task.id);
       }
       if(name==='cairn_read')return this.read(parsed);
+      if(name==='cairn_update'&&parsed.feedback){const {task_id,...feedback}=parsed.feedback;return this.engine.feedback(task_id,feedback);}
       const {task,session}=this.current();
       if(name==='cairn_update')return this.engine.update(task.id,session,parsed as StateUpdateInput);
       if(name==='cairn_checkpoint')return this.engine.checkpoint(task.id,session,parsed as CheckpointInput);

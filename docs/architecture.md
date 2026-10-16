@@ -1,4 +1,4 @@
-# Cairn 4.6 plugin architecture
+# Cairn 4.7 plugin architecture
 
 Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
 
@@ -65,7 +65,7 @@ No identity is guessed from recent activity or a database row. Read-only inspect
 
 Subagents can conduct independent checks or work in fresh context using the host's native mechanism. The primary owner reviews the results and saves the canonical checkpoint. Another durable native session can become the owner only through explicit resume/takeover. A child context is not a portable substitute for a new native session, its lifecycle hooks or task fencing.
 
-Takeover increments the epoch and settles the previous owner's in-flight bookkeeping. Old owners cannot mutate or finish the task. In captured mode late observations remain audit-only. Suspension turns running progress items into blocked work, retains their meaning and suppresses continuation prompts. Resumption does not assume a previously running process is still alive. Completed tasks are immutable; repeating a content-free finish returns their recorded result.
+Takeover increments the epoch and settles the previous owner's in-flight bookkeeping. Old owners cannot mutate or finish the task. In captured mode late observations remain audit-only. Suspension turns running progress items into blocked work, retains their meaning and suppresses continuation prompts. Resumption does not assume a previously running process is still alive. Completed tasks reject ordinary writes; explicit reopen with a reason advances the owner epoch and preserves the historical completion. Repeating a content-free finish returns its recorded status. MCP connections pin their bound epoch, including when the same native session explicitly reopens a task.
 
 ## Autonomous investigation branches
 
@@ -154,3 +154,11 @@ cairn_read graph supports the full body, complete topology index, evidence-conne
 A handoff contains the assignment, root goal/criteria/constraints, evidence-connected selection, human hints and global graph access. Related proof components include competing hypotheses and branch ancestors, without claiming that membership establishes causality. Native child startup injects read-only graph access only for the verified active parent owner, never a newer unrelated goal. A helper can read an explicit task_id without binding/resuming it. MCP-only delegation resolves and forwards this packet through the host.
 
 New writes remain compact receipts whose sequence identifies a graph snapshot. The agent reads the latest graph or a delta at decision/review points, without a polling scheduler. Snapshots reflect saved semantics at that point; they cannot prove the model read every token or the cited material is correct. The host still owns execution and concurrency.
+
+## Versioned exploration and review
+
+branch.from pins supported, task-scoped fact versions (or origin); finding.producedBy records the producing exploration attempt and its immutable inputs. Membership does not imply production. Reused branch attempts retain distinct exploration nodes; revised source bodies remain visible as fixed historical fact nodes. Core rejects unsupported/foreign sources, self-derived cycles and outputs based on stale inputs. The UI and semantic graph share this topology.
+
+A task enters explicit evidence-review mode when it first declares an exploration or receives external feedback. Subsequent new/revised findings queue generation-numbered review reasons; plain direct tasks remain lightweight. A review acknowledgement names a task-scoped historical snapshot and a summary, clearing only generations visible there. It cannot repair a stale derivation. Source revisions propagate staleness through derived findings and block completion until revalidated or withdrawn. Both queues and source validity are persisted/projected, not maintained by a scheduler. Host events/context and update receipts expose pending review; the shared skill handles reconsideration at decision points.
+
+Attributed human feedback is append-only in any status and does not bind or change the owner. Optional immutable keys make retries idempotent. The author is caller supplied, not authenticated identity. Feedback does not reopen a completed task automatically. Explicit resume with reopen.reason preserves prior history, advances the epoch and requires takeover for a different owner; graph/replay show the feedback, review and reopen as separate saved changes. No tool inputs/results or child transcripts are collected.

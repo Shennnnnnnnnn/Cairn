@@ -1,8 +1,9 @@
+import { explorationTopology, needsReview, factNodeId } from './exploration.js';
 import { branchRun, branchStatus } from './branches.js';
-import type { Task, Check, Claim, Criterion, EvidenceMode } from './types.js';
+import type { Task, Check, Claim, Criterion, EvidenceMode, FactVersion } from './types.js';
 
 export type EvidenceRelation = 'basis'|'supports'|'refutes'|'criterion'|'addresses'|'goal';
-export interface SemanticEdge { from:string; to:string; relation:string }
+export interface SemanticEdge { from:string; to:string; relation:string; revision?:number }
 export interface EvidenceEdge extends SemanticEdge { relation:EvidenceRelation }
 export interface SemanticNode {
   id:string; kind:string; label:string; status:string;
@@ -15,7 +16,7 @@ export interface SemanticGraph {
   owner:Task['owner']; status:Task['status']; evidenceMode:EvidenceMode;
   nodes:SemanticNode[]; edges:SemanticEdge[];
   questions:string[]; next?:string; summary?:string; reportSummary?:string;
-  validation:Check;
+  validation:Check; review?:Task['review']; reopened?:Task['reopened'];
 }
 
 /** Evidence topology is shared by the model graph and the visual graph. */
@@ -37,6 +38,7 @@ export function evidenceRelations(task:{evidenceMode?:EvidenceMode;claims:Claim[
 /** All persisted semantic content, without UI geometry, raw IO or a host transcript. */
 export function semanticGraph(task:Task,validation:Check):SemanticGraph {
   const nodes:SemanticNode[]=[],edges:SemanticEdge[]=[];
+  const factRef=(fact:FactVersion)=>({id:fact.id,revision:fact.revision,node:factNodeId(task,fact)});
   const add=(id:string,kind:string,label:string,status:string,source:SemanticNode['source'],data:Record<string,unknown>,branch?:string)=>{
     nodes.push({id,kind,label,status,source,...(branch?{branch}:{}),data});
   };
@@ -46,7 +48,7 @@ export function semanticGraph(task:Task,validation:Check):SemanticGraph {
   for(const c of task.criteria)add(`criterion:${c.id}`,'criterion',c.text,validation.unmet.includes(c.id)?'unmet':'satisfied','task',{id:c.id,claimIds:c.claimIds});
   for(const b of task.branches??[]){
     const run=branchRun(task,b),status=branchStatus(task,b);
-    add(`branch:${b.key}`,'branch',b.title,status,'agent',{...b,status,recordedStatus:b.status,activitySource:run?'host':'agent',...(run?{executionId:`agent:${run.epoch}:${run.attempt}:${run.agentId}`}:{})},b.key);
+    add(`branch:${b.key}`,'branch',b.title,status,'agent',{...b,...(b.sourceFacts?{sourceFacts:b.sourceFacts.map(factRef)}:{}),status,recordedStatus:b.status,activitySource:run?'host':'agent',...(run?{executionId:`agent:${run.epoch}:${run.attempt}:${run.agentId}`}:{})},b.key);
     edge(b.parent?`branch:${b.parent}`:'origin',`branch:${b.key}`,'branch');
   }
   for(const run of task.agentRuns??[]){
@@ -74,13 +76,18 @@ export function semanticGraph(task:Task,validation:Check):SemanticGraph {
     }
   }
   for(const claim of task.claims){
-    add(`claim:${claim.id}`,'claim',claim.text,claim.status,claim.provenance==='captured'?'captured':'agent',{...claim},claim.branch);
+    add(`claim:${claim.id}`,'claim',claim.text,needsReview(task,claim)?'needs_review':claim.status,claim.provenance==='captured'?'captured':'agent',{...claim,...(claim.derivation?{derivation:{...claim.derivation,inputs:claim.derivation.inputs.map(factRef)}}:{}),needsReview:needsReview(task,claim)},claim.branch);
     if(task.evidenceMode==='curated'&&(claim.basis||claim.references?.length)){
       add(`basis:${claim.id}`,'basis',claim.basis??'Referenced material','recorded','agent',{basis:claim.basis??'',references:claim.references??[],scope:claim.scope},claim.branch);
       edge(claim.branch?`branch:${claim.branch}`:'origin',`basis:${claim.id}`,'context');
     }
     edge(claim.branch?`branch:${claim.branch}`:'origin',`claim:${claim.id}`,'membership');
   }
+  const topology=explorationTopology(task);
+  for(const {id,fact}of topology.versions)add(id,'fact',fact.text,'superseded','agent',{...fact,currentRevision:task.claims.find(claim=>claim.id===fact.id)?.revision});
+  for(const {id,derivation,current}of topology.attempts){const branch=task.branches?.find(branch=>branch.key===derivation.branch);add(id,'exploration',branch?.question??branch?.title??derivation.branch,current&&branch?branchStatus(task,branch):'recorded','agent',{...derivation,inputs:derivation.inputs.map(factRef),current},derivation.branch);}
+  edges.push(...topology.edges);
+  if(task.review)add('global-review','global-review','Review new evidence and feedback',task.review.generation>task.review.acknowledged?'pending':'reviewed','agent',{...task.review});
   for(const hint of task.hints){add(`hint:${hint.id}`,'hint',hint.text,'provided','human',{...hint});edge(`hint:${hint.id}`,'goal','context');}
   edges.push(...evidenceRelations(task));
   const known=new Set(nodes.map(node=>node.id));
@@ -90,7 +97,7 @@ export function semanticGraph(task:Task,validation:Check):SemanticGraph {
   }
   const unique=[...new Map(edges.map(e=>[JSON.stringify([e.from,e.to,e.relation]),e])).values()];
   return {schema:'cairn.graph.v1',taskId:task.id,revision:task.revision,goal:task.goal,origin:task.origin,constraints:task.constraints,scope:task.scope,owner:task.owner,status:task.status,evidenceMode:task.evidenceMode??'captured',nodes,edges:unique,
-    questions:task.checkpoint?.questions??[],...(task.checkpoint?.next?{next:task.checkpoint.next}:{}),...(task.checkpoint?.summary?{summary:task.checkpoint.summary}:{}),...(task.report?{reportSummary:task.report.summary}:{}),validation};
+    questions:task.checkpoint?.questions??[],...(task.checkpoint?.next?{next:task.checkpoint.next}:{}),...(task.checkpoint?.summary?{summary:task.checkpoint.summary}:{}),...(task.report?{reportSummary:task.report.summary}:{}),validation,...(task.review?{review:task.review}:{}),...(task.reopened?{reopened:task.reopened}:{})};
 }
 
 /** Evidence-connected selection, including competing findings and branch ancestry. */
@@ -103,7 +110,7 @@ export function relatedGraph(graph:SemanticGraph,ref:string) {
     while(changed){changed=false;for(const e of graph.edges)if(e.relation==='branch'&&branches.has(e.from)&&!branches.has(e.to)){branches.add(e.to);changed=true;}}
     for(const node of graph.nodes)if(branches.has(node.id)||node.branch&&branches.has(`branch:${node.branch}`))selected.add(node.id);
   }
-  const proof=new Set(['basis','supports','refutes','criterion','addresses','result']);let changed=true;
+  const proof=new Set(['basis','supports','refutes','criterion','addresses','result','input','produces','revises']);let changed=true;
   while(changed){
     changed=false;
     for(const e of graph.edges)if(proof.has(e.relation)&&(selected.has(e.from)||selected.has(e.to))){
@@ -113,7 +120,7 @@ export function relatedGraph(graph:SemanticGraph,ref:string) {
   for(const node of graph.nodes)if(selected.has(node.id)&&node.branch)selected.add(`branch:${node.branch}`);
   changed=true;while(changed){changed=false;for(const e of graph.edges)if(e.relation==='branch'&&selected.has(e.to)&&!selected.has(e.from)){selected.add(e.from);changed=true;}}
   selected.add('origin');selected.add('goal');
-  for(const node of graph.nodes)if(node.kind==='hint')selected.add(node.id);
+  for(const node of graph.nodes)if(node.kind==='hint'||node.kind==='global-review')selected.add(node.id);
   for(const e of graph.edges)if(e.relation==='execution'&&selected.has(e.from))selected.add(e.to);
   const nodes=graph.nodes.filter(node=>selected.has(node.id)),edges=graph.edges.filter(e=>selected.has(e.from)&&selected.has(e.to));
   return {...graph,nodes,edges,selection:{ref:seed.id,policy:'evidence-connected',omittedNodes:graph.nodes.length-nodes.length,omittedEdges:graph.edges.length-edges.length}};
@@ -125,7 +132,7 @@ export function graphIndex(graph:SemanticGraph) {
 
 export function graphDelta(before:SemanticGraph,after:SemanticGraph) {
   const old=new Map(before.nodes.map(n=>[n.id,n])),now=new Map(after.nodes.map(n=>[n.id,n]));
-  const key=(edge:SemanticEdge)=>JSON.stringify([edge.from,edge.to,edge.relation]);
+  const key=(edge:SemanticEdge)=>JSON.stringify(edge);
   const oldEdges=new Set(before.edges.map(key)),newEdges=new Set(after.edges.map(key));
   const {nodes:_nodes,edges:_edges,...current}=after;
   return {schema:'cairn.graph-delta.v1',taskId:after.taskId,

@@ -3,7 +3,7 @@ import type { Observation } from '../core/types.js';
 import { projectGraph, layoutGraph, graphNodeSize, graphPalette, graphKindLabels } from './graph.js';
 import type { GraphNode } from './graph.js';
 import { compareCheckpoint, checkpointActors, type CheckpointDelta } from './replay.js';
-import { ReplayClock, replayTimeline, replayIndexAt, type ReplayTimeline } from './replay-clock.js';
+import { ReplayClock, replayTimeline, replayDueOffset, replayIndexAt, type ReplayTimeline } from './replay-clock.js';
 
 type PositionedNode = GraphNode & { x: number; y: number };
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -211,6 +211,8 @@ function renderReplay() {
 }
 function scheduleReplay() {
   if (!replayPlaying || replayLoading) return;
+  const due=replayDueOffset(replayAxis,replayIndex,replayClock.position);
+  if(due!==undefined){void seekReplayTime(due,true);return;}
   if (replayClock.position >= replayAxis.durationMs) { stopReplayPlayback(); renderReplay(); return; }
   const next = replayAxis.offsets[replayIndex + 1] ?? replayAxis.durationMs;
   replayTimer = setTimeout(() => {
@@ -307,7 +309,8 @@ function renderGraph() {
       : `M${a.x + width},${a.y + height / 2} C${a.x + width + 35},${a.y + height / 2} ${b.x - 35},${b.y + height / 2} ${b.x},${b.y + height / 2}`;
     const marker = edge.relation==='handoff'||edge.state==='review'?'arrow-review':edge.state === 'running' ? 'arrow-running' : edge.state === 'refuted' ? 'arrow-red' : edge.state === 'pending' || edge.state === 'context' ? 'arrow-pending' : 'arrow';
     const line = svg('path', { d: path, class: `edge ${edge.state} relation-${edge.relation}`, 'marker-end': `url(#${marker})`, 'data-edge-from': edge.from, 'data-edge-to': edge.to, 'data-relation': edge.relation });
-    line.append(svg('title', {}, { context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', handoff:'子 Agent 返回结果，进入主 Agent 的复核流程',review:'由分支状态生成的主 Agent 复核关系',stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', addresses:'涉及此目标条件，尚未构成完成依据', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+    line.append(svg('title', {}, { context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', handoff:'子 Agent 返回结果，进入主 Agent 的复核流程',review:'由分支状态生成的主 Agent 复核关系',stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', addresses:'涉及此目标条件，尚未构成完成依据', input:'来源事实 → 探索（固定事实版本）',produces:'探索 → 产出结论，不代表自动证明因果',explores:'分支包含这次探索',revises:'旧来源版本已被修订', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+    if(edge.relation==='input'||edge.relation==='produces')world.append(svg('text',{x:(a.x+b.x+width)/2,y:(a.y+b.y+height)/2-5,'text-anchor':'middle',class:'provenance-label'},edge.relation==='input'?`来源 · r${edge.revision??0}`:'产出'));
     if(edge.relation==='handoff')world.append(svg('text',{x:(a.x+b.x+width)/2,y:(a.y+b.y+height)/2-5,'text-anchor':'middle',class:'handoff-label'},edge.state==='review'?'返回 · 待复核':'返回 · 已复核'));
   }
   for (const node of nodes.values()) {
@@ -343,14 +346,14 @@ function focusNodes(ids:string[]){
   transform.x=rect.width/2-(left+right)/2*transform.scale;transform.y=rect.height/2-(top+bottom)/2*transform.scale;viewportCustomized=true;applyTransform();
 }
 function followReplayActivity(){
-  const flow=[...nodes.values()].filter(node=>['branch','agent','review'].includes(node.kind));
+  const flow=[...nodes.values()].filter(node=>['branch','agent','review','exploration','global-review'].includes(node.kind));
   focusNodes(flow.length?flow.map(node=>node.id):replayDelta?.highlighted??[]);viewportCustomized=false;
 }
 function applyTransform() {
   document.getElementById('graph-world')!.setAttribute('transform', `translate(${transform.x},${transform.y}) scale(${transform.scale})`);
   const labels=document.querySelector('.graph-labels')!.children;
   labels[0]!.textContent=replayActive&&replayFollow?'聚焦分支执行与复核':'连线表示保存关系与分支复核状态';
-  labels[1]!.textContent=replayActive&&replayFollow?'适应画布查看完整关系图':'阶段分支不表示依赖顺序';
+  labels[1]!.textContent=replayActive&&replayFollow?'适应画布查看完整关系图':'来源 → 探索 → 产出；分支线仅表示归属';
   byId('focus-change').setAttribute('aria-pressed',String(replayActive&&replayFollow));
 }
 function fit() {
@@ -422,6 +425,14 @@ async function renderDetails() {
   const node = nodes.get(selectedNode) ?? nodes.get('origin')!; if (!node) return;
   text('detail-kind', graphKindLabels[node.kind]);
   panel.append(create('div', 'detail-tag', node.state), create('h2', '', node.kind === 'origin' || node.kind === 'goal' ? task.goal : node.label));
+  if(node.kind==='exploration'){
+    metadata(panel,'探索分支',node.data.branch);metadata(panel,'执行代次 / 轮次',`${node.data.epoch} / ${node.data.attempt}`);
+    heading(panel,'来源事实（固定版本）');for(const fact of node.data.inputs){panel.append(create('div','detail-text',`${fact.id} · r${fact.revision}\n${fact.text}`));if(fact.basis)panel.append(create('p','note',fact.basis));for(const ref of fact.references??[])sourceReference(panel,ref);}
+    panel.append(create('div','notice','这是已登记的探索来源与产出关系，不是工具调用记录。'));return;
+  }
+  if(node.kind==='fact'){metadata(panel,'固定修订',node.data.revision);if(node.data.basis)panel.append(create('div','detail-text',node.data.basis));for(const ref of node.data.references??[])sourceReference(panel,ref);panel.append(create('div','notice','保留探索发生时使用的旧事实版本，当前版本已变化。'));return;}
+  if(node.kind==='hint'){metadata(panel,'提供者',node.data.author);metadata(panel,'来源','调用者注明的人工反馈');metadata(panel,'时间',formatTime(node.data.at));panel.append(create('div','notice','人工输入是背景与方向，不自动变成已确认事实。'));return;}
+  if(node.kind==='global-review'){metadata(panel,'已复核 / 最新',`${node.data.acknowledged} / ${node.data.generation}`);for(const reason of node.data.pending)panel.append(create('div','detail-text',reason.text));if(node.data.last){heading(panel,'最近复核');panel.append(create('div','detail-text',node.data.last.summary));metadata(panel,'快照',node.data.last.snapshot);}return;}
   if (node.kind === 'origin' || node.kind === 'goal') {
     if(task.checkpoint){
       heading(panel,'最新进展');panel.append(create('div','detail-text',task.checkpoint.summary));
@@ -449,6 +460,8 @@ async function renderDetails() {
     if (node.kind === 'basis') panel.append(create('div', 'detail-text', node.data.text));
     metadata(panel, '结论修订', node.data.revision); metadata(panel, '当前状态', statuses[node.data.status] ?? node.data.status);
     metadata(panel, '依据来源', node.data.provenance === 'agent' ? 'AI 整理' : '采集记录与 Agent 解释');
+    if(node.data.needsReview)panel.append(create('div','notice','来源版本已变化；仅确认全局复核不能恢复此结论，需要重新验证并更新产出关系，或撤回结论。'));
+    if(node.data.derivation){heading(panel,'探索产出');metadata(panel,'探索分支',node.data.derivation.branch);metadata(panel,'轮次',node.data.derivation.attempt);}
     if(node.data.branch){heading(panel,'排查分支');reference(panel,node.data.branch,'branch');}
     if (node.data.basis) { heading(panel, '整理的依据'); panel.append(create('div', 'detail-text', node.data.basis)); }
     if (node.data.references?.length) { heading(panel, '文件与链接引用'); for (const ref of node.data.references) sourceReference(panel, ref); }

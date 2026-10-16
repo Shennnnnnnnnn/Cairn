@@ -58,7 +58,7 @@ export default function cairn(pi:any){
   const key=JSON.stringify([database(ctx.cwd),s.sessionId,s.cwd]),revision=JSON.stringify([task?.id,task?.revision,task?.status,task?.owner.epoch]);
   if(injectedContext.get(key)===revision)return;
   injectedContext.set(key,revision);
-  const guidance=!task?'Cairn is available. Use cairn_start to bind a goal; native session identity is automatic, so omit session_id.':task.status==='completed'?'The previous goal is completed; cairn_start creates a new goal.':!owns?`This task belongs to another session. Explicitly cairn_resume task_id=${task.id} with takeover=true before changing it.`:task.status==='suspended'?`This task is suspended; explicitly cairn_resume task_id=${task.id} before continuing.`:'Saved Cairn state follows. Use cairn_read for omitted details.';
+  const guidance=!task?'Cairn is available. Use cairn_start to bind a goal; native session identity is automatic, so omit session_id.':task.status==='completed'?'The previous goal is completed. Explicit cairn_resume reopen={reason} can continue it when authorized; cairn_start creates a different goal.':!owns?`This task belongs to another session. Explicitly cairn_resume task_id=${task.id} with takeover=true before changing it.`:task.status==='suspended'?`This task is suspended; explicitly cairn_resume task_id=${task.id} before continuing.`:'Saved Cairn state follows. Use cairn_read for omitted details.';
   return {message:{customType:'cairn-context',content:task?`${guidance}\n${JSON.stringify(e.context(task.id))}`:guidance,display:false}};
  });
  pi.on('session_before_compact',(event:any,ctx:any)=>{dispatch(event,ctx);});

@@ -77,7 +77,7 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
  const marker=host==='pi'?'Cairn tools are bound to this native Pi session. Omit session_id; do not invent one.':`Cairn host=${host} session_id=${session.sessionId}. Supply this real session_id only on the first cairn_start or cairn_resume of this MCP connection; subsequent calls are already bound. Never guess a session id.`;
  if(event.type==='SessionStart'){
   if(!task)return {context:`${marker} Cairn is enabled only after starting or resuming a task.`};
-  if(task.status==='completed')return {context:`${marker}\nTask ${task.id} is completed. Use cairn_read with task_id=${task.id} to inspect it, or cairn_start for a new goal.\n${JSON.stringify(engine.context(task.id))}`};
+  if(task.status==='completed')return {context:`${marker}\nTask ${task.id} is completed. Use cairn_read with task_id=${task.id} to inspect it. Explicit cairn_resume with reopen={reason} continues this goal when authorized; cairn_start creates a different goal.\n${JSON.stringify(engine.context(task.id))}`};
   const owns=task.owner.host===host&&task.owner.sessionId===session.sessionId&&engine.store.session(session)?.epoch===task.owner.epoch;
   const binding=host==='pi'?`Use cairn_read for this task${!owns?`; first cairn_resume task_id=${task.id} with explicit takeover=true to change the recorded owner`:task.status==='suspended'?'; explicitly cairn_resume to continue the suspended work':''}.`:`For a new MCP connection, first cairn_resume task_id=${task.id} with this session_id${owns?'':'; takeover=true is required to change the recorded owner'}. After compaction on the same connection, use cairn_read.`;
   return {context:`${marker}\n${binding}\n${JSON.stringify(engine.context(task.id))}`};

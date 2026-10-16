@@ -23,6 +23,12 @@ Before choosing new investigation directions, accepting helper results or declar
 
 Before delegation, use cairn_read view=handoff with ref selecting the branch/node and optional question. Forward the resolved packet: goal, constraints, task boundary, related evidence and sources. It includes access to the full global snapshot. Native child startup also supplies a graph reference when available. A helper may read an explicit task_id without resuming or owning it; when it lacks Cairn read access, resolve the pages in the main session and pass their content.
 
+## Exploration and new evidence
+
+When an investigation follows known facts, use branch.from with supported finding keys/IDs (or origin for the initial attempt). This pins the source versions. Save actual outputs with finding.producedBy naming that branch; branch alone records membership. Several sources can jointly motivate an exploration. Do not infer a causal explanation merely from these links.
+
+Explorations enable a persistent global review queue. New/revised findings and external feedback require reconsidering the current direction and goal coverage. After reading the relevant graph snapshot, use cairn_update review={snapshot,summary}. Acknowledging an older snapshot leaves later changes pending. If source facts change, derived results become stale: investigate again using refreshed from sources and revise producedBy, or withdraw the conclusion. A global review acknowledgement alone cannot validate stale results.
+
 ## Immediate semantic updates
 
 Use `cairn_update` as each meaningful branch, work item or finding changes. Report one entity per call, with a stable key: creation, actual work starting, blocking/cancellation, a returned result, review starting, acceptance, or a finding revision. Read only when context is needed; unchanged re-saves, polling and heartbeat prompts add no progress.
@@ -43,6 +49,8 @@ Each helper gets a bounded question, relevant inputs, permitted actions, expecte
 
 Completion depends on observable goal coverage and checked findings. Inspect finish validation gaps and continue useful work or suspend with the missing evidence and next action. A time limit, stopped attempt or written recommendation is not a completed fix. User interruption ends execution immediately.
 
+Human feedback is attributed external input, not a confirmed fact. It can be appended in any task status without transferring ownership. A completed task changes only through explicit cairn_resume reopen={reason}; this preserves its previous completion and advances the owner epoch. Reconcile the feedback and revised evidence before finishing again.
+
 Resume the saved task explicitly; changing owners requires takeover. Review saved branches and outstanding work rather than assuming old helpers survived. Follow truncation/paging notices to obtain needed context. Final delivery states what changed, what was actually verified, supporting artifacts and remaining limits.
 
 ## Read on demand
@@ -51,3 +59,5 @@ Resume the saved task explicitly; changing owners requires takeover. Review save
 - For branch payloads, identity association and host coverage, read [references/delegation.md](references/delegation.md) when delegating or restoring branches.
 
 - For graph snapshots, pagination, related evidence and deltas, read [references/graph-context.md](references/graph-context.md) when the graph is not inline or preparing a handoff.
+
+- For exploration provenance, review and external feedback, read [references/exploration.md](references/exploration.md) when recording exploration inputs/results or reopening a task.

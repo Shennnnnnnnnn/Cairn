@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Store } from './store.js';
 import { CairnError, type Session, type Scope, type Task, type Observation, type Claim, type Report, type Check, type Budget, type CheckpointInput, type FinishInput, type EvidenceMode, type ProgressInput, type ProgressItem, type BranchInput, type StateUpdateInput } from './types.js';
 import { updateBranches, pauseBranches, branchStatus, branchRun, unboundAgentRuns } from './branches.js';
+import { pinFacts, derive, needsReview, queueReview } from './exploration.js';
 import { semanticGraph, relatedGraph, graphIndex, graphDelta } from './graph.js';
 
 const id = (prefix: string) => `${prefix}_${randomUUID()}`;
@@ -13,7 +14,7 @@ const proofState = (task: Task) => JSON.stringify({
 const sameClaim = (a: Omit<Claim,'id'|'revision'>, b: Omit<Claim,'id'|'revision'>) =>
   a.text===b.text && a.status===b.status && JSON.stringify(a.supports)===JSON.stringify(b.supports) &&
   JSON.stringify(a.refutes)===JSON.stringify(b.refutes) && JSON.stringify(a.scope)===JSON.stringify(b.scope) && a.key===b.key &&
-  a.basis===b.basis && JSON.stringify(a.references)===JSON.stringify(b.references) && a.provenance===b.provenance && JSON.stringify(a.relatedCriteria)===JSON.stringify(b.relatedCriteria) && a.branch===b.branch;
+  a.basis===b.basis && JSON.stringify(a.references)===JSON.stringify(b.references) && a.provenance===b.provenance && JSON.stringify(a.relatedCriteria)===JSON.stringify(b.relatedCriteria) && a.branch===b.branch && JSON.stringify(a.derivation)===JSON.stringify(b.derivation);
 const curated = (task:Task) => task.evidenceMode==='curated';
 const hasBasis = (claim:Pick<Claim,'basis'|'references'>) => Boolean(claim.basis?.trim()||claim.references?.some(ref=>ref.trim()));
 function clipText(value:string,bytes:number){
@@ -146,7 +147,7 @@ export class Engine {
         criteria: input.criteria.map((text,i) => ({id:`c${i+1}`,text,claimIds:[]})), scope, budget,evidenceMode,
         owner: {...session,epoch:1}, revision:1, createdAt:this.at(), status:'active',
         observations:[], claims:[], actions:[], hints:[], calls:{}, interrupted:false };
-      if(input.branches!==undefined)updateBranches(task,input.branches,this.at());
+      if(input.branches!==undefined)this.branchesOn(task,input.branches);
       if(input.progress!==undefined)this.progressOn(task,input.progress,'agent');
       this.store.save(task, 'task.created', task, this.at()); this.store.bind(session, task); return task;
     });
@@ -156,7 +157,7 @@ export class Engine {
       const task = this.store.get(taskId);
       const current=this.active(session);
       if(current?.status==='active'&&current.id!==taskId)throw new CairnError('active_task','Suspend or complete the current task before resuming another');
-      if (task.status === 'completed') throw new CairnError('completed_task', 'Completed tasks are immutable; create a new task for follow-up');
+      if (task.status === 'completed') throw new CairnError('completed_task', 'Completed tasks need explicit reopen with a reason; ordinary resume cannot reopen them');
       if (!takeover && (task.owner.host !== session.host || task.owner.sessionId !== session.sessionId || task.owner.cwd !== session.cwd)) throw new CairnError('takeover_required', 'A different session or workspace owns this task; explicit takeover is required');
       if (takeover) {
         task.owner = {...session,epoch:task.owner.epoch+1};
@@ -171,8 +172,33 @@ export class Engine {
   suspend(taskId: string, session: Session, source:'agent'|'host'='agent') {
     return this.edit(taskId,session,'task.suspended',{source},task=>{task.status='suspended';task.interrupted=true;this.pauseProgress(task);});
   }
-  hint(taskId: string, session: Session, text: string, author: string) {
-    return this.edit(taskId,session,'hint.added',{text,author},task=>{const hint={id:id('hint'),text,author};task.hints.push(hint);return hint;});
+  hint(taskId:string,_session:Session,text:string,author:string) { return this.feedback(taskId,{text,author}).feedback; }
+  feedback(taskId:string,input:{text:string;author:string;key?:string}) {
+    requireText(input.text,'feedback text');requireText(input.author,'feedback author');
+    if(input.key!==undefined)requireText(input.key,'feedback key');
+    return this.store.transaction(()=>{
+      const task=this.store.get(taskId),old=input.key?task.hints.find(hint=>hint.key===input.key):undefined;
+      if(old&&(old.text!==input.text||old.author!==input.author))throw new CairnError('feedback_conflict','Feedback keys are immutable; use a new key for new feedback');
+      const feedback=old??{id:id('hint'),...input,at:this.at()};
+      if(!old){task.hints.push(feedback);queueReview(task,{kind:'feedback',ref:feedback.id,text:feedback.text});task.revision++;this.store.save(task,'hint.added',{...feedback,source:'human',attribution:'caller supplied'},this.at());}
+      return {taskId,revision:task.revision,changed:!old,feedback,review:task.review,receipt:this.store.db.prepare('SELECT seq,kind,at FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1').get(taskId)};
+    });
+  }
+  reopen(taskId:string,session:Session,reason:string,takeover=false):Task {
+    requireText(reason,'reopen reason');
+    return this.store.transaction(()=>{
+      const task=this.store.get(taskId),current=this.active(session);
+      if(current?.status==='active'&&current.id!==taskId)throw new CairnError('active_task','Suspend or complete the current task before reopening another');
+      if(task.status!=='completed')throw new CairnError('invalid_reopen','Only a completed task can be reopened; use resume for suspended work');
+      if(!takeover&&(task.owner.host!==session.host||task.owner.sessionId!==session.sessionId||task.owner.cwd!==session.cwd))throw new CairnError('takeover_required','Explicit takeover is required to reopen with a different owner');
+      const previousOwner=task.owner;
+      task.owner={...session,epoch:previousOwner.epoch+1};task.status='active';task.interrupted=false;delete task.continuation;delete task.lastCheck;
+      task.reopened={epoch:task.owner.epoch,reason,at:this.at()};
+      for(const call of Object.values(task.calls))if(call.status==='running')call.status='finished';
+      this.pauseProgress(task,'Task reopened; explicitly restart unfinished work');
+      queueReview(task,{kind:'reopened',ref:'goal',text:reason});
+      task.revision++;this.store.save(task,'task.reopened',{reason,previousOwner,owner:task.owner,previousSummary:task.report?.summary},this.at());this.store.bind(session,task);return task;
+    });
   }
   /** Only native adapters call this. Child execution ending is never goal acceptance. */
   recordAgentLifecycle(taskId:string,session:Session,agentId:string,event:'started'|'returned',agentType?:string) {
@@ -199,7 +225,17 @@ export class Engine {
   }
   private branchesOn(task:Task,inputs:BranchInput[]):boolean {
     const unbound=unboundAgentRuns(task);
-    let changed=updateBranches(task,inputs,this.at());
+    const pinned=new Map(inputs.filter(input=>input.from!==undefined).map(input=>[input.key,pinFacts(task,input.from!)]));
+    const old=new Map((task.branches??[]).map(branch=>[branch.key,structuredClone(branch)]));
+    let changed=updateBranches(task,inputs.map(input=>pinned.has(input.key)?{...input,from:pinned.get(input.key)!.map(fact=>fact.id)}:input),this.at());
+    for(const [key,facts]of pinned){
+      const branch=task.branches!.find(value=>value.key===key)!,previous=old.get(key);
+      if(JSON.stringify(branch.sourceFacts)!==JSON.stringify(facts)){
+        if(previous?.sourceFacts&&branch.attempt===previous.attempt)branch.attempt++;
+        branch.sourceFacts=structuredClone(facts);branch.updatedAt=this.at();changed=true;
+      }
+      task.review??={generation:0,acknowledged:0,pending:[]};
+    }
     for(const branch of task.branches??[])if(branch.executor==='subagent'&&branch.epoch===task.owner.epoch&&branch.agentId&&!branchRun(task,branch)){
       const run=unbound.find(run=>run.agentId===branch.agentId&&run.epoch===task.owner.epoch&&run.host===task.owner.host);
       if(!run)continue;
@@ -213,6 +249,7 @@ export class Engine {
       const old=input.id ? task.claims.find(c=>c.id===input.id) : undefined;
       if(input.id && !old)throw new CairnError('not_found','Unknown claim');
       const claim: Claim={...input,id:old?.id??id('claim'),revision:(old?.revision??0)+1,scope:input.scope??task.scope};
+      if(input.derivation)claim.derivation=derive(task,input.derivation.branch,claim.id);else if(old?.derivation)claim.derivation=old.derivation;
       requireText(claim.text,'claim');
       if(claim.branch!==undefined&&!task.branches?.some(branch=>branch.key===claim.branch))throw new CairnError('invalid_branch','Claim branch does not belong to this task');
       if(curated(task)){
@@ -230,6 +267,7 @@ export class Engine {
         claim.provenance='captured';
       }
       if(old)task.claims[task.claims.indexOf(old)]=claim;else task.claims.push(claim);
+      if(task.review)queueReview(task,{kind:'evidence',ref:claim.id,text:claim.text});
       return claim;
     });
   }
@@ -281,7 +319,7 @@ export class Engine {
         keys.add(finding.key);
       }
       let old=finding.key?task.claims.find(c=>c.key===finding.key):undefined;
-      const branch=finding.branch??old?.branch;
+      const branch=finding.branch??old?.branch??finding.producedBy;
       if(branch!==undefined&&!task.branches?.some(value=>value.key===branch))throw new CairnError('invalid_branch','Finding branch does not belong to this task');
       const scope=finding.scope??old?.scope??task.scope;
       const refs=(values:string[]|undefined,existing:string[])=>{
@@ -321,11 +359,13 @@ export class Engine {
       else if(!old&&task.criteria.length===1&&status==='supported')criteria=[task.criteria[0]!];
       if(isCurated&&status==='supported'&&criteria?.length&&!covers(scope,task.scope))throw new CairnError('scope_mismatch','A conclusion used for completion must cover this task scope');
       const value:Omit<Claim,'id'|'revision'>={text:finding.text,status,supports,refutes,scope,...(finding.key?{key:finding.key}:{}),...(branch?{branch}:{}),
+        ...((finding.producedBy||old?.derivation)?{derivation:finding.producedBy?derive(task,finding.producedBy,old?.id):old!.derivation}:{}),
         ...(isCurated?{provenance:'agent' as const,...(basis===undefined?{}:{basis}),...(references===undefined?{}:{references}),relatedCriteria:criteria?.map(c=>c.id)??old?.relatedCriteria??[]}: {provenance:'captured' as const})};
       // Unkeyed exact retries reuse the original conclusion; readable keys permit deliberate revisions.
       old??=task.claims.find(c=>sameClaim(c,value));
       const claim:Claim=old&&sameClaim(old,value)?old:{...value,id:old?.id??id('claim'),revision:(old?.revision??0)+1,updatedAt:this.at()};
       if(old)task.claims[task.claims.indexOf(old)]=claim;else task.claims.push(claim);
+      if(task.review&&claim!==old)queueReview(task,{kind:'evidence',ref:claim.id,text:claim.text});
       if(isCurated){
         for(const criterion of task.criteria)criterion.claimIds=criterion.claimIds.filter(ref=>ref!==claim.id);
         if(status==='supported')for(const criterion of criteria??[])criterion.claimIds.push(claim.id);
@@ -371,7 +411,14 @@ export class Engine {
       const task=this.store.get(taskId);this.own(task,session);
       if(task.status!=='active')throw new CairnError('inactive_task',`Task is ${task.status}`);
       const keys=Object.keys(input);
-      if(keys.length!==1||!['branch','progress','finding'].includes(keys[0]!))throw new CairnError('invalid_input','Report exactly one branch, progress item or finding per update');
+      if(keys.length!==1||!['branch','progress','finding','review'].includes(keys[0]!))throw new CairnError('invalid_input','Report exactly one branch, progress item or finding per update');
+      if(input.review){
+        requireText(input.review.summary,'review summary');
+        const saved=this.store.graphState(taskId,input.review.snapshot),generation=saved.task.review?.generation??0;
+        const review=task.review,changed=!!review&&generation>review.acknowledged;
+        if(changed){review!.acknowledged=generation;review!.pending=review!.pending.filter(reason=>reason.generation>generation);review!.last={snapshot:input.review.snapshot,generation,summary:input.review.summary,at:this.at()};task.revision++;this.store.save(task,'task.reviewed',{...input.review,generation},this.at());}
+        return {taskId,revision:task.revision,changed,review:task.review,branch:undefined,receipt:this.store.db.prepare('SELECT seq,kind,at FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1').get(taskId)};
+      }
       const patch:CheckpointInput={summary:task.checkpoint?.summary??task.goal};
       let kind:string,subject:string;
       if(input.branch){
@@ -392,7 +439,7 @@ export class Engine {
       if(changed){task.revision++;this.store.save(task,kind,{input,subject,source:'agent',revision:task.revision},this.at());}
       const latest=this.store.db.prepare('SELECT seq,kind,at FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1').get(taskId);
       const branch=input.branch?task.branches?.find(branch=>branch.key===input.branch!.key):undefined;
-      return {taskId,revision:task.revision,changed,receipt:latest,...(branch?{branch:{key:branch.key,status:branchStatus(task,branch),source:branchRun(task,branch)?'host':'agent'},
+      return {taskId,revision:task.revision,changed,receipt:latest,...(task.review?{review:{generation:task.review.generation,acknowledged:task.review.acknowledged,pending:task.review.pending.length}}:{}),...(branch?{branch:{key:branch.key,status:branchStatus(task,branch),source:branchRun(task,branch)?'host':'agent'},
         ...(branch.executor==='subagent'&&branch.agentId&&!branchRun(task,branch)?{guidance:'No native lifecycle matched this branch ID. Native executions are saved and displayed independently; their IDs may differ from host routing addresses. Exact binding is optional. Report semantic changes, not duplicate lifecycle events.'}:{})}:{})};
     });
   }
@@ -402,7 +449,7 @@ export class Engine {
       if(!['completed','suspended'].includes(input.outcome))throw new CairnError('invalid_input','Finish outcome must be completed or suspended');
       const hasContent=['summary','findings','questions','next','report','progress','branches'].some(key=>input[key as keyof FinishInput]!==undefined);
       if(task.status==='completed'){
-        if(hasContent||input.outcome!=='completed')throw new CairnError('completed_task','Completed tasks are immutable; create a new task for follow-up');
+        if(hasContent||input.outcome!=='completed')throw new CairnError('completed_task','Completed tasks are immutable until explicit reopen with a reason');
         return {...this.context(taskId),phase:'completed' as const,validation:boundedCheck(this.evaluateReport(task,task.report!))};
       }
       if(task.status==='suspended'){
@@ -433,7 +480,7 @@ export class Engine {
   evaluate(task:Task):Check {
     const unmet=task.criteria.filter(c=>!c.claimIds.length || c.claimIds.some(ref=>{
       const claim=task.claims.find(x=>x.id===ref);
-      if(curated(task))return !claim||claim.status!=='supported'||claim.provenance!=='agent'||!hasBasis(claim)||!covers(claim.scope,task.scope);
+      if(curated(task))return !claim||claim.status!=='supported'||claim.provenance!=='agent'||!hasBasis(claim)||!covers(claim.scope,task.scope)||needsReview(task,claim);
       return !claim || claim.status!=='supported' || !claim.supports.length || claim.refutes.length || claim.supports.some(o=>!task.observations.find(x=>x.id===o&&x.eligible&&x.status==='success'));
     })).map(c=>c.id);
     const issues=unmet.map(c=>`Criterion ${c} lacks a supported conclusion`);
@@ -441,6 +488,8 @@ export class Engine {
       const claim=task.claims.find(value=>value.id===ref);
       if(claim&&!covers(claim.scope,task.scope))issues.push(`Conclusion ${ref} does not cover this task scope`);
     }
+    if(task.review&&task.review.generation>task.review.acknowledged)issues.push(`New evidence or feedback needs global review (${task.review.generation-task.review.acknowledged} changes); read the graph and acknowledge its snapshot`);
+    for(const claim of task.claims)if(claim.status==='supported'&&needsReview(task,claim))issues.push(`Derived finding ${claim.key??claim.id} has changed source facts; investigate again and revise its producedBy provenance or withdraw it`);
     if(task.interrupted)issues.push('Task was interrupted');
     if(Object.values(task.calls).some(c=>c.status==='running'))issues.push('Tool calls are still running');
     for(const branch of task.branches??[]) {
@@ -553,8 +602,10 @@ export class Engine {
       actions:t.actions.slice(-4).map(a=>({...a,purpose:text(a.purpose,350),stopCondition:text(a.stopCondition,240),observationIds:a.observationIds.slice(0,6)})),
       hints:t.hints.slice(-4).map(h=>({...h,text:text(h.text,450),author:text(h.author,120)})),
       progress:(t.progress??[]).slice(-24).map(item=>({...item,key:text(item.key,180),title:text(item.title,350),...(item.detail===undefined?{}:{detail:text(item.detail,500)})})),
-      branches:(t.branches??[]).slice().sort((a,b)=>Number(['completed','cancelled'].includes(a.status))-Number(['completed','cancelled'].includes(b.status))||b.updatedAt.localeCompare(a.updatedAt)).slice(0,16).map(branch=>({...branch,title:text(branch.title,300),...(branch.question?{question:text(branch.question,400)}:{}),...(branch.rationale?{rationale:text(branch.rationale,350)}:{}),...(branch.summary?{summary:text(branch.summary,600)}:{}),...(branch.assignee?{assignee:text(branch.assignee,160)}:{}),status:branchStatus(t,branch),recordedStatus:branch.status,activity:branchRun(t,branch)?.status??'reported'})),
+      branches:(t.branches??[]).slice().sort((a,b)=>Number(['completed','cancelled'].includes(a.status))-Number(['completed','cancelled'].includes(b.status))||b.updatedAt.localeCompare(a.updatedAt)).slice(0,16).map(branch=>({...branch,...(branch.sourceFacts?{sourceFacts:branch.sourceFacts.map(({id,revision})=>({id,revision}))}:{}),title:text(branch.title,300),...(branch.question?{question:text(branch.question,400)}:{}),...(branch.rationale?{rationale:text(branch.rationale,350)}:{}),...(branch.summary?{summary:text(branch.summary,600)}:{}),...(branch.assignee?{assignee:text(branch.assignee,160)}:{}),status:branchStatus(t,branch),recordedStatus:branch.status,activity:branchRun(t,branch)?.status??'reported'})),
       agentRuns:(t.agentRuns??[]).filter(run=>run.epoch===t.owner.epoch).slice(-12).map(run=>({...run,agentId:text(run.agentId,500),...(run.type?{type:text(run.type,120)}:{})})),
+      ...(t.review?{review:{generation:t.review.generation,acknowledged:t.review.acknowledged,pending:t.review.pending.length,last:t.review.last?{...t.review.last,summary:text(t.review.last.summary,600)}:undefined,staleFindings:t.claims.filter(claim=>needsReview(t,claim)).slice(0,12).map(claim=>text(claim.key??claim.id,180))}}:{}),
+      ...(t.reopened?{reopened:{...t.reopened,reason:text(t.reopened.reason,500)}}:{}),
       delegation:'Follow the shared Cairn skill; current branches and native executions are included in this context.',
       checkpoint:t.checkpoint?{summary:text(t.checkpoint.summary,1800),questions:t.checkpoint.questions.slice(0,8).map(q=>text(q,350)),next:t.checkpoint.next?text(t.checkpoint.next,600):undefined,at:t.checkpoint.at}:undefined,
       budget:t.budget,budgetPolicy:curated(t)?'advisory':'enforced',remainingMs:t.budget.deadline?Math.max(0,Date.parse(t.budget.deadline)-this.now().getTime()):null,

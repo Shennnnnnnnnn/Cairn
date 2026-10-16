@@ -4,7 +4,7 @@
 
 **为 Pi、Claude Code、Codex 保留目标、证据链和可恢复的进度。**
 
-Cairn 4.6 提供六个工具：**开始、恢复、读取、即时更新、恢复摘要、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，每次有意义的状态变化立即保存，保留结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
+Cairn 4.7 提供六个工具：**开始、恢复、读取、即时更新、恢复摘要、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，每次有意义的状态变化立即保存，保留结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
 
 模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存目标记录，并提供蓝白进度看板。普通任务无需配置工具白名单或 MCP 上游。
 
@@ -158,6 +158,34 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 ```
 
 交付包保留关联假设、依据和分支祖先，并提供全局图引用。助手无需接管主目标即可只读查询；原生子会话启动时也会获得图引用。分页固定 snapshot、checksum 和 nextOffset，避免并发更新拼接成不同版本。详细用法见[图上下文协议](skills/cairn/references/graph-context.md)。
+
+### 来源事实 → 探索 → 产出事实
+
+用 `branch.from` 指定已有 supported 事实的 key／ID（或初始 `origin`），用 `finding.producedBy` 记录实际探索产出。系统固定来源版本，支持多个来源共同驱动一次探索。分支归属不等于产出关系。
+
+```json
+{"branch":{"key":"verify-cache","title":"验证缓存解释","status":"running","from":["已保存事实的key"]}}
+```
+
+```json
+{"finding":{"key":"result","text":"实际回归通过","basis":"记录实际检查结果","references":["verify.mjs"],"producedBy":"verify-cache","covers":["c1"]}}
+```
+
+声明探索后，新结论和修订进入全局复核队列。读完图快照，再用 `cairn_update {"review":{"snapshot":实际序号,"summary":"实际复核结论"}}` 确认。来源变化会使下游结果待重新验证；仅确认复核不能恢复旧结果。看板和自然时间回放显示来源版本、探索轮次、产出、反馈与复核变化。
+
+人工可以在任意任务状态追加反馈，无需接管：
+
+```sh
+cairn feedback TASK_ID --text '边界输入仍失败，请核对' --author '用户' --key boundary-case
+```
+
+反馈保留调用者提供的作者，不自动变成事实，也不自动重开。明确继续时，Agent 使用 `cairn_resume`：
+
+```json
+{"task_id":"TASK_ID","takeover":true,"reopen":{"reason":"根据新反馈继续修复边界条件"}}
+```
+
+重开保留原完成快照，增加执行代次；更换负责人必须显式 takeover。同一负责人可省略 takeover。详细参数见[探索和反馈协议](skills/cairn/references/exploration.md)；可复跑的[真实 Codex 探索／反馈样例](docs/examples/exploration-feedback.zh-CN.md)展示首次完成、外部反馈、重开与重新验收。
 
 ### 即时状态更新
 

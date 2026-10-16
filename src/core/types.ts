@@ -14,11 +14,11 @@ export type BranchStatus = 'pending' | 'running' | 'awaiting_review' | 'reviewin
 export interface BranchInput {
   key: string; title: string; status: BranchStatus; executor?: 'main' | 'subagent';
   parent?: string | null; question?: string; rationale?: string; assignee?: string;
-  agentId?: string | null; summary?: string;
+  agentId?: string | null; summary?: string; from?: string[];
 }
 export interface Branch extends Omit<BranchInput, 'executor' | 'parent' | 'agentId'> {
   executor: 'main' | 'subagent'; parent?: string; agentId?: string;
-  epoch: number; attempt: number; updatedAt: string;
+  epoch: number; attempt: number; updatedAt: string; sourceFacts?: FactVersion[];
 }
 /** Minimal host lifecycle metadata, never a tool call or a child transcript. */
 export interface AgentRun {
@@ -32,12 +32,17 @@ export interface Observation {
   actor: {host:Host;sessionId:string;epoch:number};
   status: 'success' | 'error'; capturedAt: string; eligible: boolean;
 }
+export interface FactVersion { id:string; revision:number; text:string; basis?:string; references?:string[]; scope:Scope }
+export interface Derivation { branch:string; epoch:number; attempt:number; inputs:FactVersion[] }
+export interface ReviewReason { generation:number; kind:'evidence'|'feedback'|'reopened'; ref:string; text:string }
+export interface ReviewState { generation:number; acknowledged:number; pending:ReviewReason[]; last?:{snapshot:number;generation:number;summary:string;at:string} }
+export interface HumanFeedback { id:string; text:string; author:string; key?:string; at?:string }
 export interface Claim {
   id: string; text: string; status: 'proposed' | 'supported' | 'refuted' | 'inconclusive';
   supports: string[]; refutes: string[]; scope: Scope; revision: number;
   key?: string; updatedAt?: string;
   basis?: string; references?: string[]; provenance?: 'agent' | 'captured'; relatedCriteria?: string[];
-  branch?: string;
+  branch?: string; derivation?:Derivation;
 }
 export interface Action {
   id: string; purpose: string; stopCondition: string;
@@ -54,7 +59,7 @@ export interface CheckpointInput {
   findings?: {
     key?: string; text: string; status?: Claim['status']; evidence?: string[]; against?: string[];
     covers?: string[]; scope?: Scope; basis?: string; references?: string[];
-    branch?: string;
+    branch?: string; producedBy?:string;
   }[];
   progress?: ProgressInput[];
   branches?: BranchInput[];
@@ -67,13 +72,16 @@ export interface StateUpdateInput {
   branch?: Omit<BranchInput, 'title'> & { title?: string };
   progress?: Omit<ProgressInput, 'title'> & { title?: string };
   finding?: NonNullable<CheckpointInput['findings']>[number] & { key: string };
+  review?:{snapshot:number;summary:string};
+  feedback?:{task_id:string;text:string;author:string;key?:string};
 }
 export type FinishInput = Partial<CheckpointInput> & { outcome: 'completed' | 'suspended' };
 export interface Task {
   id: string; origin: string; goal: string; constraints: string[]; criteria: Criterion[];
   scope: Scope; owner: Owner; revision: number; createdAt: string; budget: Budget;
   status: 'active' | 'suspended' | 'completed'; observations: Observation[]; claims: Claim[];
-  actions: Action[]; hints: { id: string; text: string; author: string }[];
+  actions: Action[]; hints: HumanFeedback[];
+  review?:ReviewState; reopened?:{epoch:number;reason:string;at:string};
   calls: Record<string, { status: 'running' | 'finished'; tool: string; startedAt: string; epoch?:number }>;
   report?: Report;
   checkpoint?: Checkpoint;
