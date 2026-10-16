@@ -146,7 +146,7 @@ for(const host of ['pi','claude','codex'] as Host[])test(`${host}: curated goals
  assert.deepEqual(handleNative(engine,host,{...event,type:'PostToolUse'}),{});
  assert.deepEqual(handleNative(engine,host,{...event,type:'PostToolUseFailure',isError:true}),{});
  const saved=store.get(task.id);assert.deepEqual(saved.calls,{});assert.deepEqual(saved.observations,[]);assert.equal(saved.revision,task.revision);
- assert.equal(store.events(task.id).length,before);assert.doesNotMatch(JSON.stringify(store.events(task.id)),/raw-input-sentinel|raw-output-sentinel|native_arbitrary_tool/);
+ assert.equal(store.events(task.id).length,before+1);assert.equal(saved.usage?.toolCalls,1);assert.doesNotMatch(JSON.stringify(store.events(task.id)),/raw-input-sentinel|raw-output-sentinel|native_arbitrary_tool/);
  store.close();
 });
 

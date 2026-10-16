@@ -1,4 +1,6 @@
 import { Engine } from '../core/engine.js';
+import { toolUsage } from '../core/usage.js';
+import { syncTranscriptUsage } from './usage.js';
 import { CairnError, type Session, type Host, type Capabilities, type ProgressInput } from '../core/types.js';
 import { structuredResult, valueAt, type GatewayConfig } from '../gateway.js';
 // These describe the installed adapter's integration points. They are not proof
@@ -14,12 +16,12 @@ export function isCairnTool(host:Host,name:string){
  const prefix=host==='claude'?/^mcp__(?:plugin_cairn_cairn|cairn)__/:/^mcp__cairn__/;
  return prefix.test(name)&&local.test(name.replace(prefix,''));
 }
-export interface NativeEvent { type:string; sessionId:string; cwd:string; callId?:string; tool?:string; input?:unknown; output?:unknown; isError?:boolean; aborted?:boolean; stopHookActive?:boolean; agentId?:string; agentType?:string }
+export interface NativeEvent { transcriptPath?:string; type:string; sessionId:string; cwd:string; callId?:string; tool?:string; input?:unknown; output?:unknown; isError?:boolean; aborted?:boolean; stopHookActive?:boolean; agentId?:string; agentType?:string }
 export function normalize(host:Host,event:any):NativeEvent{
  if(host==='pi')return {type:({session_start:'SessionStart',tool_call:'PreToolUse',tool_result:'PostToolUse',session_before_compact:'PreCompact',session_compact:'PostCompact',session_shutdown:'SessionEnd',agent_before_settle:'Stop',agent_settled:'Settled'} as Record<string,string>)[event.type]??event.type,
   sessionId:event.sessionId,cwd:event.cwd,callId:event.toolCallId,tool:event.toolName,input:event.input,
   output:event.structuredContent?{structuredContent:event.structuredContent,content:event.content}: {content:event.content,details:event.details},isError:event.isError,aborted:event.aborted??event.outcome==='aborted'};
- return {type:event.hook_event_name,sessionId:event.session_id,cwd:event.cwd,callId:event.tool_use_id,tool:event.tool_name,input:event.tool_input,output:event.tool_response??{error:event.error},isError:event.hook_event_name==='PostToolUseFailure'||event.tool_response?.isError===true||event.tool_response?.is_error===true,stopHookActive:event.stop_hook_active,agentId:typeof event.agent_id==='string'?event.agent_id:undefined,agentType:typeof event.agent_type==='string'?event.agent_type:undefined};
+ return {transcriptPath:event.transcript_path,type:event.hook_event_name,sessionId:event.session_id,cwd:event.cwd,callId:event.tool_use_id,tool:event.tool_name,input:event.tool_input,output:event.tool_response??{error:event.error},isError:event.hook_event_name==='PostToolUseFailure'||event.tool_response?.isError===true||event.tool_response?.is_error===true,stopHookActive:event.stop_hook_active,agentId:typeof event.agent_id==='string'?event.agent_id:undefined,agentType:typeof event.agent_type==='string'?event.agent_type:undefined};
 }
 /** Only Codex's known plan contract is interpreted. The caller must already
  * possess a captured call's task/epoch association; curated hooks never use it.
@@ -51,6 +53,12 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
   else if(!seen[`main:${actor}`])return {};
  }
  engine.store.register(session,event.type==='SessionStart'?nativeCapabilities:undefined,event.type,engine.at());
+ syncTranscriptUsage(engine,session,event.transcriptPath,event.type==='SessionStart');
+ if(event.tool&&event.callId){
+  const local=isCairnTool(host,event.tool);
+  if(event.type==='PreToolUse')toolUsage(engine,session,event.callId,'start',local);
+  if(['PostToolUse','PostToolUseFailure'].includes(event.type))toolUsage(engine,session,event.callId,'end',local,!!event.isError,local&&/(?:^|__)cairn_(?:start|resume)$/.test(event.tool));
+ }
  if(event.tool&&isCairnTool(host,event.tool))return {};
  const nativeCallId=event.callId?`${host}:${event.sessionId}:${event.callId}`:undefined;
  // The host may switch goals while an old native call is still returning. Its
@@ -89,7 +97,8 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
  if(!event.tool)return {};
  if(task.evidenceMode==='curated'){
   // Native tools remain entirely under the host's control: no call reservations,
-  // budget decisions, raw inputs/results, or tool metadata are persisted.
+  // budget decisions or raw inputs/results are persisted. Numeric usage has
+  // a separate opaque dedup receipt; it is never an evidence record.
   // A late plan result cannot be associated with its original task without call
   // metadata. Use explicit semantic updates instead of guessing that binding.
   return {};

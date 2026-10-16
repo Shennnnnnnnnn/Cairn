@@ -9,6 +9,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 
+const curated=process.argv.includes('--curated');
 const root=mkdtempSync(join(tmpdir(),'cairn-pi-fixture-')),entry=resolve('dist/cairn.mjs'),db=join(root,'.cairn/state.db');
 const agentDir=join(root,'isolated-agent'),providerExtension=join(root,'local-provider.mjs');
 mkdirSync(agentDir,{recursive:true});
@@ -38,7 +39,7 @@ function verifyPrevious(body){
  assert.ok(previous,`Pi did not return the previous tool result for ${phase}/${step-1}`);
  assert.ok(!previous.is_error,`Pi tool failed at ${phase}/${step-1}: ${JSON.stringify(previous.content)}`);
  if(phase==='create'&&step===2){
-  const text=JSON.stringify(previous.content);assert.match(text,/cairn-smoke-verified/);assert.match(text,/Cairn E1/);
+  const text=JSON.stringify(previous.content);assert.match(text,/cairn-smoke-verified/);if(!curated)assert.match(text,/Cairn E1/);
  }
 }
 const server=createServer(async(req,res)=>{
@@ -53,9 +54,9 @@ const server=createServer(async(req,res)=>{
   for(const tool of body.tools??[])if(coreNames.includes(tool.name))assert.equal(tool.input_schema?.properties?.session_id,undefined,'Pi must bind native identity without a model-facing session_id');
   verifyPrevious(body);
   const planned=phase==='create'?[
-   ['cairn_start',{evidence_mode:'captured',goal:'Verify marker',criteria:['File contains marker']}],
+   ['cairn_start',{evidence_mode:curated?'curated':'captured',goal:'Verify marker',criteria:['File contains marker']}],
    ['read',{path:join(root,'evidence.txt')}],
-   ['cairn_finish',{outcome:'suspended',summary:'Verified marker; reviewer pending',findings:[{key:'marker',text:'File contains marker',evidence:['E1'],covers:['c1']}],questions:['Reviewer acceptance pending']}],
+   ['cairn_finish',{outcome:'suspended',summary:'Verified marker; reviewer pending',findings:[{key:'marker',text:'File contains marker',...(curated?{basis:'Confirmed the marker in the local fixture file',references:[join(root,'evidence.txt')]}:{evidence:['E1']}),covers:['c1']}],questions:['Reviewer acceptance pending']}],
   ]:[
    ['cairn_resume',{task_id:state?.id,takeover:true}],
    ['cairn_finish',{summary:'Reviewer accepted the saved evidence',questions:[]}],
@@ -104,16 +105,21 @@ try{
  await launch();
  let task=savedTask();
  assert.equal(task?.status,'suspended');assert.equal(task.owner.sessionId,sessionId);assert.equal(task.owner.host,'pi');assert.equal(task.owner.epoch,1);
- assert.equal(task.observations.length,1);const observation=task.observations[0];
+ assert.equal(task.observations.length,curated?0:1);const observation=task.observations[0];
+ if(!curated){
  assert.equal(observation.source,'hook');assert.equal(observation.tool,'read');assert.equal(observation.eligible,true);assert.equal(observation.actor.sessionId,sessionId);assert.match(JSON.stringify(observation.output),/cairn-smoke-verified/);
  assert.equal(task.report.citations[0].observationId,observation.id);assert.equal(task.claims[0].supports[0],observation.id);
- const originalObservationId=observation.id,originalTaskId=task.id;
+ }
+ const originalObservationId=observation?.id,originalTaskId=task.id;
  phase='resume';step=0;sessionId=randomUUID();await launch();task=savedTask();
  assert.equal(task.id,originalTaskId);assert.equal(task.status,'completed');assert.equal(task.owner.host,'pi');assert.equal(task.owner.sessionId,sessionId);assert.equal(task.owner.epoch,2);
- assert.equal(task.observations.length,1);assert.equal(task.report.citations[0].observationId,originalObservationId);
+ assert.equal(task.observations.length,curated?0:1);if(!curated)assert.equal(task.report.citations[0].observationId,originalObservationId);
+ assert.equal(task.usage.toolCalls,1);assert.equal(task.usage.cairnCalls,4);
+ assert.equal(task.usage.tokens.input,140);assert.equal(task.usage.tokens.output,210);assert.equal(task.usage.modelCalls,7);
+ assert.ok(task.timing.activeMs>=0);if(curated)assert.deepEqual(task.calls,{});
  assert.deepEqual(operations.map(item=>item.tool),['cairn_start','read','cairn_finish','cairn_resume','cairn_finish']);
  assert.equal(readFileSync(join(agentDir,'auth.json'),'utf8').trim(),'{}','The isolated blank auth store must remain empty');
- console.log(JSON.stringify({ok:true,host:'pi',mode:'real-cli/local-protocol-fixture',requests:requestCount,tools:operations,taskId:task.id,observations:task.observations.length,epoch:task.owner.epoch,root}));
+ console.log(JSON.stringify({ok:true,host:'pi',mode:'real-cli/local-protocol-fixture',requests:requestCount,tools:operations,taskId:task.id,observations:task.observations.length,epoch:task.owner.epoch,usage:task.usage,timing:task.timing,curated,root}));
 }finally{
  if(activeChild&&activeChild.exitCode===null){activeChild.kill('SIGKILL');await new Promise(resolve=>activeChild.once('close',resolve));}
  server.closeAllConnections();await new Promise(resolve=>server.close(resolve));

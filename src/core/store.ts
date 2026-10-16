@@ -16,7 +16,8 @@ export class Store {
       CREATE INDEX IF NOT EXISTS events_task_seq ON events(task_id,seq);
       CREATE TABLE IF NOT EXISTS task_history(event_seq INTEGER PRIMARY KEY REFERENCES events(seq), state TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(host TEXT NOT NULL, id TEXT NOT NULL, cwd TEXT NOT NULL, task_id TEXT, epoch INTEGER, capabilities TEXT NOT NULL DEFAULT '{}', seen TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(host,id));
-      CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS usage_samples(key TEXT PRIMARY KEY, task_id TEXT, epoch INTEGER, value TEXT NOT NULL);`);
     // Older databases did not retain intermediate states. Preserve only states we
     // actually know: the creation payload and the current head. Never infer old
     // conclusions from today's values or replay side effects to fill the gaps.
@@ -60,6 +61,17 @@ export class Store {
     // Store callers. State, event and its historical frame can never diverge.
     this.db.exec('SAVEPOINT cairn_save');
     try {
+      const previous=this.db.prepare('SELECT state FROM tasks WHERE id=?').get(task.id);
+      const old:Task|undefined=previous?JSON.parse(previous.state as string):undefined;
+      if(task.timing||old?.timing||task.status==='active'||!old){
+      const timing=task.timing??old?.timing??{activeMs:0,trackedSince:at,...(old?.status==='active'?{activeSince:at}:{})};
+      if(task.status==='active'){
+        timing.activeSince??=at;delete timing.stoppedAt;
+      }else if(timing.activeSince){
+        timing.activeMs+=Math.max(0,Date.parse(at)-Date.parse(timing.activeSince));delete timing.activeSince;timing.stoppedAt=at;
+      }else timing.stoppedAt??=at;
+      task.timing=timing;
+      }
       this.db.prepare('INSERT INTO tasks VALUES (?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state').run(task.id, JSON.stringify(task));
       const event = this.db.prepare('INSERT INTO events(task_id,kind,payload,at) VALUES (?,?,?,?)').run(task.id, kind, JSON.stringify(payload), at);
       this.db.prepare('INSERT INTO task_history VALUES (?,?)').run(event.lastInsertRowid, historyState(task));

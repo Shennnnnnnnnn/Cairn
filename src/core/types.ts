@@ -76,6 +76,15 @@ export interface StateUpdateInput {
   feedback?:{task_id:string;text:string;author:string;key?:string};
 }
 export type FinishInput = Partial<CheckpointInput> & { outcome: 'completed' | 'suspended' };
+/** Numeric host telemetry only; no tool names, arguments, results or transcripts. */
+export interface TokenUsage {
+  input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number;
+}
+export interface UsageTotals {
+  tokens?: TokenUsage; modelCalls?: number; toolCalls?: number; cairnCalls?: number; toolErrors?: number;
+  sources: string[]; updatedAt: string;
+}
+export interface TaskTiming { activeMs: number; activeSince?: string; stoppedAt?: string; trackedSince: string }
 export interface Task {
   id: string; origin: string; goal: string; constraints: string[]; criteria: Criterion[];
   scope: Scope; owner: Owner; revision: number; createdAt: string; budget: Budget;
@@ -88,6 +97,7 @@ export interface Task {
   /** Older records omit evidenceMode and retain captured semantics. */
   evidenceMode?: EvidenceMode; progress?: ProgressItem[];
   branches?: Branch[]; agentRuns?: AgentRun[];
+  usage?: UsageTotals; timing?: TaskTiming;
   lastCheck?: { revision: number; fingerprint: string };
   continuation?: { revision: number; count: number }; interrupted: boolean;
 }

@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 **Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-Cairn 4.7 provides **start, resume, read, update, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then immediately saves each meaningful state change, conclusion, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
+Cairn 4.8 provides **start, resume, read, update, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then immediately saves each meaningful state change, conclusion, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn keeps the goal and its progress in SQLite, with an optional blue-and-white dashboard. No upstream gateway or tool whitelist is required for an ordinary task.
 
@@ -112,7 +112,7 @@ The [Chinese goal workflow guide](docs/goal-workflow.zh-CN.md) provides a comple
 General curated tasks have **no default call or concurrency quota**. Omit `budget` for normal use. Host concurrency and model/account usage remain under the CLI's control.
 
 - `budget.deadline` is an advisory time target for curated tasks. Passing it does not complete the goal or prevent further work.
-- Curated mode rejects `maxCalls` and `maxParallel`: Cairn cannot enforce counts for calls it does not record.
+- Curated mode rejects `maxCalls` and `maxParallel`: partial host counters do not provide a reliable call/concurrency enforcement boundary.
 - A stopped or budget-limited attempt remains incomplete. Save gaps and suspend when needed; tool count is never a completion criterion.
 - Explicit `captured` tasks can enforce call/concurrency/deadline limits on Cairn gateway calls and native tool paths that actually invoke the hooks. This is not a global quota over every host tool path.
 
@@ -157,7 +157,7 @@ From 4.1, each committed event retains its domain state, including finding revis
 
 ![Blue-and-white relationship graph with synthetic demonstration data](docs/images/dashboard-graph.png)
 
-The dashboard displays the most recently committed progress. An `active` task or a zero tool count does not prove that a process is currently alive. Curated tasks deliberately have no tool-call telemetry and use immediate semantic updates. Native plan results without a reliable original task association are skipped, so a delayed event cannot change another goal.
+The dashboard displays the most recently committed progress. An `active` task or a zero tool count does not prove that a process is currently alive. Curated tasks retain only numeric host usage and opaque deduplication receipts, with no tool-call content; business state uses immediate semantic updates. Native plan results without a reliable original task association are skipped, so a delayed event cannot change another goal.
 
 The dashboard is read-only and loopback-only. Closing it does not stop the agent. Use the same database/workspace as the host. Goal coverage can decrease if a supporting conclusion is revised or refuted.
 
@@ -318,3 +318,10 @@ Licensed under [AGPL-3.0](LICENSE).
 See the [Chinese immediate-state and native lifecycle example](docs/examples/immediate-state.zh-CN.md) for a real Codex run with continuous recorded-time replay.
 
 See the [actual main/subagent prompt messages](docs/examples/actual-agent-prompts.zh-CN.md) from the prompt consolidation acceptance run.
+
+
+## Resource usage
+
+The blue/white dashboard shows observed main-session input/output tokens, completed business tool calls (Cairn calls separately), active task time excluding suspension, and wall time that continues during suspension and freezes on completion. Cache tokens are included in input and reasoning tokens in output; totals never add either subset twice. Hover token details for the cache breakdown and model-response count where available. Replay uses each saved historical total and the playback clock. Missing data is `—`, not zero.
+
+Pi collects native assistant-message usage, including a start/resume response attributed after the tool succeeds and the same turn's final delivery. Claude/Codex use a bounded incremental compatibility reader for numeric metadata from the exact hook-provided transcript. Those formats can change; unknown data remains unavailable, and pre-existing transcript content is baselined. Their coverage is the main-session increment observed during an active goal, not all billing or child-agent usage. MCP alone cannot observe the host's model or other tools. No transcript, tool name, argument or result is copied into usage records. Statistics never enforce a budget or change completion checks. See the Chinese guide for details.

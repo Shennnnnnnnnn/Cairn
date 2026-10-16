@@ -1,6 +1,7 @@
 import type { Engine } from '../core/engine.js';
 import type { Task, Observation, Check, Branch } from '../core/types.js';
 import { branchStatus, branchRun, branchLabels } from '../core/branches.js';
+import { projectUsage, type ResourceUsage } from './usage.js';
 import type { CheckpointDelta } from './replay.js';
 
 export type ObservationIndex = Omit<Observation, 'input' | 'output'> & { ref: string };
@@ -17,9 +18,10 @@ export type TaskView = Omit<Task, 'observations' | 'progress' | 'branches'> & {
   workCounts: { running: number; completed: number; waiting: number; blocked: number; questions: number };
   progressSource: 'agent' | 'historical' | 'none'; updatedAt: string;
   phase: { key: string; label: string };
+  resourceUsage: ResourceUsage;
   metrics: { observations: number; supported: number; refuted: number; inFlight: number; calls: number };
 };
-export type TaskSummary = Pick<TaskView, 'id' | 'goal' | 'status' | 'createdAt' | 'owner' | 'revision' | 'phase' | 'progress' | 'metrics' | 'budget' | 'workCounts' | 'branchCounts' | 'updatedAt' | 'progressSource' | 'evidenceMode'>;
+export type TaskSummary = Pick<TaskView, 'id' | 'goal' | 'status' | 'createdAt' | 'owner' | 'revision' | 'phase' | 'progress' | 'metrics' | 'budget' | 'workCounts' | 'branchCounts' | 'updatedAt' | 'progressSource' | 'evidenceMode' | 'resourceUsage'>;
 const stageLabels = { pending: '待推进', running: '执行中', completed: '已完成', blocked: '受阻', cancelled: '已取消' };
 const stageDetails:Record<string,string> = {
   'Paused with this task':'随任务暂停，等待恢复。',
@@ -80,16 +82,19 @@ export function projectTask(engine: Engine, task: Task, historicalAt?: string): 
   else if (task.report && check.ok) phase = { key: 'reporting', label: reportCheck?.ok ? '报告待完成' : '报告待补齐' };
   else if (check.ok) phase = { key: 'verifying', label: '条件已满足' };
   else if (!task.observations.length && !metrics.calls && !task.checkpoint && !branches.length && !work.items.some(i => i.source !== 'criterion')) phase = { key: 'starting', label: '目标已建立' };
+  const stopped=!task.timing&&task.status!=='active'?engine.store.db.prepare(`SELECT at FROM events WHERE task_id=? AND at<=?
+    AND (kind IN ('task.suspended','task.completed') OR (kind='task.finished' AND json_extract(payload,'$.phase') IN ('completed','suspended'))) ORDER BY seq DESC LIMIT 1`).get(task.id,historicalAt??engine.at()):undefined;
+  const timeEnd=stopped?.at as string??updatedAt;
   const { observations, progress: _stages, ...rest } = task;
   return {
-    ...rest, branches, branchCounts, calls: captured ? rest.calls : {}, actions: captured ? rest.actions : [], check, reportCheck, phase, progress, workItems: work.items, workGroups, workCounts, progressSource: work.source, updatedAt, metrics,
+    ...rest, resourceUsage:projectUsage(task,historicalAt?Date.parse(historicalAt):engine.now().getTime(),timeEnd), branches, branchCounts, calls: captured ? rest.calls : {}, actions: captured ? rest.actions : [], check, reportCheck, phase, progress, workItems: work.items, workGroups, workCounts, progressSource: work.source, updatedAt, metrics,
     observations: captured ? observations.map(({ input, output, ...index }, i) => ({ ...index, ref: `E${i + 1}` })) : [],
   };
 }
 export function summaries(engine: Engine): TaskSummary[] {
   return engine.store.list().map(item => {
-    const { id, goal, status, createdAt, owner, revision, phase, progress, metrics, budget, workCounts, branchCounts, updatedAt, progressSource, evidenceMode } = projectTask(engine, engine.store.get(item.id));
-    return { id, goal, status, createdAt, owner, revision, phase, progress, metrics, budget, workCounts, branchCounts, updatedAt, progressSource, evidenceMode };
+    const { id, goal, status, createdAt, owner, revision, phase, progress, metrics, budget, workCounts, branchCounts, updatedAt, progressSource, evidenceMode, resourceUsage } = projectTask(engine, engine.store.get(item.id));
+    return { id, goal, status, createdAt, owner, revision, phase, progress, metrics, budget, workCounts, branchCounts, updatedAt, progressSource, evidenceMode, resourceUsage };
   });
 }
 
@@ -99,6 +104,7 @@ export interface ReplayState { task: TaskView; events: TimelineEvent[]; seq: num
 const titles: Record<string, string> = {
   'task.created': '开始目标', 'task.resumed': '接管并恢复', 'task.suspended': '暂停任务', 'task.completed': '已完成', 'task.checkpoint': '保存阶段进展',
   'tool.started': '开始历史工具调用', 'observation.captured': '保存原始观测', 'claim.revised': '更新结论', 'criterion.updated': '更新目标条件', 'action.updated': '更新行动进展',
+  'usage.updated':'更新用量统计',
   'task.reopened':'任务重开', 'task.reviewed':'复核新证据与反馈',
   'hint.added': '补充人工提示', 'report.saved': '保存报告', 'continuation.suggested': '提醒未完成事项',
   'agent.started': '助手开始执行', 'agent.returned': '助手执行结束，待汇总',
@@ -109,13 +115,14 @@ export function projectEvent(row: { seq: number; kind: string; at: string; paylo
   const payload = row.payload ?? {}, input = payload.input ?? payload;
   const value = (v: unknown) => typeof v === 'string' ? v : '';
   let title = titles[row.kind] ?? '更新任务记录', status = '', detail = '', summary = '';
-  const advanced = ['tool.started', 'observation.captured', 'claim.revised', 'criterion.updated', 'action.updated', 'report.saved'].includes(row.kind);
+  const advanced = ['usage.updated', 'tool.started', 'observation.captured', 'claim.revised', 'criterion.updated', 'action.updated', 'report.saved'].includes(row.kind);
   if (row.kind === 'task.finished' || row.kind === 'task.checked') {
     status = value(payload.phase);
     title = ({ completed: '已完成', suspended: '暂停任务', incomplete: '完成检查未通过' } as Record<string, string>)[status] ?? '完成检查';
     summary = value(input.summary);
     detail = Array.isArray(payload.validation?.issues) ? payload.validation.issues.filter((s: unknown) => typeof s === 'string').join('\n') : '';
-  } else if (row.kind === 'task.resumed') { summary = payload.takeover ? '新会话接管目标，继续已有结论与未解决问题。' : '继续当前会话保存的目标与进展。'; }
+  } else if (row.kind === 'usage.updated') { summary='已同步宿主的数值统计，不包含工具参数、结果或对话。'; }
+  else if (row.kind === 'task.resumed') { summary = payload.takeover ? '新会话接管目标，继续已有结论与未解决问题。' : '继续当前会话保存的目标与进展。'; }
   else if(row.kind==='task.reopened'){summary=value(payload.reason);detail='保留原完成记录，更新执行代次后继续探索。';}
   else if(row.kind==='task.reviewed'){summary=value(payload.summary);detail=`已复核快照 ${payload.snapshot}，后续新信息仍需另行复核。`;}
   else if(row.kind==='hint.added'){summary=value(input.text);detail=`提供者：${value(input.author)} · 人工反馈，不自动作为事实或重开任务。`;}

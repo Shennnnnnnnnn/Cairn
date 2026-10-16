@@ -118,3 +118,13 @@ npm pack --dry-run
 ```
 
 The global installer packages a source-independent copy. For an existing managed Multica integration, `npm run install:global -- --target multica` also updates its MCP and shared skill while preserving the task database and the agent's model/instructions.
+
+
+## Resource usage (4.8)
+
+- Full Node 26 build/test suite: **234 passing tests**. Node 24 resource accounting and native adapter suites: **39 passing tests**.
+- Added checks for privacy (including receipt/config tables), duplicate and failed returns, original-task attribution after switching goals, old-owner fencing, actual zero versus unavailable tokens, cache inclusion, cumulative baselines/restart/older events, numeric-only transcript import, paused/completed timers, takeover/reopen accumulation and historical projections. Usage updates do not increment the semantic revision.
+- Real installed Pi 1.1.0 CLI with an isolated **local protocol fixture**, not a real model: `node scripts/pi-fixture-smoke.mjs --curated`. Two native sessions made seven fixed provider responses, producing **140 input + 210 output = 350 tokens**, **7 model responses**, **1 returned business tool** and **4 Cairn tools**; pause/resume/completion succeeded with **zero raw observations and zero captured calls**. This includes the model responses immediately before binding and after stopping the same native turn.
+- Ego Lite browser verification: desktop 1512×828 and mobile 390×844, no horizontal overflow. The blue/white resource strip showed the exact saved totals; replay at creation showed unavailable counts, and the final 16/16 frame showed 350 tokens / 1 business tool. The narrow graph fitted within its canvas after resize. No model was called to manufacture the replay.
+
+Claude/Codex accounting is verified with known numeric metadata fixtures and their existing hook adapters, not claimed as a new real-model or real-host acceptance run. Unknown transcript versions, missing native hooks, MCP-only hosts and unreported child usage remain explicit coverage limitations. The old real Codex samples were not backfilled with invented statistics.

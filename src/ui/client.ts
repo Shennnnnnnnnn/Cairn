@@ -1,4 +1,5 @@
 import type { TaskView, TaskSummary, TimelineEvent, ReplayPage, ReplayState } from './view.js';
+import { usageTime, elapsedLabel } from './usage.js';
 import type { Observation } from '../core/types.js';
 import { projectGraph, layoutGraph, graphNodeSize, graphPalette, graphKindLabels } from './graph.js';
 import type { GraphNode } from './graph.js';
@@ -127,6 +128,7 @@ function resetReplay() {
   replayAxis = replayTimeline([]); replayClock = new ReplayClock(0);
 }
 function renderReplayTime() {
+  renderUsage();
   const position = replayClock.position, event = replayFrames[replayIndex];
   text('replay-position', `${formatDuration(position)} / ${formatDuration(replayAxis.durationMs)}`);
   text('replay-time', replayFrames.length ? new Date(replayAxis.startMs + position).toLocaleString('zh-CN', { hour12: false }) : '');
@@ -276,8 +278,25 @@ function renderCurrent() {
   text('branch-meta',`自主排查 · ${task.branchCounts.total} 个分支 · ${task.branchCounts.delegated} 个委派分支${task.branchCounts.review?` · ${task.branchCounts.review} 个待汇总`:''}`);
   tick(); renderGraph(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); renderReplay(); void renderDetails();
 }
+function renderUsage(){
+ if(!current)return;
+ const u=current.resourceUsage,n=(value:number)=>value.toLocaleString('zh-CN');
+ text('usage-tokens',u.tokens?n(u.tokens.total):'—');
+ const tokenDetail=u.tokens?`输入 ${n(u.tokens.input)} / 输出 ${n(u.tokens.output)}`:'宿主尚未提供用量';
+ text('usage-token-detail',tokenDetail);
+ byId('usage-token-detail').title=u.tokens?`${tokenDetail} · 缓存读取 ${n(u.tokens.cacheRead)} · 缓存写入 ${n(u.tokens.cacheWrite)} · 推理 ${n(u.tokens.reasoning)}${u.modelCalls===null?'':` · 模型响应 ${n(u.modelCalls)} 次`}。缓存包含在输入中，推理包含在输出中。`:tokenDetail;
+ text('usage-tools',u.toolCalls===null?'—':n(u.toolCalls));
+ text('usage-tool-detail',u.toolCalls===null?'未接入原生计数':`另有 Cairn ${n(u.cairnCalls??0)} 次 · 失败 ${n(u.toolErrors??0)} 次`);
+ byId('usage-tools').title='业务工具已返回的调用数，包含失败；Cairn 工具另计。工具内容不保存。';
+ const time=usageTime(current,replayActive?replayAxis.startMs+replayClock.position:Date.now(),u.stoppedAt??current.updatedAt);
+ text('usage-active',elapsedLabel(time.activeMs));text('usage-wall',elapsedLabel(time.wallMs));
+ text('usage-active-detail',time.activeMs===null?'历史任务未采集执行时长':`${time.partial?'接入统计后累计 · ':''}执行状态累计，扣除暂停`);
+ const hosts=[...new Set(u.sources.map(source=>source.split('/')[0]))];
+ text('usage-note',`${replayActive?'历史时刻 · ':''}${hosts.length?hosts.join(' / ')+' · ':''}仅统计已观测的主会话用量，不保存工具内容`);
+}
 function tick() {
   if (!current) return;
+  renderUsage();
   const deadline = current.budget.deadline, now = replayActive ? replayAxis.startMs + replayClock.position : Date.now();
   byId('clock-stat').hidden = !deadline || current.status === 'completed';
   text('clock-label', '提醒剩余时间');
