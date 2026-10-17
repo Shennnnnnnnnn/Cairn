@@ -10,6 +10,16 @@ Your CLI owns the model, account, sessions, tool approvals and concurrency. Cair
 
 The shared five-tool protocol now supports multi-hop joint prerequisites, finding revision history, delegated branch leases and reopening completed general goals after external feedback. The package also exports a typed `createHarness` entry point for embedding in custom hosts. See the [harness integration guide](docs/harness.zh-CN.md) and [implementation comparison](docs/optimization-roadmap.zh-CN.md).
 
+For longer explorations, save a small checkpoint when reusable facts emerge, a hypothesis changes, counterevidence appears or a direction closes. Use the returned blackboard agenda to choose the next useful test. Short tasks save one grounded checkpoint then finish {}; no worker pool or tool-by-tool bookkeeping is required.
+
+After saved findings cover the criteria, finish with `{}`. The model-facing finish accepts only outcome and a short summary; new/revised facts, covers and files belong in checkpoint. The host saves versioned handoffs automatically; SDK invoke retains legacy inputs. Explicit host-required files are collected automatically. The dashboard separates task completion, artifact acceptance and independent outcome assessment; missing assessment stays unreviewed. See the [implementation record](docs/optimization-round6.zh-CN.md), [artifact/handoff protocol](docs/artifacts-handoffs.zh-CN.md) and [OpenRig multi-session comparison](docs/multi-session-reference.zh-CN.md).
+
+Findings that explicitly reference declared artifacts bind to their file versions. After a file changes, review and explicitly resave the affected finding; resubmitting files alone never refreshes old support. Completed task views retire old actions, and reopening saves a new generation's handoff while preserving history. See [round seven](docs/optimization-round7.zh-CN.md).
+
+Codex registration explicitly forwards `CAIRN_DB`, verification and deadline settings through `env_vars`. Update existing installations with `cairn update --target codex` and restart the connection so MCP environment filtering cannot silently omit host configuration.
+
+Checkpoint object-array encoding compatibility now covers findings, progress, artifacts and handoffs, including Pi preparation before host validation. Finish stays small; generic exploration compares mechanisms on the same subject before changing scope. See [round-nine implementation](docs/optimization-round9.zh-CN.md) and the [same-model Pi comparison](evaluations/public-rca/comparison-round9.zh-CN.md): three cases repeated three times per arm, no evaluator budgets, 9/9 joint accuracy in both arms, 8/9 vs 9/9 effective deliveries, and 39.3% fewer recorded tokens with Cairn. The missing native delivery followed a connection failure; this does not establish a reasoning gain. Cost still varies and handoff recovery was not exercised.
+
 ## Quick start
 
 Requires **Node.js 24 or newer**. Run once from the Cairn repository root:
@@ -65,7 +75,7 @@ Generic `cairn mcp`, including Multica, binds a fresh connection identity automa
 
 The agent reads `package.json` with its preferred host tool. Cairn creates no raw observation or E# alias in this default mode.
 
-**`cairn_finish`:** save the conclusion and check completion together.
+**`cairn_checkpoint`:** save the grounded result and explicit coverage.
 
 ```json
 {
@@ -75,12 +85,13 @@ The agent reads `package.json` with its preferred host tool. Cairn creates no ra
     "text": "package.json declares name=cairn.",
     "status": "supported",
     "basis": "Read the name field in the project manifest.",
-    "references": ["package.json"]
+    "references": ["package.json"],
+    "covers": ["c1"]
   }]
 }
 ```
 
-A new supported finding covers the sole criterion automatically. Multiple criteria use `covers: ["c1", "c2"]`. Missing supported findings or coverage keep the task active with `phase: "incomplete"`. The program checks the recorded structure and coverage; it does **not** open a file/link to verify its contents or establish causal truth.
+Then call `cairn_finish {}`. Model findings require explicit `covers`; intermediate facts use `covers:[]`. Multiple criteria use `covers: ["c1", "c2"]`. Missing supported findings or coverage keep the task active with `phase: "incomplete"`. By default, the program checks recorded structure and coverage; it does **not** open a file/link to verify its contents or establish causal truth. Hosts can add the optional completion verifier described below.
 
 Longer work uses `cairn_checkpoint` at milestones. Include stable finding `key` values, `basis`, `references`, unresolved `questions`, a `next` action and optional progress:
 
@@ -96,7 +107,7 @@ Longer work uses `cairn_checkpoint` at milestones. Include stable finding `key` 
 }
 ```
 
-Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelled`. They describe reported work; they are separate from the goal's completion conditions. Checkpoint summaries describe the current milestone and do not overwrite an existing report summary. An explicit finish `summary` or `report.summary` sets the final report summary.
+Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelled`. They describe reported work; they are separate from the goal's completion conditions. Checkpoint summaries describe the current milestone and do not overwrite an existing report summary. A checkpoint `report.summary` or short finish `summary` sets the final summary.
 
 | Fixed tool | Purpose |
 | --- | --- |
@@ -104,9 +115,19 @@ Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelle
 | `cairn_resume` | Restore and bind a task; explicitly take over another session's work |
 | `cairn_read` | Read context, curated findings/references, task details or paginated history |
 | `cairn_checkpoint` | Save findings, progress, criterion coverage and open questions together |
-| `cairn_finish` | Save and validate completion, or suspend incomplete work |
+| `cairn_finish` | Check saved coverage and acceptance, then complete or suspend |
 
 The [Chinese goal workflow guide](docs/goal-workflow.zh-CN.md) provides a complete example without tool configuration or call records.
+
+## Optional host verification and deadlines
+
+Checkpoint and finish return compact receipts; use `cairn_read` for full evidence. A model checkpoint requires a real increment: keyed findings with status/grounds/covers, or changed questions/next/progress/files. Summary is optional; summary-only calls are rejected. The receipt distinguishes added and revised facts; cosmetic retries do not advance the state. Branch control retains its explicit contract.
+
+Before creating a task, a trusted host can set `CAIRN_VERIFY_COMMAND` to a JSON argv array such as `["node","/absolute/path/verify.mjs"]` and optionally `CAIRN_VERIFY_TIMEOUT_MS` (default 10000). No shell is used. The command receives task JSON on stdin and returns `{"ok":true}` or `{"ok":false,"issues":[{"message":"Regression failed","claims":["finding-key"]}]}` on stdout. Verification errors, timeouts and rejected results prevent completion; late results cannot complete a changed or interrupted task. A pass proves only what that verifier checks.
+
+SDK hosts can supply `completionVerifier: {id, verify(task, signal)}` to `createHarness` and finish through the tools or `engine.finishVerified(...)`. Synchronous `engine.finish(...)` checks existing receipts. Rechecking a completed general task with `engine.verify(...)` can reopen it on counterevidence, preserving its previous completion and clearing criterion coverage. Frozen emergency/delivered reports retain their existing rules.
+
+`CAIRN_DEADLINE` (ISO timestamp) and `CAIRN_SUBMIT_RESERVE_MS` (default 30000) provide advisory host timing. Create, resume and reopen use the earlier deadline and larger reserve. Reserve/expiry reminders work without progress items and are checked on host tool/lifecycle callbacks. An in-flight model request can delay or miss a reminder; the host still owns termination. Task completion, verification scope and the latest host lifecycle event are shown separately.
 
 ## Goals and budgets
 
@@ -302,3 +323,6 @@ node scripts/claude-fixture-smoke.mjs
 Cairn originated as a goal-directed exploration engine, validated in the Tencent Cloud AI penetration testing challenge. It carries its goal, evidence and human-hint ideas into reusable CLI plugins.
 
 Licensed under [AGPL-3.0](LICENSE).
+
+
+Optional submitted-file hashes, scoped acceptance receipts, layered exploration handoffs and the submit/status/graph/hint CLI are documented in [artifacts and handoffs](docs/artifacts-handoffs.zh-CN.md). The host continues to own model execution.

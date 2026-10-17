@@ -1,5 +1,6 @@
+import {artifactIssues} from './core/artifacts.js';
 import type { Task } from './core/types.js';
-import { evaluateTask } from './core/engine.js';
+import { evaluateTask,assessOutcome,verificationCurrent } from './core/engine.js';
 import { projectWork } from './ui/view.js';
 import { projectGraph, layoutGraph, graphNodeSize } from './ui/graph.js';
 const escape=(value:unknown)=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -7,8 +8,15 @@ const statuses:Record<string,string>={pending:'待推进',running:'执行中',co
 export function markdown(task:Task){
  const report=task.report,curated=task.evidenceMode==='curated';
  const steps=task.progress?.length?`## 阶段进度\n\n${task.progress.map(p=>`- ${statuses[p.status]??p.status}${task.status!=='active'&&p.status==='running'?'（历史记录，当前任务已结束）':''}：${p.title}${p.detail?` — ${p.detail}`:''}`).join('\n')}\n\n`:'';
+ const artifactState=artifactIssues(task);
+ const assessment=assessOutcome(task);
+ const verification=task.verification;
+ const acceptance=task.completionVerifier?verification?`${verificationCurrent(task)?verification.status:`stale (historical ${verification.status})`} (${verification.verifier}); method: ${verification.method??'unspecified'}; scope: ${verification.scope??'host-defined'}\n${verification.issues.map(issue=>issue.message).join('\n')}`:'等待宿主外部验证':'仅结构校验，未配置外部验证';
+ const conclusion=`结论审查：${assessment?`${assessment.current?assessment.status:'stale'} · ${assessment.reviewer} · ${assessment.scope}\n${assessment.summary}`:'未评定；任务完成或产物验收不能代替独立结论审查'}\n\n`;
+ const handoffs=task.handoffs?.length?`## Exploration handoffs\n\n${task.handoffs.map(h=>`- ${h.key}: ${h.summary}\n  - report: ${h.report??'—'}; session: ${h.sessionRef??'—'}\n  - artifacts: ${(h.artifacts??[]).join(', ')}\n  - next: ${h.next??'—'}`).join('\n')}\n\n`:'';
+ const artifacts=task.artifacts?.length?`## Submitted artifacts\n\n${task.artifacts.map(a=>`- ${a.path} (${a.bytes} bytes), SHA-256: ${a.sha256}`).join('\n')}\n\nCurrent files: ${artifactState.length?artifactState.join('; '):'match submitted hashes'}\n\n`:'';
  const evidence=curated?(report?.curatedReferences??[]).map(c=>`- ${c.statement}\n  - AI 整理的依据：${c.basis??'见引用'}${c.references.length?`\n  - 文件／链接：${c.references.map(r=>'`'+r.replaceAll('`','\\`')+'`').join('、')}`:''}`).join('\n'):(report?.citations??[]).map(c=>`- ${c.observationId}${c.resultRef?` (${c.resultRef})`:''}: ${c.statement}`).join('\n');
- return `# ${task.goal}\n\nStatus: ${task.status}\n\n依据模式：${curated?'AI 整理；引用内容与因果判断未自动核验，不保存工具调用记录。':'自动取证；原始观测与结论分开保存。'}\n\n${steps}## Completion criteria\n\n${task.criteria.map(c=>`- ${c.id}: ${c.text}`).join('\n')}\n\n## Report\n\n${report?.summary??'No report saved.'}\n\n${report?.impact?`### Impact\n\n${report.impact.text}\n\n`:''}${report?.rootCause?`### Root cause (${report.rootCause.level})\n\n${report.rootCause.text}\n\nTrigger: ${report.rootCause.trigger??'not established'}\n\nAmplification: ${report.rootCause.amplification??'not established'}\n\n`:''}${report?.solution?`### Solution\n\n- Mitigation: ${report.solution.mitigation}\n- Fix: ${report.solution.fix}\n- Prevention: ${report.solution.prevention}\n\n`:''}## ${curated?'整理后的依据与引用':'Evidence'}\n\n${evidence||'暂无依据记录。'}\n`;
+ return `# ${task.goal}\n\nStatus: ${task.status}\n\n${conclusion}${artifacts}${handoffs}完成验证：${acceptance}\n\n宿主最近状态：${task.execution?.state??"未记录"}（与任务完成状态独立）\n\n依据模式：${curated?'AI 整理；引用内容与因果判断未自动核验，不保存工具调用记录。':'自动取证；原始观测与结论分开保存。'}\n\n${steps}## Completion criteria\n\n${task.criteria.map(c=>`- ${c.id}: ${c.text}`).join('\n')}\n\n## Report\n\n${report?.summary??'No report saved.'}\n\n${report?.impact?`### Impact\n\n${report.impact.text}\n\n`:''}${report?.rootCause?`### Root cause (${report.rootCause.level})\n\n${report.rootCause.text}\n\nTrigger: ${report.rootCause.trigger??'not established'}\n\nAmplification: ${report.rootCause.amplification??'not established'}\n\n`:''}${report?.solution?`### Solution\n\n- Mitigation: ${report.solution.mitigation}\n- Fix: ${report.solution.fix}\n- Prevention: ${report.solution.prevention}\n\n`:''}## ${curated?'整理后的依据与引用':'Evidence'}\n\n${evidence||'暂无依据记录。'}\n`;
 }
 export function html(task:Task){
  const curated=task.evidenceMode==='curated',obs=curated?[]:task.observations,claims=task.claims;

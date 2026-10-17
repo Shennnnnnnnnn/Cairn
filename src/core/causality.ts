@@ -41,3 +41,15 @@ export function normalizeCausality(task: Task) {
   }
   if (ready.length !== nodes.size) throw new CairnError('dependency_cycle', 'Dependencies must form a DAG; this update introduces a cycle');
 }
+
+/** Resolve annotation sources through the same identities as the graph, without adding edges. */
+export function resolveSources(task:Task,values:string[]):string[] {
+  if(!Array.isArray(values)||values.some(v=>typeof v!=='string'||!v.trim()))throw new CairnError('invalid_dependency','from must contain nonempty dependency references');
+  const entries=[...task.claims.map(c=>({ref:`claim:${c.id}`,aliases:[c.id,c.key]})),...(task.progress??[]).map(p=>({ref:workRef(p),aliases:[p.key,`work:${p.key}`]}))];
+  return [...new Set(values.map(value=>{
+    const exact=entries.find(e=>e.ref===value);if(exact)return exact.ref;
+    const matches=entries.filter(e=>e.aliases.includes(value));
+    if(matches.length!==1)throw new CairnError(matches.length?'ambiguous_dependency':'invalid_dependency',`Unknown or ambiguous handoff/focus source ${value}; use claim:ID or work:agent:KEY / work:host:KEY`);
+    return matches[0]!.ref;
+  }))];
+}

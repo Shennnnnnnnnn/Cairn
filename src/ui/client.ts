@@ -60,13 +60,13 @@ function showError(error?: unknown) { const banner = byId('error'); banner.hidde
 function renderTasks() {
   const query = byId<HTMLInputElement>('search').value.trim().toLowerCase(), filter = byId<HTMLSelectElement>('filter').value;
   const list = byId('tasks'); list.replaceChildren(); text('task-count', tasks.length);
-  const shown = tasks.filter(t => (filter === 'all' || t.status === filter) && `${t.goal} ${t.id}`.toLowerCase().includes(query));
+  const shown = tasks.filter(t => (filter === 'all' || t.status === filter) && `${t.title??''} ${t.goal} ${t.id}`.toLowerCase().includes(query));
   for (const task of shown) {
     const button = create('button', `task${task.id === selectedTask ? ' selected' : ''}`); button.dataset.taskId = task.id;
     button.setAttribute('aria-current', task.id === selectedTask ? 'true' : 'false');
     const top = create('div', 'task-top'); top.append(create('i', `dot ${task.status}`), create('span', '', task.phase.label));
     const bottom = create('div', 'task-bottom'); bottom.append(create('span', '', task.owner.host), create('span', '', `${task.progress.satisfied}/${task.progress.total} 目标条件`));
-    button.append(top, create('div', 'task-title', task.goal), bottom); button.onclick = () => selectTask(task.id); list.append(button);
+    button.append(top, create('div', 'task-title', task.title??task.goal), bottom); button.onclick = () => selectTask(task.id); list.append(button);
   }
   if (!shown.length) list.append(create('div', 'task-empty', tasks.length ? '没有匹配的任务。' : '等待 CLI 创建第一个任务。'));
   const cards=byId('task-cards');cards.replaceChildren();
@@ -74,7 +74,7 @@ function renderTasks() {
     const card=create('button','task-card');card.dataset.taskId=task.id;
     const header=create('div','task-card-header');header.append(create('span','mono',task.id.slice(0,18)),create('span',`phase ${task.phase.key}`,task.phase.label));
     const bottom=create('div','task-bottom');bottom.append(create('span','',`${task.owner.host} · 更新于 ${formatTime(task.updatedAt)}`),create('span','card-open','打开任务 →'));
-    card.append(header,create('h2','',task.goal),create('div','card-summary',`${task.progress.satisfied}/${task.progress.total} 目标条件已满足 · ${task.metrics.supported} 条已形成结论`),bottom);
+    card.append(header,create('h2','',task.title??task.goal),create('div','card-summary',`${task.progress.satisfied}/${task.progress.total} 目标条件已满足 · ${task.metrics.supported} 条模型支持的发现`),create('div',`assessment-state ${task.assurance.conclusionState}`,task.assurance.conclusion),bottom);
     card.onclick=()=>selectTask(task.id);cards.append(card);
   }
   if(!shown.length)cards.append(create('div','task-empty','没有匹配的任务。'));
@@ -84,6 +84,10 @@ function applyMode(){
   byId(overviewMode?'global-status':'head-status').append(byId('connection'));
   byId('overview').hidden=!overviewMode||!tasks.length;byId('empty').hidden=!overviewMode||!!tasks.length;byId('task-view').hidden=overviewMode;
 }
+window.addEventListener('hashchange',()=>{
+  let id='';try{id=decodeURIComponent(location.hash.slice(1));}catch{}
+  if(id)selectTask(id);else{selectedTask='';overviewMode=true;applyMode();void refresh();}
+});
 function selectTask(id: string) {
   overviewMode=false;applyMode();
   if (selectedTask !== id) { selectedTask = id; selectedNode = 'origin'; needsFit = true; current = undefined; hintDraft='';reopenDraft='';rawCache.clear(); }
@@ -114,11 +118,13 @@ async function refresh() {
 function renderCurrent() {
   const task = current!;
   text('task-id', `${task.id.slice(0, 19).toUpperCase()} · ${task.profile === 'emergency' ? '应急比赛' : '通用任务'}`);
-  text('goal', task.goal); text('phase', task.phase.label); byId('phase').className = `phase ${task.phase.key}`;
+  text('goal', task.title??task.goal); text('phase', task.phase.label); byId('phase').className = `phase ${task.phase.key}`;
   text('owner', `${task.owner.host} · ${task.owner.epoch > 1 ? `执行代次 ${task.owner.epoch}` : '主会话'}`);
   text('created', `创建于 ${new Date(task.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}`);
   text('updated', `最近更新 ${formatTime(task.updatedAt)}`);
   byId('pause-task').hidden=task.status!=='active';
+  const assurance=byId('assurance');assurance.replaceChildren();
+  for(const [label,value] of [['任务',task.phase.label],['产物验收',`${task.assurance.artifacts} · ${task.assurance.acceptance}`],['结论',task.assurance.conclusion]])assurance.append(create('span',label==='结论'?`assessment-state ${task.assurance.conclusionState}`:'',`${label}：${value}`));
   tick(); renderGraph(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); void renderDetails();
 }
 function tick() {
@@ -159,7 +165,7 @@ function renderGraph() {
     const lines = graphLines(node.label);
     lines.forEach((line, i) => group.append(svg('text', { x: 13, y: lines.length === 1 ? 47 : 40 + i * 18, class: 'label', fill: palette.text }, line)));
     group.append(svg('text', { x: 13, y: 80, class: 'state', fill: palette.muted }, short(node.state, 27)));
-    const met = node.kind === 'goal' ? task.status === 'completed' || task.check.ok : node.kind === 'criterion' ? !task.check.unmet.includes(node.data.id) : node.status === 'completed';
+    const met = node.kind === 'goal' ? task.status === 'completed' || task.check.ok && (task.reportCheck?.ok??!task.completionVerifier) : node.kind === 'criterion' ? !task.check.unmet.includes(node.data.id) : node.status === 'completed';
     if (met) {
       group.append(svg('circle', { cx: width - 17, cy: 16, r: 8, fill: node.status === 'goal' ? '#d1fae5' : '#eef2ff' }));
       group.append(svg('text', { x: width - 17, y: 20, 'text-anchor': 'middle', class: 'node-tick', fill: node.status === 'goal' ? '#047857' : '#4f46e5' }, '✓'));
@@ -211,6 +217,9 @@ async function renderDetails() {
   text('detail-kind', graphKindLabels[node.kind]);
   panel.append(create('div', 'detail-tag', node.state), create('h2', '', node.kind === 'origin' || node.kind === 'goal' ? task.goal : node.label));
   if (node.kind === 'origin' || node.kind === 'goal') {
+    metadata(panel,'产物／契约验收',task.assurance.acceptance);
+    metadata(panel,'结论审查',task.assurance.conclusion);
+    if(task.execution)metadata(panel,'宿主最近状态',`${task.execution.state} · ${formatTime(task.execution.at)}`);
     if(task.conclude)metadata(panel,'探索收尾',task.conclude.status==='saved'?'已保存阶段结果':'已请求保存 · 等待宿主响应');
     if(task.checkpoint){
       heading(panel,'最新进展');panel.append(create('div','detail-text',task.checkpoint.summary));
@@ -321,6 +330,14 @@ function renderReport() {
   if(task.reportCheck?.warnings?.length)panel.append(create('div','notice',`引用检查提示：${task.reportCheck.warnings.join('；')}`));
   if(task.reportCheck&&!task.reportCheck.ok)panel.append(create('div','notice',`报告仍需补齐：${task.reportCheck.issues.join('；')}`));
   const section = (title: string, value: string | undefined) => { if (!value) return; const block = create('section', 'report-section'); block.append(create('h3', '', title), create('p', '', value)); panel.append(block); };
+  section('产物／契约验收',task.assurance.acceptance);
+  section('结论正确性审查',task.assurance.conclusion);
+  if(task.assurance.assessment)section('审查依据与范围',`${task.assurance.assessment.reviewer} · ${task.assurance.assessment.summary} · ${task.assurance.assessment.scope}`);
+  section('状态含义','任务完成表示当前流程检查满足。文件、数值验收仅覆盖所声明范围，不能据此推导结论正确；模型自报 supported 不属于独立审查。');
+  section('宿主最近状态',task.execution?`${task.execution.state}（与任务完成状态独立）`:undefined);
+  section('核验方式与范围',task.verification?`${task.verification.method??'未声明'} · ${task.verification.scope??'由宿主检查定义'}`:undefined);
+  for(const artifact of task.artifacts??[])section('提交物',`${artifact.path} · ${artifact.bytes} bytes · SHA-256 ${artifact.sha256}`);
+  for(const handoff of task.handoffs??[]){section(`探索交接 · ${handoff.key}`,handoff.summary);section('报告 / 会话 / 后续',`${handoff.report??'—'} / ${handoff.sessionRef??'—'} / ${handoff.next??'—'}`);}
   section('结论摘要', task.report.summary); section('影响面', task.report.impact?.text);
   section(`根因${task.report.rootCause ? ` · ${{symptom:'现象级',service:'服务级',code:'代码级',root:'根因级'}[task.report.rootCause.level]}` : ''}`, task.report.rootCause?.text);
   section('触发因', task.report.rootCause?.trigger); section('放大机制', task.report.rootCause?.amplification);

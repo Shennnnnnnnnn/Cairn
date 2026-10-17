@@ -1,9 +1,10 @@
 import { Type } from '@sinclair/typebox';
 import { Store } from '../core/store.js';
 import { Engine } from '../core/engine.js';
-import { ToolRuntime, coreCatalog, type ToolDefinition } from '../tools.js';
+import { ToolRuntime, coreCatalog, prepareModelInput, type ToolDefinition } from '../tools.js';
 import { database } from '../paths.js';
 import { handleNative, normalize } from './hooks.js';
+import { hostOptions } from './host-options.js';
 
 // The adapter uses Pi's documented structural extension interface. Core imports no host SDK.
 export default function cairn(pi:any){
@@ -14,7 +15,7 @@ export default function cairn(pi:any){
  const session=(ctx:any)=>({host:'pi' as const,sessionId:ctx.sessionManager.getSessionId(),cwd:ctx.cwd});
  const ensure=(ctx:any)=>{
   const path=database(ctx.cwd);let resource=resources.get(path);
-  if(!resource){const store=new Store(path);resource={store,engine:new Engine(store),runtimes:new Map()};resources.set(path,resource);}
+  if(!resource){const store=new Store(path);resource={store,engine:new Engine(store,undefined,hostOptions()),runtimes:new Map()};resources.set(path,resource);}
   return resource;
  };
  const runtime=(ctx:any)=>{
@@ -27,9 +28,12 @@ export default function cairn(pi:any){
   delete inputSchema.$schema;delete inputSchema.properties?.session_id;
   if(Array.isArray(inputSchema.required))inputSchema.required=inputSchema.required.filter((name:string)=>name!=='session_id');
   const definition={name:tool.name,label:tool.name,description:tool.description,parameters:Type.Unsafe(inputSchema),
+   // Pi validates before execute; normalize the wire encoding at its documented
+   // preparation boundary too. The advertised and enforced schema stays strict.
+   prepareArguments:(input:unknown)=>prepareModelInput(tool.name,input),
    execute:async(_callId:string,input:any,signal:any,_update:any,ctx:any)=>{
     // Each invocation uses its actual Pi context, including after /new or /resume.
-    try{const result=await runtime(ctx).invoke(tool.name,input,signal);return {content:[{type:'text',text:JSON.stringify(result??{ok:true})}],details:result};}
+    try{const result=await runtime(ctx).invokeModel(tool.name,input,signal);return {content:[{type:'text',text:JSON.stringify(result??{ok:true})}],details:result};}
     catch(error){throw new Error(`Cairn: ${(error as Error).message}`);}
    }};
   registered.set(tool.name,definition);pi.registerTool(definition);
@@ -54,6 +58,7 @@ export default function cairn(pi:any){
  pi.on('before_agent_start',async(_event:any,ctx:any)=>{
   await refresh(ctx);
   const e=ensure(ctx).engine,s=session(ctx),task=e.active(s);
+  if(task)e.recordExecution(task.id,s,'running');
   const owns=task&&task.owner.host===s.host&&task.owner.sessionId===s.sessionId&&e.store.session(s)?.epoch===task.owner.epoch;
   const key=JSON.stringify([database(ctx.cwd),s.sessionId,s.cwd]),revision=JSON.stringify([task?.id,task?.revision,task?.status,task?.owner.epoch]);
   if(injectedContext.get(key)===revision)return;

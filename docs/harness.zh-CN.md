@@ -39,10 +39,10 @@ const harness = createHarness({
 });
 try {
   const catalog = await harness.tools.list(); // 相同的五个工具及 JSON Schema
-  const context = await harness.tools.invoke('cairn_start', {
+  const context = await harness.tools.invokeModel('cairn_start', {
     goal: '验证修复效果', criteria: ['回归验证通过'],
   });
-  // 把 catalog 和 invoke 接到自己的模型工具循环；执行仍由应用负责。
+  // 把 catalog 和 invokeModel 接到自己的模型工具循环；执行仍由应用负责。
   console.log(context);
 } finally {
   await harness.close(); // 关闭上游与数据库，可重复调用
@@ -50,6 +50,35 @@ try {
 ```
 
 也可直接使用导出的 `Engine`、`Store`、`evaluateTask` 和领域类型。直接集成时，写操作应携带创建或恢复结果中的 `owner.epoch`；`ToolRuntime` 背后的五工具入口已自动固定连接代次。暂停恢复、接管或重开后，旧连接必须显式 `cairn_resume` 才能更新绑定。
+
+## 简短回执、完成验证与宿主时间
+
+模型 checkpoint 需要真实增量，不能只交摘要。最小事实示例：`{"findings":[{"key":"fact","text":"已观测结果","status":"supported","basis":"实际核验","covers":[]}]}`。模型 finish 只接收 outcome 与可选短摘要，调用 `{}` 检查已存覆盖；完整旧输入由 SDK 的 `tools.invoke` 保持兼容，模型接入使用 `tools.invokeModel`。写入工具返回 taskId、revision、覆盖缺口、验证结果和宿主最近状态；完整结论、引用和事件仍保存在 SQLite，通过 `cairn_read` 按需读取。分支 claim / heartbeat / release / merge 可不带 summary，仍需明确 progress_key。
+
+模型 checkpoint／finish 回执是增量确认：不重复整份旧 finding 索引、刚提交的事实正文和历史交接路径；保留新增／修订项、失效引用、缺口、验收／修复反馈和问题／下一步。完整黑板、历史交接及 SDK 回执保持，缺细节时用聚焦 read；不要每次写入后重读全量状态。
+
+请求仍应传真实对象。模型 checkpoint 对 findings、progress、artifacts、handoffs 数组中单层 JSON 编码的对象和空白可选 next 做有界兼容规范化，随后严格校验，不补事实／状态／coverage／路径；空 next 按省略处理，不清空旧下一步。公开 schema 仍要求对象；不解析整个数组字符串或双重编码。Pi 1.1.0 的 prepareArguments 在宿主参数校验前调用同一规范化函数。收敛前应比较原目标与结论的主体／范围：先比较同一对象的不同机制，再比较层级；压力可能是起因、中介或后果。保留最强替代解释与区别性证据，证据不足则保留不确定性，没有自动层级或机制优先规则。
+
+`cairn_finish` 返回 `phase: "incomplete"` 时，`repair` 会列出缺失条件的 ID、说明和下一步动作。已有结论确实支持某项条件时，可用相同 finding key 补充 `covers`；缺少依据时应补证，或保存缺口并 `outcome: "suspended"`。不会自动分配覆盖或认可结论。缺口、Finding、Hint 和探索状态都没有变化的完成重试会提示 `unchanged`；计数在 3 封顶，SQLite 保留恢复所需状态。仅改写报告摘要或进度标题不算新事实。新的依据、条件覆盖、人工 Hint、探索状态或验收反馈变化后允许重新判断。匿名 Finding 的精确重试会复用原记录，包括规范化后的依赖引用；captured 模式还比较实际条件覆盖。需要修订同一结论时仍应使用稳定 key。
+
+宿主在创建目标前可传入 `completionVerifier: { id, verify(task, signal) }`，将自己的测试、产物检查或领域验证接入完成流程。返回 `{ok:true}`，或 `{ok:false, issues:[{message, claims?, references?}]}`。`claims` 可引用 finding 的 key 或 ID，`references` 记录检查依据。结构验收通过的活动任务申请完成时会运行新验证，已完成任务的无内容重试保持幂等，异步过程在 SQLite 事务外；任务修订、恢复代次变化或中断会使迟到结果失效。凭据只对应当时的任务修订与检查结果；产物文件在完成后发生变化，需要宿主显式再验证，Cairn 不后台监视文件。自定义 verifier 的 id 应标识检查规则版本。
+
+Pi 和 CLI / MCP 也支持宿主环境配置：
+
+```sh
+export CAIRN_VERIFY_COMMAND='["node","/absolute/path/verify.mjs"]'
+export CAIRN_VERIFY_TIMEOUT_MS=10000
+export CAIRN_DEADLINE=2026-10-17T12:00:00+08:00
+export CAIRN_SUBMIT_RESERVE_MS=90000
+```
+
+验证命令不经过 shell；stdin 是完整任务 JSON，stdout 只写一条上述结果，诊断可写 stderr。进程超时或输出超过 64KiB 时，验证按错误处理，不允许完成。只配置你信任的宿主程序，验证器不是模型输入的可执行参数。脚本仍使用宿主的权限；运行产物正确性取决于该脚本实际检查的内容。
+
+SDK 通过工具入口或 `engine.finishVerified(...)` 等待验证；同步 `engine.finish(...)` 只检查已有凭据。已完成的一般任务可用 `engine.verify(taskId, session)` 再验，失败沿既有 reopen 处理，保留上一轮完成快照、追加外部反馈并清空覆盖。无效 finding 引用会保留在诊断中，不会让失败记录回滚。交付冻结或 emergency 任务保留原有冻结规则。
+
+`hostBudget` 可在 SDK 提供 deadline / submitReserveMs；环境变量由 Pi / CLI 适配为同一选项。创建、恢复和重开取更早截止时间和更大预留。进入收尾窗口及到期各提醒一次，即使没有 progress 项、仅调用 Cairn 管理工具也可提醒。收尾窗口内不再给出一般探索续跑提示，两种证据模式到期后都不会在提醒去重后回退到探索。提醒依赖宿主工具／生命周期回调，在途模型请求可能使其延迟或错过。它是尽力通知，宿主负责实际终止；Cairn 不通过普通 curated 模式接管原生调用配额。
+
+任务 `completed`、验证器 `passed` 和宿主最近 `settled` 是独立事实。看板、读取和导出分别展示；`passed` 的范围以验证器为准，`running` 也只是最近观测事件。SDK 宿主可用 `engine.recordExecution(taskId, session, state)` 报告 running / settled / interrupted / closed，不把进程退出写成任务成功。
 
 ## 多跳探索与共同前提
 
@@ -59,9 +88,9 @@ try {
 {
   "summary": "交叉核对配置和日志后形成验证方向",
   "findings": [
-    {"key":"config","text":"配置存在超时差异","basis":"比对当前配置","covers":[]},
-    {"key":"logs","text":"日志显示重试放大","basis":"核对日志中的时间和请求关联","covers":[]},
-    {"key":"cause","text":"超时和重试共同放大故障","basis":"完成交叉验证","from":["verify"],"covers":["c1"]}
+    {"key":"config","text":"配置存在超时差异","status":"supported","basis":"比对当前配置","covers":[]},
+    {"key":"logs","text":"日志显示重试放大","status":"supported","basis":"核对日志中的时间和请求关联","covers":[]},
+    {"key":"cause","text":"超时和重试共同放大故障","status":"supported","basis":"完成交叉验证","from":["verify"],"covers":["c1"]}
   ],
   "progress": [
     {"key":"verify","title":"联合验证两项发现","status":"completed","from":["config","logs"]}
@@ -102,7 +131,7 @@ try {
 ```
 
 ```json
-{"progress_key":"source","branch_action":"checkpoint","lease_token":"TOKEN","summary":"完成源码核对","findings":[{"key":"cause","text":"发现潜在原因","basis":"源码检查结果","status":"proposed"}]}
+{"progress_key":"source","branch_action":"checkpoint","lease_token":"TOKEN","summary":"完成源码核对","findings":[{"key":"cause","text":"发现潜在原因","basis":"源码检查结果","status":"proposed","covers":[]}]}
 ```
 
 `branch_action: "release"` 释放租约，主会话也可显式释放自己的分支。Worker 不能改报告、完成条件、其他进度，也不能完成主任务。过期、释放、重新认领或任务代次变化后，旧 token 的写入会失败。租约只协调写入，不会停止宿主中的 Worker 进程。并行租约上限使用 captured 预算的 `maxParallel`，未设置时为 32；它不限制普通宿主工具调用。
@@ -139,6 +168,16 @@ Hint 在活动、暂停和完成状态均可追加；追加 Hint 本身不会重
 
 嵌入远程工作区时可提供 `createHarness({ ..., validateReference(reference, task) { ... } })`，返回诊断文本或 `undefined`，以宿主的引用规则替换本地检查。
 
-Stop 时存在未保存的运行阶段，会收到一次有界的 conclude 请求：保存已确认结果、被排除的假设、缺口与下一步；后续有效 checkpoint／finish 显示 saved。Pi 也会在压缩前注入请求。Claude／Codex 不依赖未支持的 PreCompact 输出字段，使用 Stop、恢复上下文和显式 checkpoint。显式中断、失去 Owner 或 captured 截止时间已过时不会继续唤起探索。
+Stop 时存在未保存的运行阶段，会收到一次有界的 conclude 请求：保存已确认结果、被排除的假设、缺口与下一步；后续有效 checkpoint／finish 显示 saved。Pi 也会在压缩前注入请求。Claude／Codex 不依赖未支持的 PreCompact 输出字段，使用 Stop、恢复上下文和显式 checkpoint。显式中断、失去 Owner、收尾预算窗口或任一种模式的截止时间已过时，不再通过一般 continuation 唤起探索；conclude 仅请求保存当前已经确认的增量事实和缺口，不等待新命令或结果。
 
 这一机制是宿主内的保存引导，不具备原版外部 dispatcher 的进程监控和强制同会话重试保证。模型质量、工具权限及真正的进程取消仍由接入方负责。
+
+
+产物摘要、独立验收范围、按需交接与简化 CLI 使用见 [产物验收与分层交接](artifacts-handoffs.zh-CN.md)。
+
+
+## 宿主生成的可靠交接
+
+创建任务、有效 checkpoint、挂起／宿主结束、接管前自动保存 keyed handoff。SQLite 正文为准，数据库旁的私有 handoffs 目录保存不可变 Markdown 投影；文件生成失败会明确标记 projectionError，正文仍可由 cairn_read view=handoffs 分页读取。自动记录只描述已保存状态，无法恢复尚未 checkpoint 的原生工作。
+
+source 记录 task、生成时 host/sessionId/cwd/epoch/revision、candidate 指纹和 state=saved；保存不等于发送、已读或责任接受。接管前保留前任来源，迟到会话仍被 epoch/lease 拦截。分支提交会自动保存带 branchKey 与真实 worker 来源的提案交接，不自动提升 supported 或授予覆盖。详细人工报告优先按关联 focus 返回；自动正文不会全量注入短上下文。

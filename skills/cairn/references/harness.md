@@ -23,7 +23,7 @@ Keep the returned `leaseToken` private. The default lease lasts 120 seconds; `le
 Submit through `cairn_checkpoint`:
 
 ```json
-{"progress_key":"source","branch_action":"checkpoint","lease_token":"TOKEN","summary":"Source reviewed","findings":[{"key":"cause","text":"Potential cause","status":"proposed","basis":"Relevant source comparison"}]}
+{"progress_key":"source","branch_action":"checkpoint","lease_token":"TOKEN","summary":"Source reviewed","findings":[{"key":"cause","text":"Potential cause","status":"proposed","basis":"Relevant source comparison","covers":[]}]}
 ```
 
 Workers cannot change coverage, reports, other progress items or finish the root goal. Use `branch_action: "release"` with the token to relinquish work. Expired/revoked tokens cannot be reused; reclaim an available branch to get a new token. A lease does not start or terminate a host process.

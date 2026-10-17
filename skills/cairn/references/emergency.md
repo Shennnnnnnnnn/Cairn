@@ -6,7 +6,7 @@ Use the organizer's configured `cairn_tool_*` tools. Each exposes its own parame
 
 The match has one 30-minute deadline shared by all rounds. Reserve time for submission and team review. Repeating a task does not reset the clock.
 
-Provide the report fields in checkpoint or finish:
+Provide the report fields in checkpoint, then use finish {} to check the saved report:
 
 1. `report.impact`: affected functions, users, data and measured scope, with observationIds (E1 aliases are accepted). Distinguish samples from full-population coverage.
 2. `report.rootCause`: text and causal level (`symptom`, `service`, `code`, `root`); add trigger/amplification when supported.

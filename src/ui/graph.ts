@@ -25,12 +25,12 @@ export function projectGraph(task: GraphTask): GraphModel {
   const nodes: GraphNode[] = [], edges: GraphEdge[] = [];
   const add = (rank: number, kind: GraphNodeKind, id: string, label: string, state: string, status: GraphState, data: any) => nodes.push({ rank, kind, id, label, state, status, data });
   const connect = (from: string, to: string, relation: GraphEdge['relation'], state: GraphEdge['state'] = 'completed') => edges.push({ from, to, relation, state });
-  const claimLabels = { proposed: '待验证', supported: '已形成结论', refuted: '已反驳', inconclusive: '依据不足' };
+  const claimLabels = { proposed: '待验证', supported: '模型判断有支持', refuted: '已反驳', inconclusive: '依据不足' };
   const workIds=new Map(task.workItems.map(item=>[`work:${item.source}:${item.key}`,task.workItems.filter(other=>other.key===item.key).length>1?`work:${item.source}:${item.key}`:`work:${item.key}`]));
   const dependency=(ref:string)=>workIds.get(ref)??ref;
   const dependencies=(from:string[]|undefined,to:string)=>{for(const ref of from??[])edges.push({from:dependency(ref),to,relation:'dependency',state:'completed',group:`dependencies:${to}`});};
   add(0, 'origin', 'origin', task.origin, '起点 · 已知背景', 'origin', task);
-  add(4, 'goal', 'goal', task.goal, task.status === 'completed' ? '✓ 目标已完成' : task.check.ok ? '✓ 条件已满足 · 待完成检查' : task.status === 'suspended' ? '目标尚未完成 · 任务已暂停' : '目标尚未完成', 'goal', task);
+  add(4, 'goal', 'goal', task.goal, task.status === 'completed' ? '✓ 流程已完成 · 结论另行审查' : task.check.ok ? '✓ 条件已满足 · 待完成检查' : task.status === 'suspended' ? '目标尚未完成 · 任务已暂停' : '目标尚未完成', 'goal', task);
 
   // Historical criterion projections duplicate the real target nodes and are omitted.
   for (const item of task.workItems.filter(i => i.source !== 'criterion')) {
@@ -64,7 +64,7 @@ export function projectGraph(task: GraphTask): GraphModel {
   }
   for (const criterion of task.criteria) {
     const met = !task.check.unmet.includes(criterion.id);
-    add(3, 'criterion', `criterion:${criterion.id}`, criterion.text, met ? '✓ 目标条件已满足' : '○ 目标条件待满足', 'goal', criterion);
+    add(3, 'criterion', `criterion:${criterion.id}`, criterion.text, met ? '✓ 已有发现覆盖此条件' : '○ 目标条件待满足', 'goal', criterion);
     for (const ref of criterion.claimIds) connect(`claim:${ref}`, `criterion:${criterion.id}`, 'criterion', met ? 'completed' : 'pending');
     connect(`criterion:${criterion.id}`, 'goal', 'goal', met ? 'completed' : 'pending');
   }

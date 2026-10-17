@@ -26,4 +26,6 @@ export const styles = `
 @media(max-width:800px){.legend{display:flex;flex-wrap:wrap}.graph-toolbar{gap:8px}.toolbar-right{justify-content:flex-start;flex-basis:100%;flex-wrap:wrap}.legend{flex:1}.graph-labels{gap:12px;font-size:8px}.timeline-list{padding-left:23px}.timeline-list:before{left:4px}.timeline-event:before{left:-23px}.event-card-heading{align-items:flex-start;flex-direction:column;gap:4px}.event-card{padding:14px}}
 @media(max-width:600px){.panel{min-height:460px}.board-main{min-height:0}.graph-wrap{min-height:560px}.graph-toolbar{padding-left:12px;padding-right:12px}.graph{height:450px;flex:1}.tabs{padding:0 16px;gap:23px}.basis-card{padding:17px}.basis-header{align-items:flex-start;flex-direction:column;gap:4px}.graph-meta{margin-left:32px}.graph-labels span:nth-child(2){display:none}}
 @media(prefers-reduced-motion:reduce){.edge.running{animation:none}}
+
+.assurance-row{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 0 0;font-size:12px;color:#64748b}.assessment-state{font-size:12px;color:#64748b}.assessment-state.failed{color:#b91c1c}.assessment-state.passed{color:#047857}.assessment-state.stale,.assessment-state.inconclusive{color:#b45309}
 `;

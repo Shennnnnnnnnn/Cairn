@@ -10,6 +10,16 @@ Cairn 3.0 将模型操作收敛为五个工具：**开始、恢复、读取、�
 
 本轮增加通用 ESM／TypeScript harness 入口、多跳共同前提图、结论修订历史、带租约的分支协作，以及外部反馈重开。五个工具名称保持不变；看板支持人工提示、暂停与重开。参见 [通用 Harness 接入与协作](docs/harness.zh-CN.md) 和 [原版对比及实现记录](docs/optimization-roadmap.zh-CN.md)。
 
+长探索应在第一批事实、假设改变、反证或方向结束时保存小型 checkpoint，再依据回执中的黑板议程选择下一项检验。短任务保存一次有依据的 checkpoint 后 finish {}；无需逐工具记账或常驻推理 Worker。
+
+已有发现覆盖条件后，`cairn_finish {}` 即可收尾。模型侧 finish 只接受结束状态与短摘要，新增事实、覆盖、报告和文件统一写 checkpoint；SDK invoke 保留旧输入兼容。宿主自动保存带候选版本与会话来源的交接。宿主明确要求的文件会自动收集。UI 分开显示任务完成、产物验收和独立结论审查，未审查时显示“结论未评定”。参见 [第六轮实现](docs/optimization-round6.zh-CN.md)、[产物与交接](docs/artifacts-handoffs.zh-CN.md)及 [OpenRig 多会话设计对照](docs/multi-session-reference.zh-CN.md)。
+
+显式引用已声明产物的事实会绑定文件版本；文件变化后须检查并重新保存该事实，单独重拍产物不会刷新旧依据。完成后的当前交接停用旧行动，重开立即保存新代次交接，历史记录保留。详见 [第七轮优化](docs/optimization-round7.zh-CN.md)。
+
+Codex 安装器会显式转发 `CAIRN_DB`、验收与时限配置；已有安装请执行 `cairn update --target codex` 后重启连接，避免 MCP 环境筛选使宿主配置未生效。
+
+模型 checkpoint 对 findings/progress/artifacts/handoffs 的单层对象编码统一兼容，Pi 在宿主校验前准备参数；finish 保持简化，黑板增量与历史按需读取。因果探索先比较同一对象的不同机制，再比较层级，不设领域或层级优先规则。见[第九轮实现](docs/optimization-round9.zh-CN.md)和[同模型 Pi 对照](evaluations/public-rca/comparison-round9.zh-CN.md)：DeepSeek 三题各三次、无预算，两组联合命中均9/9；原生/Cairn有效交付8/9、9/9，Cairn记录tokens少39.3%。原生少一次交付源于连接错误，不能全归因于框架；成本仍有波动，恢复未实测。
+
 ## 快速开始
 
 需要 **Node.js 24 或更新版本**。先在 Cairn 仓库根目录安装全局命令：
@@ -95,7 +105,7 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 
 **2. Agent 使用宿主已有工具读取 `package.json`。** 默认不保存读取的工具名、参数和结果，不生成 `E1` 等原始取证编号。
 
-**3. `cairn_finish`：** 一次写入整理后的结论并检查完成条件。
+**3. `cairn_checkpoint`：** 保存有依据的结果并显式关联完成条件。
 
 ```json
 {
@@ -105,12 +115,13 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
     "text": "package.json 的 name 字段为 cairn。",
     "status": "supported",
     "basis": "读取项目清单，核对 name 字段。",
-    "references": ["package.json"]
+    "references": ["package.json"],
+    "covers": ["c1"]
   }]
 }
 ```
 
-单一完成条件会自动关联新增的已支持结论；多个条件用 `covers: ["c1", "c2"]` 关联。未满足条件时保持 `active`，返回 `phase: "incomplete"` 和缺口。程序检查记录格式、结论状态和覆盖关系，**不会自动打开引用验证内容，也不能替 AI 判断因果是否成立**。
+随后调用 `cairn_finish {}`。模型侧的条件覆盖必须显式给出；中间事实使用 `covers:[]`，多个条件用 `covers: ["c1", "c2"]` 关联。未满足条件时保持 `active`，返回 `phase: "incomplete"` 和缺口。默认检查记录格式、结论状态和覆盖关系。外部验证为可选宿主能力；**默认不会打开引用验证内容，也不能替 AI 判断因果是否成立**。
 
 ### 长任务：保存依据和可见的执行进度
 
@@ -134,7 +145,7 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 - `progress.status` 用 `pending`、`running`、`completed`、`blocked`、`cancelled` 表示工作状态。它与目标是否通过验收分别保存。
 - `questions` 是未解决问题，`next` 是下一步。无需登记每次思考或每个工具调用。
 
-阶段记录的 `summary` 描述当前进展，不覆盖已有最终报告摘要；结束时明确传入 `summary` 或 `report.summary` 设置最终报告。简单任务可直接 finish，无需先 checkpoint。无新增内容地重试已完成的 finish，会返回已有状态。
+阶段记录的 `summary` 描述当前进展，不覆盖已有最终报告摘要；通过 checkpoint 的 `report.summary` 或 finish 的短 `summary` 设置最终摘要。简单任务保存一次有依据的 checkpoint 即可。无新增内容地重试已完成的 finish，会返回已有状态。
 
 | 五个固定工具 | 用途 |
 | --- | --- |
@@ -142,7 +153,22 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 | `cairn_resume` | 恢复或显式接管任务，绑定当前连接 |
 | `cairn_read` | 读取摘要、整理依据与引用、完整任务或分页历史 |
 | `cairn_checkpoint` | 一次保存结论、进度、目标覆盖、问题和下一步 |
-| `cairn_finish` | 一次保存并验收完成，或保存缺口后暂停 |
+| `cairn_finish` | 检查已存覆盖与验收，再完成或挂起 |
+
+写入 checkpoint / finish 返回简短回执，含覆盖缺口、验证结果与宿主最近状态；完整依据按需用 `cairn_read` 读取。模型 checkpoint 需要 keyed Finding（含状态、依据、显式 covers），或问题／下一步／进展／文件的真实增量；summary 可省略，摘要单独提交会拒绝，回执区分新增、修订和无变化；无摘要的分支 claim / heartbeat / release / merge 控制操作只需明确分支标识。
+
+## 可选宿主验证
+
+宿主可在创建目标前配置验证脚本，在申请完成时检查真实产物。脚本从 stdin 接收完整任务 JSON，stdout 只返回 `{"ok":true}` 或 `{"ok":false,"issues":[{"message":"缺少回归结果","claims":["finding-key"],"references":["test.log"]}]}`。`claims` 和 `references` 可省略。以显式 argv 配置，不经过 shell：
+
+```sh
+export CAIRN_VERIFY_COMMAND='["node","/absolute/path/verify.mjs"]'
+export CAIRN_VERIFY_TIMEOUT_MS=10000
+```
+
+验证在事务外运行，超时、异常或格式错误保持未完成；任务修订或中断后的迟到结果被拒绝。验证器的检查范围由接入方决定：格式检查通过不代表因果结论正确。已完成的一般任务可通过 SDK `engine.verify(taskId, session)` 再验证；失败会沿既有 reopen 流程保留完成快照、清空覆盖并记录反证来源。交付冻结的比赛报告仍保持冻结规则。
+
+SDK 也可在 `createHarness` 传入 `completionVerifier: {id, verify(task, signal)}`。使用异步验证的 SDK 调用应走 `tools.invoke('cairn_finish', ...)` 或 `engine.finishVerified(...)`；同步 `engine.finish(...)` 只检查已有验证凭据。
 
 ## 预算如何配置
 
@@ -155,6 +181,8 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 | 普通 `curated`，传 `maxCalls`／`maxParallel` | 拒绝配置：不统计调用，就不能宣称执行硬限制 |
 | 显式 `captured` | 可限制网关调用和实际经过 hook 的原生调用；不能保证覆盖宿主所有工具路径 |
 | `emergency` 比赛 | 保留共享 30 分钟截止时间及提交预留窗口 |
+
+宿主可通过 `CAIRN_DEADLINE`（ISO 时间）和 `CAIRN_SUBMIT_RESERVE_MS`（默认 30000 毫秒）提供时限。创建、恢复和重开时取更早截止时间与更大预留；在宿主工具／生命周期回调中检查，进入预留窗口及到期各提醒一次，无需先建进度项；在途模型请求可能使提醒延迟或错过。它只要求保存依据、结论或缺口，实际终止由宿主负责。任务完成状态与宿主最近的 running / settled / interrupted / closed 状态分别展示。
 
 工具次数、到期或预算耗尽都不代表成功。确实需要停止时保存未满足条件和下一步，标记暂停；之后恢复继续。原演示的六次调用上限只是该样例配置，不是通用默认值。
 
@@ -338,3 +366,6 @@ node scripts/claude-fixture-smoke.mjs
 Cairn 最初是一个以目标为导向的探索引擎，曾在腾讯云 AI 渗透测试挑战赛验证。当前版本将目标、证据和人工提示思想融入通用 CLI 插件。
 
 项目采用 [AGPL-3.0](LICENSE) 许可证。
+
+
+产物摘要、独立验收范围、按需交接与简化 CLI 使用见 [产物验收与分层交接](docs/artifacts-handoffs.zh-CN.md)。

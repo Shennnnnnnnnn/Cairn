@@ -6,6 +6,15 @@ import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {install,uninstall,location,type Target} from '../src/install.js';
 const bundles=resolve('dist/plugins');
+test('Codex explicitly forwards host configuration names without freezing values in its registration',()=>{
+ const root=mkdtempSync(join(tmpdir(),'cairn-codex-env-'));
+ try{
+  install('codex','project',root,bundles);
+  const config=readFileSync(join(root,'.codex/config.toml'),'utf8');
+  assert.deepEqual(JSON.parse(config.match(/^env_vars = (\[.*\])$/m)![1]!),['CAIRN_DB','CAIRN_WORKSPACE','CAIRN_VERIFY_COMMAND','CAIRN_VERIFY_ARTIFACTS','CAIRN_VERIFY_TIMEOUT_MS','CAIRN_DEADLINE','CAIRN_SUBMIT_RESERVE_MS']);
+  assert.equal(config.includes('[mcp_servers.cairn.env]'),false);
+ }finally{rmSync(root,{recursive:true,force:true});}
+});
 for(const target of ['pi','claude','codex'] as Target[])test(`${target}: isolated project and user installation updates and uninstalls without damaging other settings`,()=>{
  for(const scope of ['project','user'] as const){
   const root=mkdtempSync(join(tmpdir(),`cairn-${target}-`));

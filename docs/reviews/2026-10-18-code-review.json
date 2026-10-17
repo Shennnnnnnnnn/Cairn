@@ -1,0 +1,1456 @@
+{
+  "date": "2026-10-18",
+  "mode": "workspace",
+  "base_commit": "8747c94",
+  "branch": "codex/general-harness-optimization",
+  "skill": "open-code-review-codex:open-code-review-delegate",
+  "scope": "对当前工作区全部变更建清单，逐文件审查全部改动的运行时、适配器、CLI、UI、安装与用量同步代码，以及共享验收器、当前模型驱动和合成评测。历史逐轮分析/报告/编排及数据快照仅做语法检查，逐项列为 skipped；不声明项目全量语义审查。 提交前清单新增一份 round11 报告生成器，已补充源码审查和语法检查；历史成绩本身未重新计算。",
+  "summary": {
+    "total_files": 174,
+    "reviewed_files": 57,
+    "skipped_files": 117,
+    "coverage_rate": 0.3276,
+    "accounted_files": 174,
+    "runtime_files": 21,
+    "runtime_reviewed": 21
+  },
+  "findings": [
+    {
+      "path": "src/core/engine.ts",
+      "start_line": 785,
+      "end_line": 785,
+      "category": "bug",
+      "severity": "high",
+      "status": "fixed",
+      "content": "配置 completionVerifier 后，旧 SDK engine.complete() 只检查报告结构，无验收、验收失败或候选修订使验收过期时仍可直接置 completed。统一使用 completionCheck，要求当前有效且通过的宿主凭据。",
+      "regression": "legacy SDK completion requires a current passing host receipt"
+    },
+    {
+      "path": "src/export.ts",
+      "start_line": 14,
+      "end_line": 14,
+      "category": "bug",
+      "severity": "medium",
+      "status": "fixed",
+      "content": "Markdown 及嵌入 Markdown 的 HTML 导出直接展示历史 verification.status；候选报告修改、所有权代次切换或产物文件变化后仍显示 passed。共享 verificationCurrent 判断，保留历史回执并明确展示 stale。",
+      "regression": "Markdown and HTML exports distinguish stale receipts from current acceptance"
+    },
+    {
+      "path": "evaluations/public-rca/verify-artifacts.mjs",
+      "start_line": 10,
+      "end_line": 13,
+      "category": "bug",
+      "severity": "medium",
+      "status": "fixed",
+      "content": "answer.json 的 JSON 值为 null、false、0 或空字符串时，if(answer) 跳过全部契约检查，只需非空 REPORT.md 即返回 ok:true。解析后要求非数组对象，非法根值显式拒绝。",
+      "regression": "artifact contract rejects falsey JSON answers and accepts a complete object"
+    }
+  ],
+  "validation": {
+    "baseline": {
+      "command": "npm test",
+      "passed": 291,
+      "failed": 0
+    },
+    "final": {
+      "command": "npm test",
+      "passed": 294,
+      "failed": 0,
+      "includes": "TypeScript type check, production bundle build, unit and local HTTP/MCP integration tests"
+    },
+    "regressions": "三个新增测试均先复现失败再修复为通过；覆盖未验收/失败/过期/通过、报告/epoch/文件变化、空值答案和合法对象。",
+    "syntax": {
+      "javascript_and_json": 77,
+      "python": 74,
+      "failed": 0
+    },
+    "pi_fixture": {
+      "command": "node scripts/pi-fixture-smoke.mjs --exploration-loop",
+      "ok": true,
+      "requests": 10,
+      "epoch": 2
+    },
+    "git_diff_check": "原有 tracked 变更通过；完整暂存区检查另有 CSV 夹具的 CRLF 行尾及历史评测脚本/报告的尾随空白提示，未更改冻结数据内容。",
+    "real_model_evaluations_rerun": false
+  },
+  "files": [
+    {
+      "path": "package.json",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "scripts/host-smoke.mjs",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "scripts/pi-fixture-smoke.mjs",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/adapters/hooks.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/adapters/pi-extension.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/cli.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/core/causality.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/core/engine.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/core/store.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/core/types.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/demo.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/export.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/harness.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/install.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/mcp.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/tools.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/ui/client.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/ui/graph.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/ui/page.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/ui/styles.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/ui/view.ts",
+      "status": "modified",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/.gitignore",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/audit.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/delivery-queue/delivery_queue.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/pricing-incident/config/rollout.json",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/pricing-incident/src/pricing.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/grade.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/prepare.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/run.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/pi-ab/summarize.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/.gitignore",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-codex-repeated.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-codex-round7.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-codex-round8.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-model-matrix.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-pi-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-pi-round9.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-round11.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-round3.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-round4.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-round5.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/analyze-round6.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/assess-round11.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/audit-native-pi-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/audit-native-pi-round9.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/audit-round2.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/auxiliary-checks-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/case-manifest.json",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史评测数据/协议快照：完成 JSON 解析检查，未核验与原始来源、历史实验产物的一致性。"
+    },
+    {
+      "path": "evaluations/public-rca/check-codex-assurance.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/check-codex-repeated.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/check-codex-round8.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/check-outputs-codex-repeated.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/check-outputs-codex-round8.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/check-outputs-pi-round10.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/check-outputs-pi-round9.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/check-pi-round10.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/check-pi-round9.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/cleanup-codex-repeated.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/cleanup-codex-round8.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/codex-driver-round11.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/codex-driver.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/continuation-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/diagnostics-round11.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/download.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/finalize-codex-repeated.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/finalize-codex-round7.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/finalize-codex-round8.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/finalize-model-matrix.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/finalize-pi-round10.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/finalize-pi-round9.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/freeze-codex-round7.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/grade-codex-repeated.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/grade.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/inspect-evidence-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/interaction-audit.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/io-cost-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/measure-context-round10.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/measure-context-round8.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/measure-context-round9.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/pi-driver-round10.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/pi-driver-round11.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/pi-driver-round9.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/prepare-codex-repeated.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/prepare-review-model-matrix.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/prepare-review-round5.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/prepare-review-round6.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/prepare-review-ui.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/prepare.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/probe-codex.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/probe-model-matrix.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/probe-model.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/probe-pi-round10.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/probe-pi-round9.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/probe-verifier.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/progress-codex-repeated.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/progress-codex-round8.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/progress-model-matrix.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/progress-pi-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/progress-pi-round9.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/progress-round11.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/progress-round6.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/provenance.json",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史评测数据/协议快照：完成 JSON 解析检查，未核验与原始来源、历史实验产物的一致性。"
+    },
+    {
+      "path": "evaluations/public-rca/provider-timeline-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/queue-codex-round7-after.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/record-review-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/record-review-round8.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/record-review-round9.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/reference.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/remote_zip.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/replay-encoding-round9.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/replay-generic-verifier-round11.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/restore-handoffs.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/restore-model-matrix.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/restore-round5.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/review-scope-codex-repeated.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/review-scope-codex-round8.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/review-scope-pi-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/review-scope-pi-round9.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-codex-repeated.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-codex-round7.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-codex-round8.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-model-matrix.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-pi-round10.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-pi-round9.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-round11.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/run-round2.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-round3.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-round4.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-round5.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run-round6.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/run.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/schema-probe-failed.json",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史评测数据/协议快照：完成 JSON 解析检查，未核验与原始来源、历史实验产物的一致性。"
+    },
+    {
+      "path": "evaluations/public-rca/schema-probe-fixed.json",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史评测数据/协议快照：完成 JSON 解析检查，未核验与原始来源、历史实验产物的一致性。"
+    },
+    {
+      "path": "evaluations/public-rca/schema-provider-probe.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/schema-repro.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/scope-codex-repeated.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/scope-codex-round8.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/scope-pi-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/scope-pi-round9.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/scope-round5.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/scope_audit.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/series.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/session-usage.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/source-files.json",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史评测数据/协议快照：完成 JSON 解析检查，未核验与原始来源、历史实验产物的一致性。"
+    },
+    {
+      "path": "evaluations/public-rca/stability-quality-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/summarize.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/supplement-pi-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/supplement-pi-round9.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/supplement-round8.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/validate-round2.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/validate_states.mjs",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/verifier-controls.json",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史评测数据/协议快照：完成 JSON 解析检查，未核验与原始来源、历史实验产物的一致性。"
+    },
+    {
+      "path": "evaluations/public-rca/verify-artifacts.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/verify-generic-round11.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/verify-reproduction.py",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/verify-submission.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/write-report-codex-repeated.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write-report-codex-round7.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write-report-model-matrix.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write-report-round10.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write-report-round8.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write-report-round9.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write_report.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write_report_round2.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write_report_round4.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write_report_round5.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "evaluations/public-rca/write_report_round6.py",
+      "status": "added",
+      "review": "skipped",
+      "reason": "历史轮次的独立分析、报告或编排辅助脚本：完成语法检查；本轮聚焦运行时及共享验收链路，未逐行核实历史轮次评分口径或重跑对应模型实验。"
+    },
+    {
+      "path": "scripts/sync-evaluation-usage.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "scripts/verify-evaluation-usage.mjs",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/adapters/host-options.ts",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/core/artifacts.ts",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "src/core/handoff.ts",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "docs/reviews/2026-10-18-code-review.json",
+      "status": "added",
+      "review": "reviewed"
+    },
+    {
+      "path": "evaluations/public-rca/write-report-round11.py",
+      "status": "added",
+      "review": "reviewed"
+    }
+  ],
+  "ocr_excluded": [
+    {
+      "path": "CONTEXT.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "README.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/goal-workflow.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/harness.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/verification.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/README.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "skills/cairn/SKILL.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "skills/cairn/references/emergency.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "skills/cairn/references/harness.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "tests/adapters.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/install.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/mcp-startup.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/mcp.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/ui-graph.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "docs/artifacts-handoffs.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/cc-switch-usage.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/generality-review.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/images/dashboard-assurance.png",
+      "exclude_reason": "binary"
+    },
+    {
+      "path": "docs/images/dashboard-round4b.png",
+      "exclude_reason": "binary"
+    },
+    {
+      "path": "docs/images/dashboard-round5.png",
+      "exclude_reason": "binary"
+    },
+    {
+      "path": "docs/images/dashboard-round6-unbudgeted.png",
+      "exclude_reason": "binary"
+    },
+    {
+      "path": "docs/multi-session-reference.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round10.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round2.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round3.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round4.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round5.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round6.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round7.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round8.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/optimization-round9.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/public-rca-ui.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/README.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/delivery-queue/TASK.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/delivery-queue/test_public.py",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/pricing-incident/TASK.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/pricing-incident/evidence/cache_trace.jsonl",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/pricing-incident/evidence/request_sample.csv",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/pricing-incident/evidence/service_metrics.csv",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/cases/pricing-incident/notes/old_runbook.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/comparison.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/prompts/code.txt",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/prompts/incident-initial.txt",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/prompts/incident-review.txt",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/review-input/adjudication.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/pi-ab/review-input/full_audit.csv",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/README.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/acceptance-codex-repeated.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/acceptance-codex-round7.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/acceptance-round10.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/acceptance-round11.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/acceptance-round8.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/acceptance-round9.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-codex-repeated.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-codex-round7.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-model-matrix.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-round10.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-round2.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-round3.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-round4.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-round5.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-round6.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-round8.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison-round9.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/comparison.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/prompt.txt",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/protocol-codex-repeated.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/protocol-model-matrix.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/protocol-round10.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/protocol-round11.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/protocol-round6-unbudgeted.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/protocol-round8.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/protocol-round9.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/reproduction-contract.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/reproduction-contract.v2.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/review.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/synthesis-model-matrix.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/synthesis-round2.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/synthesis-round4.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/synthesis-round5.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/synthesis-round6.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "evaluations/public-rca/synthesis.zh-CN.md",
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "tests/artifact-handoff.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/claim-artifact-version.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/completion-feedback.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/evidence-reuse-round10.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/exploration-loop.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/model-contract-handoff.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/model-input-round8.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/model-input-round9.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/reproduction-verifier.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/review-regressions.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/session-usage.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/submission-cli.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/terminal-handoff-round7.test.ts",
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "tests/verification-budget.test.ts",
+      "exclude_reason": "default_path"
+    }
+  ],
+  "additional_tests": "tests/review-regressions.test.ts（OCR 默认排除 tests 路径；本次手工编写并运行）"
+}

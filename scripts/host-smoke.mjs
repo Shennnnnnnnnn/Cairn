@@ -6,6 +6,7 @@ import {resolve,join,dirname} from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
+import {publishEvaluationUsage} from '../evaluations/public-rca/session-usage.mjs';
 const host=process.argv[2];if(!['pi','claude','codex'].includes(host))throw new Error('Usage: node scripts/host-smoke.mjs pi|claude|codex');
 const root=mkdtempSync(join(tmpdir(),`cairn-live-${host}-`)),entry=resolve('dist/cairn.mjs');
 const env={...process.env,PATH:`${dirname(process.execPath)}:/opt/homebrew/bin:/Users/shen/.local/bin:${process.env.PATH??''}`};
@@ -25,6 +26,7 @@ async function launch(prompt,phase){
  const timer=setTimeout(()=>child.kill('SIGTERM'),150000);
  const code=await new Promise((res,rej)=>{child.on('error',rej);child.on('exit',res);});clearTimeout(timer);
  writeFileSync(join(root,`${phase}.jsonl`),stdout,{mode:0o600});writeFileSync(join(root,`${phase}.stderr`),stderr,{mode:0o600});
+ if(host==='pi')await publishEvaluationUsage(join(root,'sessions'));
  console.log(JSON.stringify({phase,exitCode:code,stdoutBytes:stdout.length,stderrTail:stderr.slice(-1500)}));
  if(code!==0)throw new Error(`Host failed. Inspect ${root}/${phase}.stderr and .jsonl`);
  if(host==='pi'){

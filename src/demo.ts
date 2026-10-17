@@ -61,7 +61,7 @@ export function prepareDemo(requestedRoot?: string, entry = join(dirname(fileURL
     },
   };
   writeNew(scenarioPath, scenario);
-  writeNew(promptPath, `# Cairn 完整链路样例\n\n这是本地虚构诊断练习；所有结果都有 demo:true 和 demo: 引用。它不连接生产系统。\n\n## 在真实 CLI 中执行\n\n\`cairn demo --prepare --root DIR\` 会生成本目录。随后执行：\n\n1. \`cairn install --target codex --root DIR\`（可换成 pi 或 claude）；如果使用 \`cairn demo --prepare --target HOST\`，对应适配包已安装，无需重复。\n2. 进入 DIR 后先执行 \`export CAIRN_DB=${shellQuote(db)}\`，确保目录即使位于其他 Git 仓库内也使用本样例数据库；再启动对应 CLI，完成它要求的插件信任步骤，并把下面任务交给 Agent。\n3. 另一个终端运行 \`cairn ui --db ${shellQuote(db)}\` 查看同一个数据库。\n\n## 给 Agent 的任务\n\n开始前先核对 CAIRN_DB 是否准确指向本目录的 .cairn/state.db（${db}）；如果数据库不符，先停止并报告，避免写入父仓库的任务库。\n\n使用 Cairn 处理这个 general 任务：${scenario.goal}。以“本地虚构演示”为来源，约束为只使用当前的只读 demo 工具，工具预算 maxCalls=6、maxParallel=2。完成条件：\n\n${scenario.criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n\n这个示例显式选择 evidence_mode=captured 演示自动取证；普通任务默认 curated，不要求配置这些工具，也不记录工具调用。请调用 cairn_start 开始；使用 Cairn 暴露的 typed 工具 cairn_tool_service_health、cairn_tool_price_sample、cairn_tool_client_mapping、cairn_tool_version_impact 取证。工具参数从它们的 schema 获取：服务 quote-display，样例代码 DEMO.600001，客户端版本 1.4（1.5 可作对照）。原始证据由 Gateway 自动保存，结论引用实际返回的 E#，不要自行捏造引用。\n\n先查健康和价格样例，在 cairn_checkpoint 中记录服务崩溃的反证、当前结论和未解决问题；然后用 cairn_finish(outcome=suspended) 暂停。告诉我任务 ID 后结束此会话。下一次会话用 cairn_resume(task_id=实际任务ID,takeover=true) 显式接管，读取恢复上下文，补查单位映射与影响范围，一次 cairn_finish 提交结论、条件覆盖和报告。每条已支持的 finding 用 covers 关联 c1/c2；反驳用 against。报告给出止损、修复、预防建议，明确建议尚未在真实系统执行。\n\n## 无模型账号的演示\n\n\`cairn demo\` 由确定性 driver 执行相同五工具协议，并启动蓝白看板；\`cairn demo --no-ui --delay 0\` 执行后退出。它测试真实 stdio MCP、Gateway、暂停与新连接接管，不评估模型推理能力，也不冒充三种原生 CLI。完成后导出 report.md、evidence.html、task.json、execution.jsonl。\n`);
+  writeNew(promptPath, `# Cairn 完整链路样例\n\n这是本地虚构诊断练习；所有结果都有 demo:true 和 demo: 引用。它不连接生产系统。\n\n## 在真实 CLI 中执行\n\n\`cairn demo --prepare --root DIR\` 会生成本目录。随后执行：\n\n1. \`cairn install --target codex --root DIR\`（可换成 pi 或 claude）；如果使用 \`cairn demo --prepare --target HOST\`，对应适配包已安装，无需重复。\n2. 进入 DIR 后先执行 \`export CAIRN_DB=${shellQuote(db)}\`，确保目录即使位于其他 Git 仓库内也使用本样例数据库；再启动对应 CLI，完成它要求的插件信任步骤，并把下面任务交给 Agent。\n3. 另一个终端运行 \`cairn ui --db ${shellQuote(db)}\` 查看同一个数据库。\n\n## 给 Agent 的任务\n\n开始前先核对 CAIRN_DB 是否准确指向本目录的 .cairn/state.db（${db}）；如果数据库不符，先停止并报告，避免写入父仓库的任务库。\n\n使用 Cairn 处理这个 general 任务：${scenario.goal}。以“本地虚构演示”为来源，约束为只使用当前的只读 demo 工具，工具预算 maxCalls=6、maxParallel=2。完成条件：\n\n${scenario.criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n\n这个示例显式选择 evidence_mode=captured 演示自动取证；普通任务默认 curated，不要求配置这些工具，也不记录工具调用。请调用 cairn_start 开始；使用 Cairn 暴露的 typed 工具 cairn_tool_service_health、cairn_tool_price_sample、cairn_tool_client_mapping、cairn_tool_version_impact 取证。工具参数从它们的 schema 获取：服务 quote-display，样例代码 DEMO.600001，客户端版本 1.4（1.5 可作对照）。原始证据由 Gateway 自动保存，结论引用实际返回的 E#，不要自行捏造引用。\n\n先查健康和价格样例，在 cairn_checkpoint 中记录服务崩溃的反证、当前结论和未解决问题；然后用 cairn_finish(outcome=suspended) 暂停。告诉我任务 ID 后结束此会话。下一次会话用 cairn_resume(task_id=实际任务ID,takeover=true) 显式接管，读取恢复上下文，补查单位映射与影响范围，用 cairn_checkpoint 保存结论、条件覆盖和报告，再调用 cairn_finish {}。每条已支持的 finding 用 covers 关联 c1/c2；反驳用 against。报告给出止损、修复、预防建议，明确建议尚未在真实系统执行。\n\n## 无模型账号的演示\n\n\`cairn demo\` 由确定性 driver 执行相同五工具协议，并启动蓝白看板；\`cairn demo --no-ui --delay 0\` 执行后退出。它测试真实 stdio MCP、Gateway、暂停与新连接接管，不评估模型推理能力，也不冒充三种原生 CLI。完成后导出 report.md、evidence.html、task.json、execution.jsonl。\n`);
   const config = demoGateway(root, entry);
   writeNew(join(root, 'whitelist.json'), config);
   if (existsSync(db)) throw new CairnError('demo_directory_not_empty', 'Demo database already exists');
@@ -158,8 +158,8 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
       progress: [{key:'evidence',title:'核对服务与价格样例',status:'completed'},{key:'mechanism',title:'确认单位映射机制',status:'blocked',detail:'暂停，等待新会话继续'}],
       summary: '本地样例源价格 10.26 元、显示 1026 元，相差 100 倍；健康工具未发现进程崩溃。需要进一步查单位映射与版本影响范围。',
       findings: [
-        { key: 'crash', text: '价格异常由 quote-display 进程崩溃引起', status: 'refuted', against: ['E1'] },
-        { key: 'price-ratio', text: '1.4 客户端将样例源价格 10.26 元显示为 1026 元，放大 100 倍', evidence: ['E2'] },
+        { key: 'crash', text: '价格异常由 quote-display 进程崩溃引起', status: 'refuted', against: ['E1'], covers: [] },
+        { key: 'price-ratio', text: '1.4 客户端将样例源价格 10.26 元显示为 1026 元，放大 100 倍', status: 'supported', evidence: ['E2'], covers: [] },
       ],
       questions: ['1.4 客户端是否对已经是元的价格重复换算？', '这次虚构窗口中哪些版本、多少用户受影响？'],
       next: '新会话显式接管后查询 client_mapping 和 version_impact；补齐目标证据后交付建议。',
@@ -172,13 +172,12 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
     if (context.owner?.epoch !== 2 || context.checkpoint?.questions?.length !== 2) throw new CairnError('demo_restore_failed', 'Takeover did not preserve the checkpoint and its questions');
     await call('cairn_tool_client_mapping', { version: '1.4' });
     await call('cairn_tool_version_impact', { service: 'quote-display' });
-    const finished = await call('cairn_finish', {
-      outcome: 'completed',
+    await call('cairn_checkpoint', {
       progress: [{key:'evidence',title:'核对服务与价格样例',status:'completed'},{key:'mechanism',title:'确认单位映射机制',status:'completed'},{key:'impact',title:'确认影响范围并交付建议',status:'completed'}],
       summary: '本地虚构样例：源价格已经是元，1.4 客户端重复乘以 100，导致 10.26 元显示为 1026 元；进程健康证据反驳崩溃假设。该窗口仅 1.4 的 300/1000 用户受影响（30%）。建议止损为回退显示映射或引导升级 1.5，修复为按明确单位只换算一次，预防为增加单位契约与版本回归测试；这些建议尚未执行。',
       findings: [
-        { key: 'unit-conversion', text: '1.4 的输入已经是 CNY 元，代码却再次乘以 100，与 10.26→1026 的样例吻合；进程崩溃假设已由 E1 反驳', evidence: ['E1', 'E2', 'E3'], covers: ['c1'] },
-        { key: 'impact', text: '虚构窗口中 1.4 的 300 名用户受影响，占总计 1000 人的 30%；1.5 的 700 名用户未受影响。建议回退映射或升级、删除重复换算并增加单位契约及版本回归测试，尚未执行', evidence: ['E2', 'E3', 'E4'], covers: ['c2'] },
+        { key: 'unit-conversion', text: '1.4 的输入已经是 CNY 元，代码却再次乘以 100，与 10.26→1026 的样例吻合；进程崩溃假设已由 E1 反驳', status: 'supported', evidence: ['E1', 'E2', 'E3'], covers: ['c1'] },
+        { key: 'impact', text: '虚构窗口中 1.4 的 300 名用户受影响，占总计 1000 人的 30%；1.5 的 700 名用户未受影响。建议回退映射或升级、删除重复换算并增加单位契约及版本回归测试，尚未执行', status: 'supported', evidence: ['E2', 'E3', 'E4'], covers: ['c2'] },
       ],
       questions: [], next: '演示已完成；真实环境需要实际验证修复效果。',
       report: {
@@ -187,6 +186,7 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
         solution: { mitigation: '建议回退该映射或引导 1.4 用户升级 1.5；未实际执行。', fix: '建议移除已是元时的重复乘以 100，按输入单位显式转换一次。', prevention: '建议加入价格单位契约、10.26 元样例与 1.4/1.5 对照回归，并监控源显示比值。' },
       },
     });
+    const finished = await call('cairn_finish', {});
     if (finished.phase !== 'completed' || !finished.validation?.ok) throw new CairnError('demo_incomplete', `Demo completion validation failed: ${JSON.stringify(finished.validation)}`);
     await close();
     signal?.throwIfAborted();

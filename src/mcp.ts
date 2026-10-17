@@ -15,7 +15,7 @@ export async function startMcp(engine:Engine,session:Session) {
   }))}));
   server.setRequestHandler(CallToolRequestSchema,async(request,extra)=>{
     try {
-      const result=await runtime.invoke(request.params.name,request.params.arguments??{},extra.signal),value=result??{ok:true};
+      const result=await runtime.invokeModel(request.params.name,request.params.arguments??{},extra.signal),value=result??{ok:true};
       return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:{result:value}};
     } catch(error) {
       return {isError:true,content:[{type:'text',text:JSON.stringify({error:(error as any).code??'invalid_input',message:(error as Error).message})}]};

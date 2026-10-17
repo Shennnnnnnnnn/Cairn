@@ -42,7 +42,7 @@ test('curated basis connects the start, conclusion, acceptance criterion and ful
     const graph = projectGraph(projectTask(engine, task));
     for (const [from, to] of [['origin', 'basis:mapping'], ['basis:mapping', 'claim:mapping'], ['claim:mapping', 'criterion:c1'], ['criterion:c1', 'goal']]) assert.ok(graph.edges.some(e => e.from === from && e.to === to), `${from} -> ${to}`);
     assert.equal(graph.nodes.find(n => n.id === 'criterion:c1')?.status, 'goal');
-    assert.match(graph.nodes.find(n => n.id === 'criterion:c1')!.state, /已满足/);
+    assert.match(graph.nodes.find(n => n.id === 'criterion:c1')!.state, /发现覆盖/);
     assert.equal(graph.nodes.filter(n => n.kind === 'observation').length, 0);
     assert.equal(graph.nodes.filter(n => n.kind === 'work').length, 0, 'criteria must not become invented work steps');
     const connected = new Set(['origin']);
@@ -61,7 +61,7 @@ test('paused and completed graphs do not show stale recorded stages as running',
       assert.ok(!model.nodes.some(n => n.status === 'running')); assert.ok(!model.edges.some(e => e.state === 'running'));
       assert.equal(model.nodes.find(n => n.id === 'goal')?.status, 'goal', 'a completed target keeps its rose role color');
     }
-    assert.match(projectGraph(projectTask(engine, task)).nodes.find(n => n.id === 'goal')!.state, /目标已完成/);
+    assert.match(projectGraph(projectTask(engine, task)).nodes.find(n => n.id === 'goal')!.state, /流程已完成/);
   } finally { store.close(); }
 });
 

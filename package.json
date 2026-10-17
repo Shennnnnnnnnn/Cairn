@@ -26,6 +26,7 @@
   "scripts": {
     "build": "tsc --noEmit && node scripts/build.mjs",
     "install:global": "node scripts/install-global.mjs",
+    "usage:sync": "node scripts/sync-evaluation-usage.mjs",
     "pretest": "npm run build",
     "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm test",

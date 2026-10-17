@@ -144,10 +144,10 @@ for(const host of ['pi','claude','codex'] as Host[])test(`${host}: curated goals
  engine.beforeTool=()=>{throw new Error('Curated hooks must not reserve calls');};
  engine.observe=()=>{throw new Error('Curated hooks must not capture results');};
  assert.deepEqual(handleNative(engine,host,{...event,type:'PreToolUse'}),{});
- assert.deepEqual(handleNative(engine,host,{...event,type:'PostToolUse'}),{});
+ assert.match(handleNative(engine,host,{...event,type:'PostToolUse'}).context!,/budget expired/);
  assert.deepEqual(handleNative(engine,host,{...event,type:'PostToolUseFailure',isError:true}),{});
  const saved=store.get(task.id);assert.deepEqual(saved.calls,{});assert.deepEqual(saved.observations,[]);assert.equal(saved.revision,task.revision);
- assert.equal(store.events(task.id).length,before);assert.doesNotMatch(JSON.stringify(store.events(task.id)),/raw-input-sentinel|raw-output-sentinel|native_arbitrary_tool/);
+ assert.equal(store.events(task.id).length,before+1);assert.equal(store.events(task.id).at(-1)!.kind,'budget.conclude_requested');assert.doesNotMatch(JSON.stringify(store.events(task.id)),/raw-input-sentinel|raw-output-sentinel|native_arbitrary_tool/);
  store.close();
 });
 

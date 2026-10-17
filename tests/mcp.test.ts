@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
@@ -13,7 +13,7 @@ import {handleNative} from '../src/adapters/hooks.js';
 const config=gatewaySchema.parse({servers:{fixture:{command:process.execPath,args:[resolve('tests/fixtures/upstream.mjs')]}},tools:['read','submit','receipt','slow'].map(name=>({name,server:'fixture',upstream:name,role:name==='submit'?'submit':name==='receipt'?'receipt':'read',resultRefPath:'result_ref',reportPath:name==='submit'?'report':undefined,receiptPath:['submit','receipt'].includes(name)?'receipt':undefined,scopePaths:{teamId:'team_id',roundId:'round_id',issueId:'issue_id'}}))});
 test('five-tool MCP lifecycle binds once, captures native evidence, and restores across CLIs',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'cairn-mcp-')),db=join(dir,'state.db');
- const local=new Store(db),engine=new Engine(local),session:Session={host:'claude',sessionId:'session1',cwd:'/workspace'};
+ const local=new Store(db),engine=new Engine(local),session:Session={host:'claude',sessionId:'session1',cwd:dir};
  handleNative(engine,'claude',{type:'SessionStart',sessionId:session.sessionId,cwd:session.cwd});
  const client=new Client({name:'integration',version:'1'});
  await client.connect(new StdioClientTransport({command:process.execPath,args:[resolve('dist/cairn.mjs'),'mcp','--db',db,'--host','claude','--root',session.cwd],stderr:'pipe'}));
@@ -25,10 +25,16 @@ test('five-tool MCP lifecycle binds once, captures native evidence, and restores
   const context=await call('cairn_start',{session_id:session.sessionId,goal:'Verify native marker',evidence_mode:'captured'}),taskId=context.taskId;
   handleNative(engine,'claude',{type:'PreToolUse',sessionId:session.sessionId,cwd:session.cwd,callId:'read1',tool:'Read',input:{path:'evidence.txt'}});
   handleNative(engine,'claude',{type:'PostToolUse',sessionId:session.sessionId,cwd:session.cwd,callId:'read1',tool:'Read',output:{text:'native marker'}});
-  await call('cairn_finish',{outcome:'suspended',summary:'Marker read; awaiting reviewer',findings:[{key:'marker',text:'The native file contains the marker',evidence:['E1']}]});
+  const increment={key:'marker',text:'The native file contains the marker',status:'supported',evidence:['E1'],covers:['c1']};
+  writeFileSync(join(dir,'marker.txt'),'native marker');
+  const receipt=await call('cairn_checkpoint',JSON.parse(JSON.stringify({findings:[JSON.stringify(increment)],artifacts:[JSON.stringify({path:'marker.txt'})],handoffs:[JSON.stringify({key:'wire',summary:'Saved native marker',from:['marker'],artifacts:['marker.txt']})],progress:[JSON.stringify({key:'verify',title:'Verify marker',status:'completed',from:['marker']})],next:''})));
+  assert.equal(local.get(taskId).artifacts![0]!.bytes,13);assert.equal(local.get(taskId).handoffs!.find(h=>h.key==='wire')!.summary,'Saved native marker');
+  assert.deepEqual(receipt.delta.addedFindings,['marker']);assert.equal(receipt.coverage.covered,1);
+  assert.deepEqual(local.get(taskId).claims[0]!.text,increment.text);
+  await call('cairn_finish',{outcome:'suspended'});
   const original=local.get(taskId);assert.equal(original.status,'suspended');assert.equal(original.report!.citations.length,1);
   const other=new Client({name:'codex-test',version:'1'});
-  await other.connect(new StdioClientTransport({command:process.execPath,args:[resolve('dist/cairn.mjs'),'mcp','--db',db,'--host','codex','--root','/workspace'],stderr:'pipe'}));
+  await other.connect(new StdioClientTransport({command:process.execPath,args:[resolve('dist/cairn.mjs'),'mcp','--db',db,'--host','codex','--root',dir],stderr:'pipe'}));
   try{
    const refused=await other.callTool({name:'cairn_resume',arguments:{task_id:taskId,session_id:'session2'}});assert.equal(refused.isError,true);
    const resumed=await other.callTool({name:'cairn_resume',arguments:{task_id:taskId,session_id:'session2',takeover:true}});assert.ok(!resumed.isError);

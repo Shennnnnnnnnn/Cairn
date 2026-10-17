@@ -19,7 +19,7 @@
 
 阶段节点从起点展开；依据→结论→完成条件→目标的连线来自保存的关系。阶段之间不因排列顺序自动生成因果关系。图支持缩放、平移、适应画布、全屏和横纵布局，时间线和报告仍可单独查看。
 
-Agent 可在 start／checkpoint／finish 中传 `progress`，用同一个可读 `key` 更新同一工作项。无需按每次工具调用登记。
+Agent 可在 start／checkpoint 中传 `progress`，用同一个可读 `key` 更新同一工作项；模型 finish 只检查已存状态。SDK invoke 保留旧 finish 输入兼容。无需按每次工具调用登记。
 
 ```json
 {
@@ -170,6 +170,7 @@ Agent 使用宿主文件工具或终端读取 JSON。Cairn 不保存这次调用
     "key": "unit-conversion",
     "text": "显示端可能漏掉分到元的换算。",
     "status": "proposed",
+    "covers": [],
     "basis": "模拟输入的 API 值为 1640 分，显示值却为 1640 元；参考值为 16.4 元。",
     "references": ["price-case.json"]
   }],
@@ -212,7 +213,7 @@ Agent 调用 `cairn_resume`：
 
 ### F. 完成目标验收
 
-确认文件和核算内容后，Agent 调用 `cairn_finish`。下面内容只对应上述模拟数据，实际任务应引用实际核验结果：
+确认文件和核算内容后，Agent 调用 `cairn_checkpoint` 保存事实增量。下面内容只对应上述模拟数据，实际任务应引用实际核验结果：
 
 ```json
 {
@@ -252,7 +253,7 @@ Agent 调用 `cairn_resume`：
 }
 ```
 
-结构和条件覆盖通过后返回 `status: "completed"`。若漏了条件、没有支撑依据或结论仍是 proposed，则保持 active 并列出缺口；Agent 应补查或暂停。看板中执行项、目标完成条件与报告分别可读。
+保存后调用 `cairn_finish {}`。结构和条件覆盖通过后返回 `status: "completed"`。若漏了条件、没有支撑依据或结论仍是 proposed，则保持 active 并列出缺口；Agent 应补查并更新 checkpoint，或暂停。看板中执行项、目标完成条件与报告分别可读。
 
 程序的通过结果表示“记录和条件覆盖符合约定”，不等于程序独立证明了文件内容和诊断真伪。Agent 和使用者仍需审阅依据是否真的支持结论。
 
