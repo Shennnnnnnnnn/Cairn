@@ -1,0 +1,401 @@
+[
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_network_receive_packets_dropped.csv",
+    "localPath": "sources/metrics/container/kpi_container_network_receive_packets_dropped.csv",
+    "bytes": 5210952,
+    "zipCRC32": "cf476617",
+    "sha256": "634a19e8f78b096b21e63656a0b3f057fb5fd5adbf50c4f896e5145c8498df4d"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_spec_cpu_shares.csv",
+    "localPath": "sources/metrics/container/kpi_container_spec_cpu_shares.csv",
+    "bytes": 3763980,
+    "zipCRC32": "03363592",
+    "sha256": "e9b7875af79da9a6f34968543a5a01bfdd09453a267f7eb6924ffa0f007de14e"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_spec_memory_swap_limit_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_spec_memory_swap_limit_MB.csv",
+    "bytes": 4459464,
+    "zipCRC32": "6cf4b9cd",
+    "sha256": "cd4edaf0a38d929ff5180db38c0e7d76b2ee5ac1fab9f80af03cf042b6848dad"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_writes_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_writes_MB.csv",
+    "bytes": 3583386,
+    "zipCRC32": "7fd1f18f",
+    "sha256": "43f6f10b4c20d72bcf6a42ad5440a38db66b089dd6323ee3d8959db8ebe70ba4"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_network_transmit_packets_dropped.csv",
+    "localPath": "sources/metrics/container/kpi_container_network_transmit_packets_dropped.csv",
+    "bytes": 5271427,
+    "zipCRC32": "0e7300f8",
+    "sha256": "de69403f635a02f76feda5d56c160f8235334377c7983879b2368ebd40469c56"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_network_receive_errors.csv",
+    "localPath": "sources/metrics/container/kpi_container_network_receive_errors.csv",
+    "bytes": 4666677,
+    "zipCRC32": "af7161fb",
+    "sha256": "c973fa0201cf0a2b4e6c81b6a9d32687cf87304aee01ebffdcfb89a48c8a02a9"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_writes_merged.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_writes_merged.csv",
+    "bytes": 4397993,
+    "zipCRC32": "f18c869e",
+    "sha256": "f442d8f49639d6af852f9af120965b3e222d791656103527f0f6214980e20c05"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_threads_max.csv",
+    "localPath": "sources/metrics/container/kpi_container_threads_max.csv",
+    "bytes": 3418742,
+    "zipCRC32": "d6e7d46b",
+    "sha256": "8e634f0d5893fabc899a1613206981900407188a456732588bee513b7a8abc52"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_write_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_write_seconds.csv",
+    "bytes": 4397993,
+    "zipCRC32": "c43cdff2",
+    "sha256": "da328e4fdcd83d0b78749565eee5309387455e9bbad146fa5d3ba880b5066341"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_inodes_free.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_inodes_free.csv",
+    "bytes": 4167581,
+    "zipCRC32": "c7d312a3",
+    "sha256": "bc322a73a12295086fd11766ce45990a99144442c846480b01063df752a1d80a"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_sector_reads.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_sector_reads.csv",
+    "bytes": 4340390,
+    "zipCRC32": "c55f9cb8",
+    "sha256": "8f8eee0339f3a72e24c133f9666cffabfb63fda8213ff39370cd952688c8eb52"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_network_transmit_packets.csv",
+    "localPath": "sources/metrics/container/kpi_container_network_transmit_packets.csv",
+    "bytes": 4957390,
+    "zipCRC32": "75c35476",
+    "sha256": "44a7db504ec9fdf68f25ce0d6111d0bd116ef1bee2e50d79bd1eb5d7334810d5"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_cpu_usage_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_cpu_usage_seconds.csv",
+    "bytes": 4798636,
+    "zipCRC32": "ffcb78d5",
+    "sha256": "19a9d0634fa50feba7f6cc5dcff558fa59755495c64b14161a4dd266877b2cb4"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_cpu_cfs_throttled_periods.csv",
+    "localPath": "sources/metrics/container/kpi_container_cpu_cfs_throttled_periods.csv",
+    "bytes": 4350723,
+    "zipCRC32": "ca84f611",
+    "sha256": "c23a8cc7a8b5d017ca294dc8dd8eff853befb185c2c3f972ed79368a42989069"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_file_descriptors.csv",
+    "localPath": "sources/metrics/container/kpi_container_file_descriptors.csv",
+    "bytes": 3877510,
+    "zipCRC32": "df72c792",
+    "sha256": "a1abd70491578f65df255cf40f7c776702c1078925cd8a6c41d51dc96d41324f"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_cpu_cfs_throttled_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_cpu_cfs_throttled_seconds.csv",
+    "bytes": 4477050,
+    "zipCRC32": "a15c5064",
+    "sha256": "09d12525baf5d38ece67d0bbc46c230aa293dc7c93ad12b4513439b7661456d8"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_reads.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_reads.csv",
+    "bytes": 7325037,
+    "zipCRC32": "28480628",
+    "sha256": "3d310f115c61a38dfdac14da598390f9ae81aee171d1b9f0d591f8d1caf53809"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_failures.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_failures.csv",
+    "bytes": 19785460,
+    "zipCRC32": "c4a44e09",
+    "sha256": "0caa143ca0b824136c276f1e128300e706c4df70b9bf866dd0242f7bafad26a2"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_max_usage_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_max_usage_MB.csv",
+    "bytes": 4360046,
+    "zipCRC32": "85fbdb8d",
+    "sha256": "0a75025d67302559c53c9df1251288f51818db82cc8f57f4f4991e39b7656a1d"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_inodes.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_inodes.csv",
+    "bytes": 3994831,
+    "zipCRC32": "86657cf0",
+    "sha256": "1677a83a6b51b6e6ee700809217f701fedb99364f89c66fbaa71db2fedf5ae18"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_reads_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_reads_MB.csv",
+    "bytes": 3542796,
+    "zipCRC32": "9199daa0",
+    "sha256": "3b4af8de126fe4289edae87011531f92028ce194c29341fed429b9b456485252"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_last_seen.csv",
+    "localPath": "sources/metrics/container/kpi_container_last_seen.csv",
+    "bytes": 3822017,
+    "zipCRC32": "f15cd4e2",
+    "sha256": "ba900feb773abb326d51e40ee293bad98fdad51a649bb28fe3051a4e0aaaa95c"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_cpu_user_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_cpu_user_seconds.csv",
+    "bytes": 4650684,
+    "zipCRC32": "e7f745dd",
+    "sha256": "e91b924dd0b44c3bd0c2c7f519a567817d0457ca3086d8e84cf57ede47a00465"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_limit_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_limit_MB.csv",
+    "bytes": 4801214,
+    "zipCRC32": "e76de435",
+    "sha256": "9bd5e1020b6e285771a01ecec01ab38b5d837bc9c7aed676de828d459edb0525"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_io_time_weighted_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_io_time_weighted_seconds.csv",
+    "bytes": 5031626,
+    "zipCRC32": "27a6a35a",
+    "sha256": "8a3054ebc0f6e691aecf6d9d83ca98334fdba74aa2dd58817193efa72c89d55d"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_sector_writes.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_sector_writes.csv",
+    "bytes": 4397993,
+    "zipCRC32": "55f16463",
+    "sha256": "a76da2378458e6d76e86b5838e5e5429062331a4b51185635a36520d0e095441"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_network_receive_packets.csv",
+    "localPath": "sources/metrics/container/kpi_container_network_receive_packets.csv",
+    "bytes": 4896228,
+    "zipCRC32": "c19f58fe",
+    "sha256": "7dab1cf5e97501cb10a035d1ebd55fc9b2bdc395ff3c823a4efd093b57e61546"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_working_set_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_working_set_MB.csv",
+    "bytes": 4557791,
+    "zipCRC32": "3ec505d7",
+    "sha256": "98d0b40f781279f7131bf24935871e98bb5a04e6b9421944a4ef4f51b5df9796"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_io_current.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_io_current.csv",
+    "bytes": 4109978,
+    "zipCRC32": "68cc0c1a",
+    "sha256": "d554cd9a9aea3e7fb5ddca1132a951b35c2739ec8933b2cbb7cda7d123c08489"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_usage_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_usage_MB.csv",
+    "bytes": 4217276,
+    "zipCRC32": "d8afd70a",
+    "sha256": "5561ce2f776a36edb48f5ec57c2d4a73efbef2656a8a35788bc2ed2e26bb8b45"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_usage_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_usage_MB.csv",
+    "bytes": 4520331,
+    "zipCRC32": "86a568eb",
+    "sha256": "6ced9bb23882f1e9e987f3ee084763933ea5f1da790f5ebc55503f18d3f95a1b"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_sockets.csv",
+    "localPath": "sources/metrics/container/kpi_container_sockets.csv",
+    "bytes": 3310643,
+    "zipCRC32": "2d72627c",
+    "sha256": "c8ad14d8e23a36552184938c8928f744279a60542d8644bc608403870a94746e"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_io_time_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_io_time_seconds.csv",
+    "bytes": 4513199,
+    "zipCRC32": "f3c2e708",
+    "sha256": "54a268d2e0f95597c9a5f8d45754d10b3129c2a8bf2ca7359cdd072143758409"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_failcnt.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_failcnt.csv",
+    "bytes": 3733557,
+    "zipCRC32": "fa68397d",
+    "sha256": "df41fff827c7366d90ebed1c02dc0149bf0375336d496dc7eadc57a08a467e86"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_spec_cpu_quota.csv",
+    "localPath": "sources/metrics/container/kpi_container_spec_cpu_quota.csv",
+    "bytes": 3821577,
+    "zipCRC32": "8ce56bae",
+    "sha256": "ea282efd1bd724dc89e51d7a47476552ec7a3d33c14c16fd8cb78f9f26ded086"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_writes.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_writes.csv",
+    "bytes": 7427379,
+    "zipCRC32": "b6f30d18",
+    "sha256": "942261c1aca8ba3d74567faf9370abfda125b7ffbddd18f58b2168cbcd27d681"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_ulimits_soft.csv",
+    "localPath": "sources/metrics/container/kpi_container_ulimits_soft.csv",
+    "bytes": 4570499,
+    "zipCRC32": "77a3a762",
+    "sha256": "1f2cf87175a98bfc37f23dc810a7b7474c2da6b12b2ada39304df0ae42675090"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_network_receive_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_network_receive_MB.csv",
+    "bytes": 5392594,
+    "zipCRC32": "07fa7684",
+    "sha256": "6a41c58fd7b2307069bda684086b0a52fd857866483b045257011dd37b71361a"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_tasks_state.csv",
+    "localPath": "sources/metrics/container/kpi_container_tasks_state.csv",
+    "bytes": 20031331,
+    "zipCRC32": "4d58df22",
+    "sha256": "dd418c922bbd0b419a6aa99de90d703041de91db72629837096309eb2c8c2102"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_read_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_read_seconds.csv",
+    "bytes": 4340390,
+    "zipCRC32": "ebbec619",
+    "sha256": "37a4d9925c774674d3952959d0ed11782c98d9ac272549e592f36a0e2882d35e"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_rss.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_rss.csv",
+    "bytes": 3897250,
+    "zipCRC32": "e984cf22",
+    "sha256": "f0762f6b65a44cde39e11fcaf1af292feae9d42b3ea531e4c929a6ff6214debb"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_start_time_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_start_time_seconds.csv",
+    "bytes": 4340453,
+    "zipCRC32": "a35c6e72",
+    "sha256": "4df5283fa8c260f3852e43d33d5d7a7f5e31e569b859c74c37080776ecbcef75"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_mapped_file.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_mapped_file.csv",
+    "bytes": 4151830,
+    "zipCRC32": "6cf2f92a",
+    "sha256": "3ce48562f62a0f8d2855de6708c0d67d3336f80b5cd8e8976070e1964523f433"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_spec_memory_reservation_limit_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_spec_memory_reservation_limit_MB.csv",
+    "bytes": 4743129,
+    "zipCRC32": "30bab19b",
+    "sha256": "e721fd48444037e53f4b5a9971ee807e5b0d1573ac1a94a1d49fa4178752effa"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_cache.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_cache.csv",
+    "bytes": 3906883,
+    "zipCRC32": "7ebe7860",
+    "sha256": "659f0bf31ab312d6624110897cfef4d8e13162464497862fdea47cc9e6bff31b"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_cpu_cfs_periods.csv",
+    "localPath": "sources/metrics/container/kpi_container_cpu_cfs_periods.csv",
+    "bytes": 3879202,
+    "zipCRC32": "26d2a3a8",
+    "sha256": "15da43826416d95509e482bfbed2f33fa8fca5b39f48effdd1240e725b1d44c9"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_spec_cpu_period.csv",
+    "localPath": "sources/metrics/container/kpi_container_spec_cpu_period.csv",
+    "bytes": 3936771,
+    "zipCRC32": "a471a765",
+    "sha256": "b30da9a7ace66a7e558ed0ee8710712d2848054d279c1869c2a808a4a5adfb91"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_memory_swap.csv",
+    "localPath": "sources/metrics/container/kpi_container_memory_swap.csv",
+    "bytes": 3418742,
+    "zipCRC32": "ce618f26",
+    "sha256": "09f827ecec9c1be56508e139f0a98486c0d9a8e1bb7f1b6b72de39401f7a4b76"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_threads.csv",
+    "localPath": "sources/metrics/container/kpi_container_threads.csv",
+    "bytes": 3365166,
+    "zipCRC32": "9734f5ab",
+    "sha256": "c073ce46312680e1223894b3ac38d205db5b6c686058cebc774914b8c9f82014"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_network_transmit_errors.csv",
+    "localPath": "sources/metrics/container/kpi_container_network_transmit_errors.csv",
+    "bytes": 4727152,
+    "zipCRC32": "55a76a14",
+    "sha256": "256c52eebb634973eadc8f61387663f8795cb2c73b1538cf9fcdee368f913aac"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_spec_memory_limit_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_spec_memory_limit_MB.csv",
+    "bytes": 4171479,
+    "zipCRC32": "bf549e9a",
+    "sha256": "70ce58f37a2b0ca5efda2a7a862e1f41cdbec2686fdac630f204fa6630bd11e6"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_fs_reads_merged.csv",
+    "localPath": "sources/metrics/container/kpi_container_fs_reads_merged.csv",
+    "bytes": 4340390,
+    "zipCRC32": "e8f7a7ea",
+    "sha256": "47a4652df1a9f0676a614e7b73838110b37aea36ad21d9d0036e2cf7279ca805"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_network_transmit_MB.csv",
+    "localPath": "sources/metrics/container/kpi_container_network_transmit_MB.csv",
+    "bytes": 5395316,
+    "zipCRC32": "b640446a",
+    "sha256": "2bea9bc61262f517fa45cea5e91c28e4ec601ef004b6fa18677a30da79b5c01d"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_cpu_system_seconds.csv",
+    "localPath": "sources/metrics/container/kpi_container_cpu_system_seconds.csv",
+    "bytes": 4687447,
+    "zipCRC32": "1d70af50",
+    "sha256": "73b1a29d6544c99f98bc2589a12c83b09ed0b345f9c39eb240a572f7b87a9d34"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/container/kpi_container_cpu_load_average_10s.csv",
+    "localPath": "sources/metrics/container/kpi_container_cpu_load_average_10s.csv",
+    "bytes": 3937169,
+    "zipCRC32": "53dc3624",
+    "sha256": "d1cabfc4d4100830db597e06a3b34980c568cc1b85c22c3c14e7dc368f01e96a"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/node/kpi_cloudbed2_metric_0320.csv",
+    "localPath": "sources/metrics/node/kpi_cloudbed2_metric_0320.csv",
+    "bytes": 22010467,
+    "zipCRC32": "754d921e",
+    "sha256": "6df6604d7d06347d41eea1acb07c7dbd3f9d796207aaa182067a1ff7f90dd63e"
+  },
+  {
+    "archivePath": "training_data_with_faults/training_data_with_faults/tar/2022-03-20-cloudbed2/metric/service/metric_service.csv",
+    "localPath": "sources/metrics/service/metric_service.csv",
+    "bytes": 1024774,
+    "zipCRC32": "ea1187be",
+    "sha256": "391d21473275bbc6250e43accd7ae070f154f3fdcca86386e8616db02045c854"
+  }
+]

@@ -58,17 +58,23 @@ async function request<T>(path: string): Promise<T> {
   const response = await fetch(path, { cache: 'no-store' });
   const result = await response.json(); if (!response.ok) throw new Error(result.error ?? `请求失败 (${response.status})`); return result;
 }
+async function mutate(action:'hints'|'suspend'|'reopen',input:Record<string,unknown>={}){
+  if(!current)return;
+  const response=await fetch(`/api/tasks/${encodeURIComponent(current.id)}/${action}`,{method:'POST',headers:{'Content-Type':'application/json','X-Cairn-CSRF':document.querySelector<HTMLMetaElement>('meta[name="cairn-csrf"]')!.content},body:JSON.stringify({...input,revision:current.revision})});
+  const result=await response.json();if(!response.ok)throw new Error(result.error??'操作失败');
+}
+let hintDraft='',reopenDraft='';
 function showError(error?: unknown) { const banner = byId('error'); banner.hidden = !error; if (error) banner.textContent = `暂时无法更新：${(error as Error).message}`; }
 function renderTasks() {
   const query = byId<HTMLInputElement>('search').value.trim().toLowerCase(), filter = byId<HTMLSelectElement>('filter').value;
   const list = byId('tasks'); list.replaceChildren(); text('task-count', tasks.length);
-  const shown = tasks.filter(t => (filter === 'all' || t.status === filter) && `${t.goal} ${t.id}`.toLowerCase().includes(query));
+  const shown = tasks.filter(t => (filter === 'all' || t.status === filter) && `${t.title??''} ${t.goal} ${t.id}`.toLowerCase().includes(query));
   for (const task of shown) {
     const button = create('button', `task${task.id === selectedTask ? ' selected' : ''}`); button.dataset.taskId = task.id;
     button.setAttribute('aria-current', task.id === selectedTask ? 'true' : 'false');
     const top = create('div', 'task-top'); top.append(create('i', `dot ${task.status}`), create('span', '', task.phase.label));
     const bottom = create('div', 'task-bottom'); bottom.append(create('span', '', task.owner.host), create('span', '', `${task.progress.satisfied}/${task.progress.total} 目标条件`));
-    button.append(top, create('div', 'task-title', task.goal), bottom); button.onclick = () => selectTask(task.id); list.append(button);
+    button.append(top, create('div', 'task-title', task.title??task.goal), bottom); button.onclick = () => selectTask(task.id); list.append(button);
   }
   if (!shown.length) list.append(create('div', 'task-empty', tasks.length ? '没有匹配的任务。' : '等待 CLI 创建第一个任务。'));
   const cards=byId('task-cards');cards.replaceChildren();
@@ -76,7 +82,7 @@ function renderTasks() {
     const card=create('button','task-card');card.dataset.taskId=task.id;
     const header=create('div','task-card-header');header.append(create('span','mono',task.id.slice(0,18)),create('span',`phase ${task.phase.key}`,task.phase.label));
     const bottom=create('div','task-bottom');bottom.append(create('span','',`${task.owner.host} · 更新于 ${formatTime(task.updatedAt)}`),create('span','card-open','打开任务 →'));
-    card.append(header,create('h2','',task.goal),create('div','card-summary',`${task.progress.satisfied}/${task.progress.total} 目标条件已满足 · ${task.metrics.supported} 条已形成结论${task.branchCounts.total?` · ${task.branchCounts.total} 个排查分支`:''}`),bottom);
+    card.append(header,create('h2','',task.title??task.goal),create('div','card-summary',`${task.progress.satisfied}/${task.progress.total} 目标条件已满足 · ${task.metrics.supported} 条模型支持的发现${task.branchCounts.total?` · ${task.branchCounts.total} 个分支`:''}`),create('div',`assessment-state ${task.assurance.conclusionState}`,task.assurance.conclusion),bottom);
     card.onclick=()=>selectTask(task.id);cards.append(card);
   }
   if(!shown.length)cards.append(create('div','task-empty','没有匹配的任务。'));
@@ -86,10 +92,14 @@ function applyMode(){
   byId(overviewMode?'global-status':'head-status').append(byId('connection'));
   byId('overview').hidden=!overviewMode||!tasks.length;byId('empty').hidden=!overviewMode||!!tasks.length;byId('task-view').hidden=overviewMode;
 }
+window.addEventListener('hashchange',()=>{
+  let id='';try{id=decodeURIComponent(location.hash.slice(1));}catch{}
+  if(id)selectTask(id);else{selectedTask='';overviewMode=true;applyMode();void refresh();}
+});
 function selectTask(id: string) {
   resetReplay();
   overviewMode=false;applyMode();
-  if (selectedTask !== id) { selectedTask = id; selectedNode = 'origin'; needsFit = true; current = undefined; rawCache.clear(); }
+  if (selectedTask !== id) { selectedTask = id; selectedNode = 'origin'; needsFit = true; current = undefined; hintDraft='';reopenDraft='';rawCache.clear(); }
   history.replaceState(null, '', `#${encodeURIComponent(id)}`); renderTasks(); void refresh();
 }
 async function refresh() {
@@ -270,12 +280,15 @@ async function startReplay() {
 function renderCurrent() {
   const task = current!;
   text('task-id', `${task.id.slice(0, 19).toUpperCase()} · 通用任务`);
-  text('goal', task.goal); text('phase', task.phase.label); byId('phase').className = `phase ${task.phase.key}`;
+  text('goal', task.title??task.goal); text('phase', task.phase.label); byId('phase').className = `phase ${task.phase.key}`;
   text('owner', `${task.owner.host} · ${task.owner.epoch > 1 ? `接管 ${task.owner.epoch - 1} 次` : '主会话'}`);
   text('created', `创建于 ${new Date(task.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}`);
   text('updated', `最近更新 ${formatTime(task.updatedAt)}`);
   byId('branch-meta').hidden=!task.branchCounts.total;
   text('branch-meta',`自主排查 · ${task.branchCounts.total} 个分支 · ${task.branchCounts.delegated} 个委派分支${task.branchCounts.review?` · ${task.branchCounts.review} 个待汇总`:''}`);
+  byId('pause-task').hidden=task.status!=='active'||replayActive;
+  const assurance=byId('assurance');assurance.replaceChildren();
+  for(const [label,value] of [['任务',task.phase.label],['产物验收',`${task.assurance.artifacts} · ${task.assurance.acceptance}`],['结论',task.assurance.conclusion]])assurance.append(create('span',label==='结论'?`assessment-state ${task.assurance.conclusionState}`:'',`${label}：${value}`));
   tick(); renderGraph(); renderBasis(); renderEvents(); renderReport(); renderSidebar(); renderReplay(); void renderDetails();
 }
 function renderUsage(){
@@ -286,18 +299,19 @@ function renderUsage(){
  text('usage-token-detail',tokenDetail);
  byId('usage-token-detail').title=u.tokens?`${tokenDetail} · 缓存读取 ${n(u.tokens.cacheRead)} · 缓存写入 ${n(u.tokens.cacheWrite)} · 推理 ${n(u.tokens.reasoning)}${u.modelCalls===null?'':` · 模型响应 ${n(u.modelCalls)} 次`}。缓存包含在输入中，推理包含在输出中。`:tokenDetail;
  text('usage-tools',u.toolCalls===null?'—':n(u.toolCalls));
- text('usage-tool-detail',u.toolCalls===null?'未接入原生计数':`另有 Cairn ${n(u.cairnCalls??0)} 次 · 失败 ${n(u.toolErrors??0)} 次`);
- byId('usage-tools').title='业务工具已返回的调用数，包含失败；Cairn 工具另计。工具内容不保存。';
+ text('usage-tool-detail',u.toolCalls===null?'未接入原生计数':`另有 Cairn ${u.cairnCalls===null?'—':n(u.cairnCalls)} 次 · 失败 ${u.toolErrors===null?'—':n(u.toolErrors)} 次`);
+ byId('usage-tools').title=u.sources.some(source=>source.endsWith('/scheduler'))?'自动阶段按宿主报告的调用次数累计；原生 hooks 按已返回调用累计。统计边界按来源区分，不保存工具内容。':'业务工具已返回的调用数，包含失败；Cairn 工具另计。工具内容不保存。';
  const time=usageTime(current,replayActive?replayAxis.startMs+replayClock.position:Date.now(),u.stoppedAt??current.updatedAt);
  text('usage-active',elapsedLabel(time.activeMs));text('usage-wall',elapsedLabel(time.wallMs));
  text('usage-active-detail',time.activeMs===null?'历史任务未采集执行时长':`${time.partial?'接入统计后累计 · ':''}执行状态累计，扣除暂停`);
  const hosts=[...new Set(u.sources.map(source=>source.split('/')[0]))];
- text('usage-note',`${replayActive?'历史时刻 · ':''}${hosts.length?hosts.join(' / ')+' · ':''}仅统计已观测的主会话用量，不保存工具内容`);
+ text('usage-note',`${replayActive?'历史时刻 · ':''}${hosts.length?hosts.join(' / ')+' · ':''}仅统计宿主已提供的用量${u.usageIncomplete?' · 用量不完整（下界）':''}，不保存工具内容`);
 }
 function tick() {
   if (!current) return;
   renderUsage();
   const deadline = current.budget.deadline, now = replayActive ? replayAxis.startMs + replayClock.position : Date.now();
+  if(!replayActive&&current.workItems.some(item=>item.lease&&item.status==='running'&&Date.parse(item.lease.expiresAt)<=now))void refresh();
   byId('clock-stat').hidden = !deadline || current.status === 'completed';
   text('clock-label', '提醒剩余时间');
   const clock = byId('clock'); clock.classList.toggle('expired', !!deadline && Date.parse(deadline) <= now);
@@ -328,7 +342,7 @@ function renderGraph() {
       : `M${a.x + width},${a.y + height / 2} C${a.x + width + 35},${a.y + height / 2} ${b.x - 35},${b.y + height / 2} ${b.x},${b.y + height / 2}`;
     const marker = edge.relation==='handoff'||edge.state==='review'?'arrow-review':edge.state === 'running' ? 'arrow-running' : edge.state === 'refuted' ? 'arrow-red' : edge.state === 'pending' || edge.state === 'context' ? 'arrow-pending' : 'arrow';
     const line = svg('path', { d: path, class: `edge ${edge.state} relation-${edge.relation}`, 'marker-end': `url(#${marker})`, 'data-edge-from': edge.from, 'data-edge-to': edge.to, 'data-relation': edge.relation });
-    line.append(svg('title', {}, { context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', handoff:'子 Agent 返回结果，进入主 Agent 的复核流程',review:'由分支状态生成的主 Agent 复核关系',stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', addresses:'涉及此目标条件，尚未构成完成依据', input:'来源事实 → 探索（固定事实版本）',produces:'探索 → 产出结论，不代表自动证明因果',explores:'分支包含这次探索',revises:'旧来源版本已被修订', goal: '目标与验收条件' }[edge.relation])); world.append(line);
+    line.append(svg('title', {}, { dependency:'共同前提（已声明的依赖）', context: '背景与记录', branch: '已保存的分支展开或结果归属，不表示因果关系', handoff:'子 Agent 返回结果，进入主 Agent 的复核流程',review:'由分支状态生成的主 Agent 复核关系',stage: '任务或分支包含此执行阶段，不表示阶段依赖顺序', basis: '已登记依据', supports: '支持结论', refutes: '反驳结论', criterion: '结论关联此目标条件', addresses:'涉及此目标条件，尚未构成完成依据', input:'来源事实 → 探索（固定事实版本）',produces:'探索 → 产出结论，不代表自动证明因果',explores:'分支包含这次探索',revises:'旧来源版本已被修订', goal: '目标与验收条件' }[edge.relation])); world.append(line);
     if(edge.relation==='input'||edge.relation==='produces')world.append(svg('text',{x:(a.x+b.x+width)/2,y:(a.y+b.y+height)/2-5,'text-anchor':'middle',class:'provenance-label'},edge.relation==='input'?`来源 · r${edge.revision??0}`:'产出'));
     if(edge.relation==='handoff')world.append(svg('text',{x:(a.x+b.x+width)/2,y:(a.y+b.y+height)/2-5,'text-anchor':'middle',class:'handoff-label'},edge.state==='review'?'返回 · 待复核':'返回 · 已复核'));
   }
@@ -343,7 +357,7 @@ function renderGraph() {
     const lines = graphLines(node.label);
     lines.forEach((line, i) => group.append(svg('text', { x: 13, y: lines.length === 1 ? 47 : 40 + i * 18, class: 'label', fill: palette.text }, line)));
     group.append(svg('text', { x: 13, y: 80, class: 'state', fill: palette.muted }, short(node.state, 27)));
-    const met = node.kind === 'goal' ? task.status === 'completed' || task.check.ok : node.kind === 'criterion' ? !task.check.unmet.includes(node.data.id) : node.status === 'completed';
+    const met = node.kind === 'goal' ? task.status === 'completed' || task.check.ok && (task.reportCheck?.ok??!task.completionVerifier) : node.kind === 'criterion' ? !task.check.unmet.includes(node.data.id) : node.status === 'completed';
     if (met) {
       group.append(svg('circle', { cx: width - 17, cy: 16, r: 8, fill: node.status === 'goal' ? '#d1fae5' : '#eef2ff' }));
       group.append(svg('text', { x: width - 17, y: 20, 'text-anchor': 'middle', class: 'node-tick', fill: node.status === 'goal' ? '#047857' : '#4f46e5' }, '✓'));
@@ -440,7 +454,7 @@ async function renderDetails() {
       return;
     }
   }
-  if (selectedNode.startsWith('work:')) { const item = task.workItems.find(i => `work:${i.key}` === selectedNode); if (item) { text('detail-kind', '执行阶段'); panel.append(create('div', `detail-tag ${item.status}`, item.statusLabel), create('h2', '', item.title)); if (item.detail) panel.append(create('div', 'detail-text', item.detail)); metadata(panel, '最近更新', formatTime(item.updatedAt)); metadata(panel, '来源', item.source === 'agent' ? 'Agent 报告' : item.source === 'host' ? '宿主事件' : '历史任务记录'); panel.append(create('div', 'notice', '这是最近保存的阶段状态，不代表宿主进程实时存活。')); return; } }
+  if (selectedNode.startsWith('work:')) { const item = nodes.get(selectedNode)?.data as TaskView['workItems'][number] | undefined; if (item) { text('detail-kind', '执行阶段'); panel.append(create('div', `detail-tag ${item.status}`, item.statusLabel), create('h2', '', item.title)); if (item.detail) panel.append(create('div', 'detail-text', item.detail)); metadata(panel, '最近更新', formatTime(item.updatedAt)); if(item.delegated){metadata(panel,'协作分支',item.branchStatus??'open');if(item.lease){metadata(panel,'认领会话',item.lease.actor.sessionId);metadata(panel,'租约到期',new Date(item.lease.expiresAt).toLocaleString());}if(item.branchCheckpoint){panel.append(create('div','detail-text',item.branchCheckpoint.summary));for(const question of item.branchCheckpoint.questions)panel.append(create('p','note',`未解决：${question}`));if(item.branchCheckpoint.next)panel.append(create('p','note',`下一步：${item.branchCheckpoint.next}`));}} if(item.from?.length)metadata(panel,'共同前提',item.from.join('、')); metadata(panel, '来源', item.source === 'agent' ? 'Agent 报告' : item.source === 'host' ? '宿主事件' : '历史任务记录'); panel.append(create('div', 'notice', '这是最近保存的阶段状态，不代表宿主进程实时存活。')); return; } }
   const node = nodes.get(selectedNode) ?? nodes.get('origin')!; if (!node) return;
   text('detail-kind', graphKindLabels[node.kind]);
   panel.append(create('div', 'detail-tag', node.state), create('h2', '', node.kind === 'origin' || node.kind === 'goal' ? task.goal : node.label));
@@ -453,6 +467,10 @@ async function renderDetails() {
   if(node.kind==='hint'){metadata(panel,'提供者',node.data.author);metadata(panel,'来源','调用者注明的人工反馈');metadata(panel,'时间',formatTime(node.data.at));panel.append(create('div','notice','人工输入是背景与方向，不自动变成已确认事实。'));return;}
   if(node.kind==='global-review'){metadata(panel,'已复核 / 最新',`${node.data.acknowledged} / ${node.data.generation}`);for(const reason of node.data.pending)panel.append(create('div','detail-text',reason.text));if(node.data.last){heading(panel,'最近复核');panel.append(create('div','detail-text',node.data.last.summary));metadata(panel,'快照',node.data.last.snapshot);}return;}
   if (node.kind === 'origin' || node.kind === 'goal') {
+    metadata(panel,'产物／契约验收',task.assurance.acceptance);
+    metadata(panel,'结论审查',task.assurance.conclusion);
+    if(task.execution)metadata(panel,'宿主最近状态',`${task.execution.state} · ${formatTime(task.execution.at)}`);
+    if(task.conclude)metadata(panel,'探索收尾',task.conclude.status==='saved'?'已保存阶段结果':'已请求保存 · 等待宿主响应');
     if(task.checkpoint){
       heading(panel,'最新进展');panel.append(create('div','detail-text',task.checkpoint.summary));
       metadata(panel,'记录时间',formatTime(task.checkpoint.at));
@@ -478,7 +496,9 @@ async function renderDetails() {
   if (node.kind === 'claim' || node.kind === 'basis') {
     if (node.kind === 'basis') panel.append(create('div', 'detail-text', node.data.text));
     metadata(panel, '结论修订', node.data.revision); metadata(panel, '当前状态', statuses[node.data.status] ?? node.data.status);
-    metadata(panel, '依据来源', node.data.provenance === 'agent' ? 'AI 整理' : '采集记录与 Agent 解释');
+    metadata(panel, '依据来源', ({agent:'AI 整理',captured:'采集记录与 Agent 解释',subagent:'子 Agent 待审核',human:'外部人工反馈'} as Record<string,string>)[node.data.provenance]??'历史记录');
+    if(node.data.from?.length)metadata(panel,'共同前提',node.data.from.join('、'));
+    if(node.data.history?.length){const history=create('details','event-details');history.append(create('summary','',`修订历史 · ${node.data.history.length} 次`));for(const revision of node.data.history){const entry=create('section','report-section');entry.append(create('strong','',`v${revision.revision} · ${statuses[revision.status]??revision.status}`),create('p','',revision.text));if(revision.updatedAt)entry.append(create('small','note',new Date(revision.updatedAt).toLocaleString()));if(revision.basis)entry.append(create('p','note',revision.basis));if(revision.from?.length)entry.append(create('p','note',`当时前提：${revision.from.join('、')}`));history.append(entry);}panel.append(history);}
     if(node.data.needsReview)panel.append(create('div','notice','来源版本已变化；仅确认全局复核不能恢复此结论，需要重新验证并更新产出关系，或撤回结论。'));
     if(node.data.derivation){heading(panel,'探索产出');metadata(panel,'探索分支',node.data.derivation.branch);metadata(panel,'轮次',node.data.derivation.attempt);}
     if(node.data.branch){heading(panel,'排查分支');reference(panel,node.data.branch,'branch');}
@@ -563,6 +583,14 @@ function renderReport() {
   if (!task.report) { panel.append(create('p', 'note', '尚未保存报告。Agent 保存进展或完成任务时，会按结论及其证据生成报告引用。')); return; }
   if(task.reportCheck&&!task.reportCheck.ok)panel.append(create('div','notice',`报告仍需补齐：${task.reportCheck.issues.join('；')}`));
   const section = (title: string, value: string | undefined) => { if (!value) return; const block = create('section', 'report-section'); block.append(create('h3', '', title), create('p', '', value)); panel.append(block); };
+  section('产物／契约验收',task.assurance.acceptance);
+  section('结论正确性审查',task.assurance.conclusion);
+  if(task.assurance.assessment)section('审查依据与范围',`${task.assurance.assessment.reviewer} · ${task.assurance.assessment.summary} · ${task.assurance.assessment.scope}`);
+  section('状态含义','任务完成表示当前流程检查满足。文件、数值验收仅覆盖所声明范围，不能据此推导结论正确；模型自报 supported 不属于独立审查。');
+  section('宿主最近状态',task.execution?`${task.execution.state}（与任务完成状态独立）`:undefined);
+  section('核验方式与范围',task.verification?`${task.verification.method??'未声明'} · ${task.verification.scope??'由宿主检查定义'}`:undefined);
+  for(const artifact of task.artifacts??[])section('提交物',`${artifact.path} · ${artifact.bytes} bytes · SHA-256 ${artifact.sha256}`);
+  for(const handoff of task.handoffs??[]){section(`探索交接 · ${handoff.key}`,handoff.summary);section('报告 / 会话 / 后续',`${handoff.report??'—'} / ${handoff.sessionRef??'—'} / ${handoff.next??'—'}`);}
   section('结果总结', task.report.summary);
   section('完成状态', task.status==='completed'?'目标条件与依据校验已通过，任务已完成。':'报告已保存，等待目标完成检查。');
   const citations = create('section', 'report-section'); citations.append(create('h3', '', '引用证据'));
@@ -585,13 +613,18 @@ function renderSidebar(){
   text('hint-count',current!.hints.length);
   const hints=byId('hints-panel');hints.replaceChildren();
   for(const hint of current!.hints){const card=create('div','hint-card');card.append(create('p','',hint.text),create('small','',`人工提示 · ${hint.author}`));hints.append(card);}
-  if(!current!.hints.length)hints.append(create('p','note','暂无人工提示。在 CLI 中补充的 Hint 会同步到这里。'));
+  if(!current!.hints.length)hints.append(create('p','note','暂无人工提示，可在这里补充新的背景信息。'));
+  const form=create('form','human-form'),label=create('label','','给 Agent 的提示'),input=create('textarea','search');input.id='hint-text';input.maxLength=8000;input.required=true;input.value=hintDraft;input.placeholder='补充背景、优先级或验证结果…';label.htmlFor=input.id;input.oninput=()=>{hintDraft=input.value;};const save=create('button','button primary','保存提示');save.type='submit';form.append(label,input,save);form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await mutate('hints',{text:input.value});hintDraft='';await refresh();}catch(error){showError(error);}finally{save.disabled=false;}};if(!replayActive)hints.append(form);
+  if(!replayActive&&current!.status==='completed'){
+    const reopen=create('form','human-form'),label=create('label','','外部验证反馈'),reason=create('textarea','search');reason.id='reopen-reason';reason.maxLength=8000;reason.required=true;reason.value=reopenDraft;reason.placeholder='说明未通过的验证，以及需要继续检查的内容…';label.htmlFor=reason.id;reason.oninput=()=>{reopenDraft=reason.value;};const button=create('button','button','按反馈重开任务');button.type='submit';reopen.append(label,reason,button);reopen.onsubmit=async event=>{event.preventDefault();button.disabled=true;try{await mutate('reopen',{reason:reason.value});reopenDraft='';await refresh();}catch(error){showError(error);}finally{button.disabled=false;}};hints.append(reopen);
+  }
   const logs=byId('log-panel');logs.replaceChildren();for(const event of timeline.filter(e=>e.category!=='advanced').slice(-12).reverse())logs.append(eventElement(event,true));
   if(!timeline.length)logs.append(create('p','note','尚无任务事件。'));
   switchInspector(activeInspector);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => { button.onclick = () => switchView(button.dataset.view!); });
 byId<HTMLInputElement>('search').oninput = renderTasks; byId<HTMLSelectElement>('filter').onchange = renderTasks;
+byId('pause-task').onclick=async()=>{const button=byId<HTMLButtonElement>('pause-task');button.disabled=true;try{await mutate('suspend');await refresh();}catch(error){showError(error);}finally{button.disabled=false;}};
 byId('show-goal').onclick = () => {replayFollow=false;inspect('goal');focusNodes(['goal']);};
 byId('focus-change').onclick=()=>{replayFollow=true;followReplayActivity();};
 byId('replay-start').onclick = () => { void startReplay(); };

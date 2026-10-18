@@ -1,0 +1,1202 @@
+[
+  {
+    "case": "case-01",
+    "groundtruth": {
+      "timestamp": "1647736507",
+      "level": "pod",
+      "cmdb_id": "recommendationservice2-0",
+      "failure_type": "k8s容器写io负载"
+    },
+    "windowStart": 1647735907,
+    "windowEnd": 1647737107,
+    "family": "disk_io",
+    "files": [
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_periods.csv",
+        "rows": 800,
+        "sha256": "4010f6916f91e7bc71ee7593696c26f8ad3b0af5a28c7323dc9dbf69806c74c7"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_throttled_periods.csv",
+        "rows": 800,
+        "sha256": "252aa23cd2e8d7deddd54e6cfcf603d0cf097556d042212dcb8c9bfad8d68760"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_throttled_seconds.csv",
+        "rows": 800,
+        "sha256": "8afde215f4e0b6b1233becacfcd2c3fceffe18ce6429b4594f09ae43c3382221"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_load_average_10s.csv",
+        "rows": 800,
+        "sha256": "2d59a1567176b2434de3b1843d95e56fd320ee59f19d444d671d1a9bee0865d1"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_system_seconds.csv",
+        "rows": 800,
+        "sha256": "bffd2e26ae65f4969ac266f1904202d8f63e52e75aeadbada155df53d819a6c7"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_usage_seconds.csv",
+        "rows": 800,
+        "sha256": "6a6d034fdcc2e01e045e1ede02beab314fceaad07ae8b1989e1a9bae1c3f4092"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_user_seconds.csv",
+        "rows": 800,
+        "sha256": "1477cb2b3317192b2b9f13ce2068755d0c629fc21da6f409fb96f27698bdb9ff"
+      },
+      {
+        "path": "evidence/container/kpi_container_file_descriptors.csv",
+        "rows": 800,
+        "sha256": "ed7be5b1bf3e23bdf4e64bb0d00f9a46c12ea8de1e3a277d151ec38e6913d01a"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_inodes.csv",
+        "rows": 800,
+        "sha256": "3a3e3d0a318f014b6265ffd638550d6e2b97db1d3ccefd01a9d7ad9a153ec81e"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_inodes_free.csv",
+        "rows": 800,
+        "sha256": "772a876108040eae2d96e2f7e125c7d97b1c0fa55c0a91d35b847d862d186f6c"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_current.csv",
+        "rows": 800,
+        "sha256": "3da92828bed145e1f63076184f6aaa1f2f3f846e64b205c0a3e90348212ca471"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_time_seconds.csv",
+        "rows": 800,
+        "sha256": "354dd95190876d7c22bae418b5aac769893f381808c56ebd9aea4a71284056fe"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_time_weighted_seconds.csv",
+        "rows": 800,
+        "sha256": "e14be200926184e2aafc822b8cd4745914fc0137f9eb6af62387467a81426334"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_limit_MB.csv",
+        "rows": 800,
+        "sha256": "de7bb2626eb2267b0de8130266a299c5ae8dab60d06c646d779b44aeb8b9a7d3"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_read_seconds.csv",
+        "rows": 800,
+        "sha256": "d068a387c3afbdbb63503496a7522a438a60fe472c78206fcf3f321e1854d548"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads.csv",
+        "rows": 1460,
+        "sha256": "767145fce4c0d7f94d7959a4784b05905aac8da0d71cf9a6fef698c997cb9481"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads_MB.csv",
+        "rows": 660,
+        "sha256": "ac051949c77e4b14800ca1276bfd8ab2ea1440276d73e1feaaf07824c0981b77"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads_merged.csv",
+        "rows": 800,
+        "sha256": "3b859f9eb15470e6959bd96b9ff815fa75727b47c3a5c348ca173c0162c77395"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_sector_reads.csv",
+        "rows": 800,
+        "sha256": "6c75fedfc2feefd60bfa0fc31dc966527c8cb8acab27b4aaf06bac0ce44398f2"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_sector_writes.csv",
+        "rows": 800,
+        "sha256": "d8a844f6df694672a8f1c00e0e5335e8845d2c655d8ba86b8c66dd82c208be91"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_usage_MB.csv",
+        "rows": 800,
+        "sha256": "e1c42b25461f19af25c541ceab13d781844d0cbd6ee68757ad15d873cda8c0e7"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_write_seconds.csv",
+        "rows": 800,
+        "sha256": "eb282b494750932aaba8e79dde4fd47bf1f9f7dd4dd299eb5710bb879b31f1a0"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes.csv",
+        "rows": 1460,
+        "sha256": "f5aa0c79b0d8158144062d1066be1f671d3d9220cc363e4910fadefdefd4dc03"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes_MB.csv",
+        "rows": 660,
+        "sha256": "3d36714010c4b51abf4057050ffdc818d0a3a1acc16e5035088891294d19a658"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes_merged.csv",
+        "rows": 800,
+        "sha256": "633152d41a54513d6c51f578b1d0cde0bc6d3f64decb9448af1cbac112ae9101"
+      },
+      {
+        "path": "evidence/container/kpi_container_last_seen.csv",
+        "rows": 800,
+        "sha256": "808fcf0b46784d64c59da65a35ae722d886eda6b021ae9098d466f9370fa9f04"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_cache.csv",
+        "rows": 800,
+        "sha256": "06a5d072f82fca0898f72a0ad8b6ff03e002fe597a6e30b7f13b77473a52e00d"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_failcnt.csv",
+        "rows": 800,
+        "sha256": "359244da6a1063b8d605bf69b6cf53cb755f1c41c7e18613907a1ac7c207a7d5"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_failures.csv",
+        "rows": 3200,
+        "sha256": "248c3b46e5eb8a9ef95e1a82d4384d37521dfe03924a98c0b04fbbf3f6415a34"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_mapped_file.csv",
+        "rows": 800,
+        "sha256": "b8ee308585ac3dec52344ce525a176008b0148e10241ad0375e609955e6b3d4e"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_max_usage_MB.csv",
+        "rows": 800,
+        "sha256": "e2fd2f4f49a2ffbf37252aa1b4594174bd9460980159c7bb178b3049a965954e"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_rss.csv",
+        "rows": 800,
+        "sha256": "3cd3c6d7eb7150e89319a73bac31aa4e79fbccfb97740b026870d6471bbba771"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_swap.csv",
+        "rows": 800,
+        "sha256": "3015a5ddf0274ea1c3fcc86732d16edfd45b028921397b0ca38e9e012cf92a6d"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_usage_MB.csv",
+        "rows": 800,
+        "sha256": "99a62a27dffc43a8bb5b840fde63fafd04f77f2a37e4c7d1c7aff7c4ec862c95"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_working_set_MB.csv",
+        "rows": 800,
+        "sha256": "f177088838e54acbf2d00c6083676df80f056a01dea5a596498938d717cc79ff"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_MB.csv",
+        "rows": 840,
+        "sha256": "f182fb36865e172cb859995a9677621dce0c6e935753fd717fa620408d895183"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_errors.csv",
+        "rows": 840,
+        "sha256": "3c0a1757ce1f4822feac552d733c5d3e43289f758dd7c155680a197884661956"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_packets.csv",
+        "rows": 840,
+        "sha256": "14aa68a86b0053981a3137a7ff03e07a35883a0d200f28d4ae028c7e0616e326"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_packets_dropped.csv",
+        "rows": 840,
+        "sha256": "f49be99161c9d38286a2a40021b44d607e3eecd796bd9a1546b30afe37f17e0d"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_MB.csv",
+        "rows": 840,
+        "sha256": "bec8b163dbe73ddc4e7fea96973ca7123d14616b210d99b668f4bc0532acd741"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_errors.csv",
+        "rows": 840,
+        "sha256": "ac3ba43ee025d4d6cb98b5727e39f8ca506ad4727d0c1e6eddbc155407e32400"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_packets.csv",
+        "rows": 840,
+        "sha256": "a94b9314867365e7c981f20abda1148b71383074ac08d8addef3a867424c31bc"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_packets_dropped.csv",
+        "rows": 840,
+        "sha256": "1efc885fd01865b001b47cd107bdf325354ca449ceef3cd7b78bc2caed4124be"
+      },
+      {
+        "path": "evidence/container/kpi_container_sockets.csv",
+        "rows": 800,
+        "sha256": "dbaec34009fc8a34f3be703e495da63ffda7e0867725bc8b3d3c63f66b94d630"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_period.csv",
+        "rows": 800,
+        "sha256": "1d2498a132521bcf8749923e07f6de248322adeb8c9e096a87c72d0c12cc01ef"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_quota.csv",
+        "rows": 800,
+        "sha256": "0ac3d1aa958588d49ea5a6720424a7c39c3e70a3e6f321317adaf500c9d3d1da"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_shares.csv",
+        "rows": 800,
+        "sha256": "7d5199d066a0ab3af2306e1b76fe801690969fbe7f479ce38a6e1cafca2ad95e"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_limit_MB.csv",
+        "rows": 800,
+        "sha256": "f01b839729f060f568e7ce4664634e2545f245722e5b3c81a8a0f4849bae4a02"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_reservation_limit_MB.csv",
+        "rows": 800,
+        "sha256": "c9d12ecc0d7f9e84b758dba814190579bee2358ba4e934f6899f1a1c6692288f"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_swap_limit_MB.csv",
+        "rows": 800,
+        "sha256": "262229e301c68bf9837c93cffd641510c7aa127b5c020966850d903753ec5272"
+      },
+      {
+        "path": "evidence/container/kpi_container_start_time_seconds.csv",
+        "rows": 800,
+        "sha256": "07b549f335efa81c414c151693b48a1d45a255aa4577e7b14b92a2141c82cad8"
+      },
+      {
+        "path": "evidence/container/kpi_container_tasks_state.csv",
+        "rows": 4000,
+        "sha256": "2f054f9778a2b75db8e2c4e330250fc395acbe654529fcc6423c0fc4e21417fd"
+      },
+      {
+        "path": "evidence/container/kpi_container_threads.csv",
+        "rows": 800,
+        "sha256": "6e4823aadf4295a280224c7c8633f77009934dd89cfa3c764e8f6b4d26e356a0"
+      },
+      {
+        "path": "evidence/container/kpi_container_threads_max.csv",
+        "rows": 800,
+        "sha256": "fee4cf1932ddcc3c3adbdbc37a1590b0f34ed2aee7fdb3a096183a451fab15f1"
+      },
+      {
+        "path": "evidence/container/kpi_container_ulimits_soft.csv",
+        "rows": 800,
+        "sha256": "9333e98fc8e0c72ba121e0db56c29510b9d338a15437492a7c3618314bb1dc29"
+      },
+      {
+        "path": "evidence/node/kpi_cloudbed2_metric_0320.csv",
+        "rows": 6808,
+        "sha256": "69192c735f440f39610c9a0c513d39380464dc51262d39d8d69b9c728aa44706"
+      },
+      {
+        "path": "evidence/service/metric_service.csv",
+        "rows": 220,
+        "sha256": "c68d26f87c62021986e60040c3fb86c83a0feafa707d3aa969092d10e633c93e"
+      }
+    ],
+    "taskHash": "7651cf087fbc0c50f3a6b3eee2357a5a098318b3d418e2b4f43168bcb9e7d416"
+  },
+  {
+    "case": "case-02",
+    "groundtruth": {
+      "timestamp": "1647737295",
+      "level": "node",
+      "cmdb_id": "node-6",
+      "failure_type": "node节点CPU故障"
+    },
+    "windowStart": 1647736695,
+    "windowEnd": 1647737895,
+    "family": "cpu",
+    "files": [
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_periods.csv",
+        "rows": 800,
+        "sha256": "a21b6c5bab3b4753da173d8eebf16d9d4da1f4db0b61ec9759040f1439391142"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_throttled_periods.csv",
+        "rows": 800,
+        "sha256": "bc20788a1f334ae02ec9c08ae36ba14be0f221917dbca8ded760321b20ccfc70"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_throttled_seconds.csv",
+        "rows": 800,
+        "sha256": "af6cf90e76c2d062a751c46950b374b2cd22a995588517c199ec88e03b1b9640"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_load_average_10s.csv",
+        "rows": 800,
+        "sha256": "70a0a1b3a196a8695dcc1342d1a21796fb4106c97d5fb4cf0c45ab4927bb0dbc"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_system_seconds.csv",
+        "rows": 800,
+        "sha256": "2522e97b608d4000c5b2363ee5d52463d137563d6723ffa427d6323ba457f101"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_usage_seconds.csv",
+        "rows": 800,
+        "sha256": "204db85f9e970752730c838c664fd58e55fee0f34959326937732b90ed1ca3ff"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_user_seconds.csv",
+        "rows": 800,
+        "sha256": "95a875eb20ff91706506350ae0532084abba2209adee55549026fb9e978b409b"
+      },
+      {
+        "path": "evidence/container/kpi_container_file_descriptors.csv",
+        "rows": 800,
+        "sha256": "7f2cdd7e33f5708aafa517b2688a2bad419fb081a89472cbeadd7a9bac042329"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_inodes.csv",
+        "rows": 800,
+        "sha256": "0fc0a9372a5f1adcbf7adeccac92be46a956c800ecc76aa2af27216cab9dd431"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_inodes_free.csv",
+        "rows": 800,
+        "sha256": "ec060ecbbb464f4a4721c831fb85fc2ca274d81feb3936a116ee380dd968e3b3"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_current.csv",
+        "rows": 800,
+        "sha256": "39d9dd6e48cede93febd9e0520b5b69e5f51fcd1e577b623a08ec62d2ccedf4c"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_time_seconds.csv",
+        "rows": 800,
+        "sha256": "c5ac04bf004af969a648c46269077e26a136b7663a35edc45fce8d67621cc5f8"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_time_weighted_seconds.csv",
+        "rows": 800,
+        "sha256": "d124da02a6b2418c8008cc102f4f2c8a9337877909b6dbf8191148972228ddf5"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_limit_MB.csv",
+        "rows": 800,
+        "sha256": "fe1ce8cf707d8b6475daf5b3fe06916b2c4ee9ce3560c748ed95afde8d38d5fd"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_read_seconds.csv",
+        "rows": 800,
+        "sha256": "8c95e90dab624353d11a8e23b42cfcd5dd34427db38fc5f9c6fd90a75ce8df05"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads.csv",
+        "rows": 1460,
+        "sha256": "847dbea652f9c4eb0cecdfbd68fbb9a9f732d24f72c033b789cada9e58d5c3c1"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads_MB.csv",
+        "rows": 660,
+        "sha256": "fc5eaf69fbb3f1472cf1cb43e58403e8f8073707c132ee70135f0e9561ad958c"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads_merged.csv",
+        "rows": 800,
+        "sha256": "5b6f54d8281f08e3b54b188c1e182aa7de1588b93a0f82e2de11500e43807c38"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_sector_reads.csv",
+        "rows": 800,
+        "sha256": "dcf16d7a6b5fa64eccea0783e94443c60b9b0c152593fce659905cc409fb7e9e"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_sector_writes.csv",
+        "rows": 800,
+        "sha256": "cbdd514366119dbe43dbca5b8fdc50c66e84fe212ba676f57f4b947f4905a98e"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_usage_MB.csv",
+        "rows": 800,
+        "sha256": "1f2a1b40229e4bfde136dc18ea97cd35daa091decb021ef59078b95e1936df5e"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_write_seconds.csv",
+        "rows": 800,
+        "sha256": "d9c00a919a2ed58d3b0c7e45800ab7b93e11886c15e8dd099f6a1bd1f5e44a5e"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes.csv",
+        "rows": 1460,
+        "sha256": "94db585ad3d3c3834f35d131efce8b4fdc9f016b28dde8f035be90d20a1401db"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes_MB.csv",
+        "rows": 660,
+        "sha256": "26887875c626f0d8998192b77c750e062609316354fe1d6fbb96c55620ea5d84"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes_merged.csv",
+        "rows": 800,
+        "sha256": "ae9c660bbc7193b7f0ce350f0b35186a04916cfd66dd3045d797c2a4a8ed9864"
+      },
+      {
+        "path": "evidence/container/kpi_container_last_seen.csv",
+        "rows": 800,
+        "sha256": "51359eb2aca4fd5e64c16c4a1dc1568ec63de3799c6cf15d436c14511ca394c6"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_cache.csv",
+        "rows": 800,
+        "sha256": "924387cf36bcf7e104acfcd023f74f6ee3696645a5395418c4ed6fe97c391c84"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_failcnt.csv",
+        "rows": 800,
+        "sha256": "b29b05971ece55919c15aa74dcea6f3de6c9c9fcafe213b2fe1c401fcf1172f6"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_failures.csv",
+        "rows": 3200,
+        "sha256": "57d1ae9fe815dccb0cbf0ebdd471a703fc17cd43d2a648c27b8c2ab59fb1dd5b"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_mapped_file.csv",
+        "rows": 800,
+        "sha256": "a6b2d5a4571803cd4d8f500a11340dd2293d33d5654f6711668b4505af2ea5a6"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_max_usage_MB.csv",
+        "rows": 800,
+        "sha256": "f274619057600a48cae6a2ef1b523046ea22e9dc13806673da9e5e78ee22cd31"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_rss.csv",
+        "rows": 800,
+        "sha256": "d713061241a4ee1aad548a0a66b1f1854c2cad328bfcfda7bc2a40a9c410848a"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_swap.csv",
+        "rows": 800,
+        "sha256": "446a13558899aa7de144a1e8e133b253d219624d184c653990cc3e2eac167686"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_usage_MB.csv",
+        "rows": 800,
+        "sha256": "64a4a2c125fd896223f8262b6fed46b2c4c9699d37b58f5aede1cdd2c11ade96"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_working_set_MB.csv",
+        "rows": 800,
+        "sha256": "9082e4048d15ad0457dea3648b6b716fc07c5598688ad0159b52b8e2019e3866"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_MB.csv",
+        "rows": 840,
+        "sha256": "6415449094ef421006730fc60ce5cd09b21b66f2d29e4fdd78097774cb815819"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_errors.csv",
+        "rows": 840,
+        "sha256": "745a31734c851b41e0b4338f7fc50a6577fb535ba95f028cc041ab8b07ffb941"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_packets.csv",
+        "rows": 840,
+        "sha256": "176cef2136ffea5906ae3a97b905a2f5633af05f5277c18c2fdb2d4b5191064f"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_packets_dropped.csv",
+        "rows": 840,
+        "sha256": "a83969fc8839fc59e26fdaea8a6244dbf01448e756871736958af15f46cad647"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_MB.csv",
+        "rows": 840,
+        "sha256": "23fd50922e9131764e0f00892f9ab383412be0208d5c218c28fb1854ed00b413"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_errors.csv",
+        "rows": 840,
+        "sha256": "aebb59724613e1452ddd0576a1cf59d61eade5faef7e52bb5b13b05efc7fcaf8"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_packets.csv",
+        "rows": 840,
+        "sha256": "eae750b58fea80560dfc86fc596c35c934f2eb4dd8359ecf1b7554ca3caf85b3"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_packets_dropped.csv",
+        "rows": 840,
+        "sha256": "387b2840639207da926f844ba5a44c5bf5ffdbeb55fee04dc8516823c4cfc29d"
+      },
+      {
+        "path": "evidence/container/kpi_container_sockets.csv",
+        "rows": 800,
+        "sha256": "b87667bdeeb905d5543ed6a9489f8981e597633a7991f93b75f29ad7de15d592"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_period.csv",
+        "rows": 800,
+        "sha256": "6a312625fe888091d65077832fe31ab7689d6c53c1f2a405e6c00c67a707753f"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_quota.csv",
+        "rows": 800,
+        "sha256": "7fd303017760345ff19e89f4d64d5d9b4bbe0617198e3c524ef9c0fd285ac922"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_shares.csv",
+        "rows": 800,
+        "sha256": "02f1bff0974b06c5b03797387e5b2efd3ac95e9cf1b3ab011a1020362bed069a"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_limit_MB.csv",
+        "rows": 800,
+        "sha256": "c90bfc9db05ef8e07bac50b6bbe368613729e448b108f3ee9ff9d132a25b0726"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_reservation_limit_MB.csv",
+        "rows": 800,
+        "sha256": "5f7cf73ababe691269a1fb0dca86c9a870cada6b5257fa5ea2bd94a802898e7f"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_swap_limit_MB.csv",
+        "rows": 800,
+        "sha256": "30bfd1a6b244074045a9beb49c9aef845ed2280fa24930e70ff6935b21b86038"
+      },
+      {
+        "path": "evidence/container/kpi_container_start_time_seconds.csv",
+        "rows": 800,
+        "sha256": "be960ac11bf140ee931228c72c2bee461eadc3e9d3f857c10caa7e5d772717c0"
+      },
+      {
+        "path": "evidence/container/kpi_container_tasks_state.csv",
+        "rows": 4000,
+        "sha256": "c943a0269f786b6e142a5e096d238e43f83800894a07a6172f05806b23e40653"
+      },
+      {
+        "path": "evidence/container/kpi_container_threads.csv",
+        "rows": 800,
+        "sha256": "2bb2a2b51f996106a9445914c20a541dffd412ac79dbf20ad71f808d5d25e1df"
+      },
+      {
+        "path": "evidence/container/kpi_container_threads_max.csv",
+        "rows": 800,
+        "sha256": "11f2781978a86020cbe67b83da93b4d07fc244a538fd47a5d38acf0c491e8563"
+      },
+      {
+        "path": "evidence/container/kpi_container_ulimits_soft.csv",
+        "rows": 800,
+        "sha256": "c35736cf0a043bc84f6c06e8194fee6770385b9d049b333c66b8079164998c4e"
+      },
+      {
+        "path": "evidence/node/kpi_cloudbed2_metric_0320.csv",
+        "rows": 6808,
+        "sha256": "c17533b2b55c45399259281c0f71f62fe33b01262ff3b462710260d780af9e8a"
+      },
+      {
+        "path": "evidence/service/metric_service.csv",
+        "rows": 220,
+        "sha256": "d0d238853dc04432a47cc04d8bbccf53393c234e6676efbd42474762647ddeb8"
+      }
+    ],
+    "taskHash": "62676f3356cf75f9f01993cb8a712a4969c048376c5133094943cad0509e2a7f"
+  },
+  {
+    "case": "case-03",
+    "groundtruth": {
+      "timestamp": "1647739015",
+      "level": "pod",
+      "cmdb_id": "cartservice2-0",
+      "failure_type": "k8s容器内存负载"
+    },
+    "windowStart": 1647738415,
+    "windowEnd": 1647739615,
+    "family": "memory",
+    "files": [
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_periods.csv",
+        "rows": 800,
+        "sha256": "ff4cb5b37af1916fd84a9b4720fec224858885f91406779073d5acf31e42e6c0"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_throttled_periods.csv",
+        "rows": 800,
+        "sha256": "7f68a78e4d6280c922ab49aa3040d706af4890d203aaf9443de4dc0102f2f31f"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_throttled_seconds.csv",
+        "rows": 800,
+        "sha256": "cfc5992e125b43afe22fcbd693a2aa28482f5455afb9a28ed61a8a93e689bbf7"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_load_average_10s.csv",
+        "rows": 800,
+        "sha256": "3c76302a96b1005a33b49a4a67612394e0715865b46232d9ef161850320a8cc9"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_system_seconds.csv",
+        "rows": 800,
+        "sha256": "b92fbb98830e08b04a4045ea917125c705e37802add7e214c374417e693ad8b6"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_usage_seconds.csv",
+        "rows": 800,
+        "sha256": "dea9a73e6e8f75644e78f19864fb1419c503ddb94a77e13b8a630362f30eddf6"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_user_seconds.csv",
+        "rows": 800,
+        "sha256": "d081dde9c50c258257e51cd79bf841b400ae02566d0ed05584a8ad4b0fc390bb"
+      },
+      {
+        "path": "evidence/container/kpi_container_file_descriptors.csv",
+        "rows": 800,
+        "sha256": "2d8fada8ae23cc75213f1fe9f2bd4a2ed58d5ce49c0e6c6c4455b7d23e124e3f"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_inodes.csv",
+        "rows": 800,
+        "sha256": "7b3f0df47e7a085df6847ce4960aa0a40399f65bacfbc3a615365246a39f3c23"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_inodes_free.csv",
+        "rows": 800,
+        "sha256": "bfb974c4284173d3cbe27ad2ac84d9afe5204f4ec9ae153dfc4b2c3ba081ab3d"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_current.csv",
+        "rows": 800,
+        "sha256": "20b3948318ef214b0bb7a68fc55830a214b3abf040951c723a18b1cb13fd59bb"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_time_seconds.csv",
+        "rows": 800,
+        "sha256": "4981ed423cc9c1733bfad7b0b30ad4495ae1db84e4da9f1974480ce207322703"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_time_weighted_seconds.csv",
+        "rows": 800,
+        "sha256": "83191f256f88904ac4e0fefdfc396f9d3bd4ba97963fbbdc07688d9a8f8e77b8"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_limit_MB.csv",
+        "rows": 800,
+        "sha256": "422650489262137c834118ae1747c69ced7a3a2c1fcb7c7d4f1b2cc3999f0cc1"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_read_seconds.csv",
+        "rows": 800,
+        "sha256": "a835f44f9dce57c23dbae467322f662fbc3ca33ac4dfad697644efbe60f8bf8c"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads.csv",
+        "rows": 1460,
+        "sha256": "16fc410cefe38ff2e5d8d0a5ff469cf6443873190e0921539527d38b40d3c788"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads_MB.csv",
+        "rows": 660,
+        "sha256": "c64617390504cca8fb204db22a03137e00ff45fbf31079da7816b761deb6572a"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads_merged.csv",
+        "rows": 800,
+        "sha256": "811bab5222fd15b16dcac936a0eabc16ff78d3242fce543fd96db02052d61b45"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_sector_reads.csv",
+        "rows": 800,
+        "sha256": "f99f1b3ede786c6a0addde739c1f8fc7dafc8cd133e08a3a563701951248cb15"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_sector_writes.csv",
+        "rows": 800,
+        "sha256": "94c4b76007d04d249f434b5e1ed8500ef53df0344c0c15d133ae233c6b1d5775"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_usage_MB.csv",
+        "rows": 800,
+        "sha256": "408e61a9e1e0090eba25b501391fe0a1f9cb8e7491e521964654d5837cfaf26b"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_write_seconds.csv",
+        "rows": 800,
+        "sha256": "815c4e6fb5a52b7f4e35a9f1730d3fc336c847c556ca3b3c538ad8075693454e"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes.csv",
+        "rows": 1460,
+        "sha256": "ff2bcbbd66a87b180c7dd91bcd035ad1af039382530d67ec94a2fb19c6457863"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes_MB.csv",
+        "rows": 660,
+        "sha256": "bceedfe7b62bb89d1e969dee2bd57e15def415a97e0c183268bd34ae432b7fdb"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes_merged.csv",
+        "rows": 800,
+        "sha256": "0ae9ec36f9ce1df94f9da0fcdff1387c785574fa08494681741872a3a98cf66f"
+      },
+      {
+        "path": "evidence/container/kpi_container_last_seen.csv",
+        "rows": 800,
+        "sha256": "014f82d55592b27df4330a46bbf3a1bcee8e1e6ff2e6082bfe96c2c04770e44d"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_cache.csv",
+        "rows": 800,
+        "sha256": "dd611926c058224342693c19796fa8766561c97c36e407d2d7fea2fe38589241"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_failcnt.csv",
+        "rows": 800,
+        "sha256": "38955fe7c2fc9d482bb7486bb4babc8ce574012f935de9e6ba33fafb5b46b29d"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_failures.csv",
+        "rows": 3200,
+        "sha256": "179fdc206a7e1ee7b4e144d9796244ea7030a059e8f454350806bec86075feb2"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_mapped_file.csv",
+        "rows": 800,
+        "sha256": "9e45ecac00c3c6c69346747ee08e5d54380da1e71ad37398e78c262585fa034f"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_max_usage_MB.csv",
+        "rows": 800,
+        "sha256": "c07e57812271be2f017acf8b306ea6cbdf6d11e6e48be84c20d317b58c266951"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_rss.csv",
+        "rows": 800,
+        "sha256": "05fe9cccde35880d1c1830329f134e8c0f42181723361b94b4b313d62ba6c3b5"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_swap.csv",
+        "rows": 800,
+        "sha256": "d0866393783f6c9588ec8cc0413c4a9b3ee5be4fb53fc3277878f8530b5519d4"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_usage_MB.csv",
+        "rows": 800,
+        "sha256": "ada21734a2aea6bd2a6638266316c35d88e730086aa13d3f7bd29db6c560eb79"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_working_set_MB.csv",
+        "rows": 800,
+        "sha256": "ecf7758a12b23e4c448bca9b374ba724ee40d488009c5a370b9b6aa278545b56"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_MB.csv",
+        "rows": 840,
+        "sha256": "b8d64470c54f1dcbe46c127cadc0668cd765f4ee32b7fd0b6e7c547892f953bb"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_errors.csv",
+        "rows": 840,
+        "sha256": "fc65c830ee8f2c707656f6a26e6dea1843f15693501b308c0005eaad36f40044"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_packets.csv",
+        "rows": 840,
+        "sha256": "752059776769aead60118dfbc0e9b91c3a94cb9485d0ee6acc3ec8e5d505ec0b"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_packets_dropped.csv",
+        "rows": 840,
+        "sha256": "35b3cab88e060db13f0369b42188e1102fb833b502fce78db2589183b7c167b7"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_MB.csv",
+        "rows": 840,
+        "sha256": "f56bf633caff2a8aee0384495e12d38e5b3e655c5d1c378664cfe3ea0fd25839"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_errors.csv",
+        "rows": 840,
+        "sha256": "a5d43f5dce5f4081a9696d2ee9248d7500c8e6038a353b2e9bba107b0c299683"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_packets.csv",
+        "rows": 840,
+        "sha256": "6068bdd10437bc33312f8f930553bac2e5748e5192e9f701cc41c871eeccfc92"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_packets_dropped.csv",
+        "rows": 840,
+        "sha256": "a7f3fa7eb5fbd906d440ea86c185b96dcd65dcedccfb1153eb18dfe00ee56911"
+      },
+      {
+        "path": "evidence/container/kpi_container_sockets.csv",
+        "rows": 800,
+        "sha256": "456e005cebb5bb550e6e890fb81c3dc6ff05f59391ebadbf8cebf4a5be67f478"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_period.csv",
+        "rows": 800,
+        "sha256": "a41a12b4c944a8c0de5a5cbcd369922baa36ff4d19dba651b99d832ab1b3b578"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_quota.csv",
+        "rows": 800,
+        "sha256": "bdbb4de139bd16e2d4049986fb97e72ae9203196890e0abc0499c289f48c3652"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_shares.csv",
+        "rows": 800,
+        "sha256": "d6fe5128367195b75ce298f5481de541f541ae3b3d2a4032817e2a916c733cc1"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_limit_MB.csv",
+        "rows": 800,
+        "sha256": "c5a1fdcdd337c51ca5b63ace91c03f4a611144725a8d70f83f3eb971745ac6b8"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_reservation_limit_MB.csv",
+        "rows": 800,
+        "sha256": "89cee06a52b19836d35b272314e593e064487645a201e52cb3ebb764d926818e"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_swap_limit_MB.csv",
+        "rows": 800,
+        "sha256": "c862fbfc61c5bb147ef3e3bc0a2160c6d3dfaa0fa2c8ecdd57301b9f7c12e8c8"
+      },
+      {
+        "path": "evidence/container/kpi_container_start_time_seconds.csv",
+        "rows": 800,
+        "sha256": "7dc9fe51cd4dadac15af84230ca514f42e7ff8defe957fe5f120c6e6a0be24d0"
+      },
+      {
+        "path": "evidence/container/kpi_container_tasks_state.csv",
+        "rows": 4000,
+        "sha256": "35382feb5282b1b0995315e375405f99c1fc90c7644216e1f3d06b62252565e7"
+      },
+      {
+        "path": "evidence/container/kpi_container_threads.csv",
+        "rows": 800,
+        "sha256": "1515e8e8a9db0a715ceed0f6163459d027e90ac620503227d56344b8aa71680e"
+      },
+      {
+        "path": "evidence/container/kpi_container_threads_max.csv",
+        "rows": 800,
+        "sha256": "ba4f438be6886b4a5143e005cae775e7f977717363d0b313b39e42df64c121f0"
+      },
+      {
+        "path": "evidence/container/kpi_container_ulimits_soft.csv",
+        "rows": 800,
+        "sha256": "dcb8164c2fe1d13509448c1a262bce577b45e458420d46e482267d174b2f7021"
+      },
+      {
+        "path": "evidence/node/kpi_cloudbed2_metric_0320.csv",
+        "rows": 6808,
+        "sha256": "d667c79b3cec2c7e95e7fce24a9d46a7e5470f5fdc9c166cc4b24a221644c2c2"
+      },
+      {
+        "path": "evidence/service/metric_service.csv",
+        "rows": 220,
+        "sha256": "20aa388a1f8085320b79e35b57495ecd77e0d98ffb9359f6be8f021b01d546aa"
+      }
+    ],
+    "taskHash": "96d6e298f185cd1df5d1398bc04dd4361d92488e235153988a31cb7b70c2c9c3"
+  },
+  {
+    "case": "case-04",
+    "groundtruth": {
+      "timestamp": "1647740269",
+      "level": "service",
+      "cmdb_id": "productcatalogservice",
+      "failure_type": "k8s容器网络资源包损坏"
+    },
+    "windowStart": 1647739669,
+    "windowEnd": 1647740869,
+    "family": "network",
+    "files": [
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_periods.csv",
+        "rows": 800,
+        "sha256": "eb65a47abdce52da45a041f324ffe47c8fcd7476ea32369844940d3c263fe30b"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_throttled_periods.csv",
+        "rows": 800,
+        "sha256": "f06343368718b2c1aa3ef3ca47d4aa0af447344db8887815aac20e94c0f8ff7e"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_cfs_throttled_seconds.csv",
+        "rows": 800,
+        "sha256": "910bb08eb644e725023df1451f0b39e549548767061fd7e101ac4a871e81c7c9"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_load_average_10s.csv",
+        "rows": 800,
+        "sha256": "ba982b1d44f5510dc434701f3ef933dfdf6520585c8829dd6967bcd42e2d5492"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_system_seconds.csv",
+        "rows": 800,
+        "sha256": "00eef6241e1f26f1cd5ad9a802c93444fe5bb352da53f00d97e3798139745087"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_usage_seconds.csv",
+        "rows": 800,
+        "sha256": "eaaff0be1b5a90bdbf7b4e9b214bb9f1935d4888a94a9c9fcfcf5bffe0894466"
+      },
+      {
+        "path": "evidence/container/kpi_container_cpu_user_seconds.csv",
+        "rows": 800,
+        "sha256": "9aec8879bce99c98e79ab4742b072588d12b9b219de28a315f4cee95fdafd9ba"
+      },
+      {
+        "path": "evidence/container/kpi_container_file_descriptors.csv",
+        "rows": 800,
+        "sha256": "727a480564df7c97a88d1e29137d56e7862572611da895fe09e0b8cf6c84c442"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_inodes.csv",
+        "rows": 800,
+        "sha256": "658240da29e72e56b475ddd0d34aec8d913934a5da6b4af99e5b115a556712d4"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_inodes_free.csv",
+        "rows": 800,
+        "sha256": "7c192036dc1d17b61dad9733afedaa94918e81a7d1b5a3567b478fc02ecb5401"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_current.csv",
+        "rows": 800,
+        "sha256": "f4c61b6fb4dcf566267893a7bcbe5b60733721393e00d2a8d9cb003873f79bd2"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_time_seconds.csv",
+        "rows": 800,
+        "sha256": "ff427d5d9ffaa25486ab4ef5299e5dd98cd7071e9c50f18d65491b7fc35d3389"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_io_time_weighted_seconds.csv",
+        "rows": 800,
+        "sha256": "85301133d5c9ba30c910d0860190804c539c549c5a8cfbaaa57a3d5d739c022f"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_limit_MB.csv",
+        "rows": 800,
+        "sha256": "01a97b7bd9e61ad999adccad9cd5d6e3eff6178c4d0ae70ff140f556daf34456"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_read_seconds.csv",
+        "rows": 800,
+        "sha256": "44e1aa340c2c45d645161f154cd6d1d34e7f9290d48e980967cb64861b32a0e9"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads.csv",
+        "rows": 1460,
+        "sha256": "c1cfbbd74dbcc99cebd7c9d3746865e45b0c1787f69a2a2778ccbf08bd26dd28"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads_MB.csv",
+        "rows": 660,
+        "sha256": "8ed95aa8ce529c1652202b924a5d9b6929ba88a8c9d510201c638aa7fc202752"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_reads_merged.csv",
+        "rows": 800,
+        "sha256": "76c96ee5ff67eee60ed20014c363baad9f66d6e0abb55f4c780a54a0178cce5f"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_sector_reads.csv",
+        "rows": 800,
+        "sha256": "ed8f6f635251d944873b2a75f3820140a7071c03136194566bea06cc6039efe9"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_sector_writes.csv",
+        "rows": 800,
+        "sha256": "693034cacdcc6a76d985b6d2a5685cd11e1e69a38965e5a06fb8e70ba7053406"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_usage_MB.csv",
+        "rows": 800,
+        "sha256": "b3f003dc4d73ae171bd1038f46406880ac797322c052189adf49f629dd96c08f"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_write_seconds.csv",
+        "rows": 800,
+        "sha256": "ecd576a911b9efc50922df3a864d0cb575fd9c5cde9679fb78b6bc69d81be893"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes.csv",
+        "rows": 1460,
+        "sha256": "5f2123de72a3ba72c7251854998301434c4afc12ea3ed9d3fb58b685594db56f"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes_MB.csv",
+        "rows": 660,
+        "sha256": "23047fb26650c26fb91703e4b4a61f13f99ab1ac99ea3b8c3131171f96058af0"
+      },
+      {
+        "path": "evidence/container/kpi_container_fs_writes_merged.csv",
+        "rows": 800,
+        "sha256": "477c4aff2292c29aa4a2b56cc3f5c6950b2bf1743a5f518bd825a35d37e46ed5"
+      },
+      {
+        "path": "evidence/container/kpi_container_last_seen.csv",
+        "rows": 800,
+        "sha256": "392d9912f5e44062c3850ad121997582075ebfead15ad1b3361a4e7fc40a5b4e"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_cache.csv",
+        "rows": 800,
+        "sha256": "b7ece02b74f3032e257162e4b9d5ac81b7be4ea3395fbcd32115a22889b1121e"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_failcnt.csv",
+        "rows": 800,
+        "sha256": "6385509e7ae72e584c943773a4a388a4519be6feab7f97029d105592f5ae60ee"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_failures.csv",
+        "rows": 3200,
+        "sha256": "d208de73b4a1256a19db3bca2362aa8479b47ba008994999d8f4d4b00717a9f5"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_mapped_file.csv",
+        "rows": 800,
+        "sha256": "3081d8e866a507a1cc721ac27caae66b6b28177a0585ac346de81a06e2bcf755"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_max_usage_MB.csv",
+        "rows": 800,
+        "sha256": "23002aec669627571439083b78aebf6f9fa99a6e751646bf25f558040e97d013"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_rss.csv",
+        "rows": 800,
+        "sha256": "047575f6a4c021426979237c52cea1cd132e47d18b0bd251bf4a39d7dd7ad693"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_swap.csv",
+        "rows": 800,
+        "sha256": "86d9c619554bce22e00f7fe4137c7546a0815c1597f62faf18447d201525b30b"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_usage_MB.csv",
+        "rows": 800,
+        "sha256": "89f06357d19f19ba72a29dd55f1f24b21197eb654e416b860dd85e54126f663b"
+      },
+      {
+        "path": "evidence/container/kpi_container_memory_working_set_MB.csv",
+        "rows": 800,
+        "sha256": "bb881a9a4fee68e1a399bd0957e8635f10582a90358c5d5ff75a0ed4f2c4759a"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_MB.csv",
+        "rows": 840,
+        "sha256": "19eb9525e328fa5ac343a9bd789cc7b8223b2a0328e43174452578dbd286c030"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_errors.csv",
+        "rows": 840,
+        "sha256": "ad2d7604043de05c2620dedebabe5867089cd94788a97523a8dfd185b7f351da"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_packets.csv",
+        "rows": 840,
+        "sha256": "f69b5fa202314444ef99e667434fbdbd11f4f56a9c21aff60db0a0cba41dbf86"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_receive_packets_dropped.csv",
+        "rows": 840,
+        "sha256": "1bf5f3327b0c19648658aa7347e4ab957f00cca391ab0513468509cd242433ff"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_MB.csv",
+        "rows": 840,
+        "sha256": "315fbf6b937abef5e643f1495681ff4e576f9e5252e043773683f6f29c0d17df"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_errors.csv",
+        "rows": 840,
+        "sha256": "7dfb2c257a6dfc84d042b2c30c5c042a8b2ea8ffcc39d9f1019c5daab5812c53"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_packets.csv",
+        "rows": 840,
+        "sha256": "545ecd15f05bc6b4cc2cb6f3c490035a97c951f0355099a7e09aaba4b516b728"
+      },
+      {
+        "path": "evidence/container/kpi_container_network_transmit_packets_dropped.csv",
+        "rows": 840,
+        "sha256": "308598bf61a80bc8060beda50324682429d9e268df24faed658c28f81d215eb7"
+      },
+      {
+        "path": "evidence/container/kpi_container_sockets.csv",
+        "rows": 800,
+        "sha256": "4d80b8386edf2cd64bcbd644ab37581dd4e894b72e019875078dea6a55767605"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_period.csv",
+        "rows": 800,
+        "sha256": "9ed8bce00ceb5f9c39cb5f1ba4efe78f98791f94d0092d934cf9c27a3e5224c7"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_quota.csv",
+        "rows": 800,
+        "sha256": "1d6513a26856dfb4f68da8190bf807c6e9e1e1eb3ab7333de9cbee1c9eb9c047"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_cpu_shares.csv",
+        "rows": 800,
+        "sha256": "1c88c281a6efe4521bdb684a34126ce44eb94d6aedad8d0dc779335279e3e178"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_limit_MB.csv",
+        "rows": 800,
+        "sha256": "411e6dd7367c58edc48ae3a738d9fdddea27c3a051ad4abfacbf863e9bf97213"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_reservation_limit_MB.csv",
+        "rows": 800,
+        "sha256": "203f7d1071e8e773b9dc26af0620d5b859a54bef004e3715007756377233b0ff"
+      },
+      {
+        "path": "evidence/container/kpi_container_spec_memory_swap_limit_MB.csv",
+        "rows": 800,
+        "sha256": "baa2e910428e4d6c215f5e72946df16a18c51be5bcfc63233b8a3bdbe8b1b9f9"
+      },
+      {
+        "path": "evidence/container/kpi_container_start_time_seconds.csv",
+        "rows": 800,
+        "sha256": "deafd5b110d37f57f3f96be54d6d9ed7c0dd975dfb23e6efdadcb64eeaf4342c"
+      },
+      {
+        "path": "evidence/container/kpi_container_tasks_state.csv",
+        "rows": 4000,
+        "sha256": "9748c8db28fd46013e569881700ff058518c6580919907f68782915a27ca0a79"
+      },
+      {
+        "path": "evidence/container/kpi_container_threads.csv",
+        "rows": 800,
+        "sha256": "5055336ed2b98243b93296708a0e65879439061915316a303769cc70d9c246bb"
+      },
+      {
+        "path": "evidence/container/kpi_container_threads_max.csv",
+        "rows": 800,
+        "sha256": "b5fc67107e31405da86fa528b83ce5df64e74961cf80f7c365242aad8a78ebed"
+      },
+      {
+        "path": "evidence/container/kpi_container_ulimits_soft.csv",
+        "rows": 800,
+        "sha256": "1636601a46247e0326fd5a858736bfbe9de2e3937b9b0b22630abe5ba0e84925"
+      },
+      {
+        "path": "evidence/node/kpi_cloudbed2_metric_0320.csv",
+        "rows": 6808,
+        "sha256": "58af19aca93a503b8930fde8d6a00bbbb22b3cf6938f7ea8a9240508074192f0"
+      },
+      {
+        "path": "evidence/service/metric_service.csv",
+        "rows": 214,
+        "sha256": "8756048eb977ef2c95717eb787a29f26331f0ac3407a4ef0bf9218ccb657c061"
+      }
+    ],
+    "taskHash": "7f363eb05f47e95c27a8027bb3b2ca599118410b4dcf011ecfedf3c9e4e070ac"
+  }
+]

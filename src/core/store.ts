@@ -6,7 +6,7 @@ import { CairnError, type Task, type Session, type Capabilities } from './types.
 /** All projections and their audit event commit in the same SQLite transaction. */
 export class Store {
   readonly db: DatabaseSync;
-  constructor(path: string) {
+  constructor(readonly path: string) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.db = new DatabaseSync(path);
     if(path!==':memory:')chmodSync(path,0o600);

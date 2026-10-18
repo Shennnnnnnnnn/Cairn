@@ -1,0 +1,61 @@
+{
+  "checkedAt": "2026-10-16T23:28:59+0800",
+  "checks": [
+    {
+      "case": 1,
+      "arm": "pi",
+      "accepted": true
+    },
+    {
+      "case": 1,
+      "arm": "pi-cairn",
+      "accepted": true
+    },
+    {
+      "case": 2,
+      "arm": "pi",
+      "accepted": true
+    },
+    {
+      "case": 2,
+      "arm": "pi-cairn",
+      "accepted": true
+    },
+    {
+      "case": 3,
+      "arm": "pi",
+      "accepted": true
+    },
+    {
+      "case": 3,
+      "arm": "pi-cairn",
+      "accepted": true
+    },
+    {
+      "case": 4,
+      "arm": "pi",
+      "accepted": true
+    },
+    {
+      "case": 4,
+      "arm": "pi-cairn",
+      "accepted": true
+    },
+    {
+      "control": "does-not-judge-root-cause",
+      "ok": true
+    },
+    {
+      "control": "inconsistent-report-rejected",
+      "ok": true
+    },
+    {
+      "control": "missing-reference-rejected",
+      "ok": true
+    },
+    {
+      "control": "invalid-json-rejected",
+      "ok": true
+    }
+  ]
+}

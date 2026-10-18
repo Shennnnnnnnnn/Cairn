@@ -8,7 +8,7 @@ export function projectUsage(task:Task,at:number,updatedAt:string){
  const usage=task.usage,tokens=usage?.tokens;
  return {tokens:tokens?{...tokens,total:tokens.input+tokens.output}:null,modelCalls:usage?.modelCalls??null,
   toolCalls:usage?.toolCalls??null,cairnCalls:usage?.cairnCalls??null,toolErrors:usage?.toolErrors??null,
-  sources:usage?.sources??[],stoppedAt:task.status==='active'?undefined:task.timing?.stoppedAt??updatedAt,...usageTime(task,at,updatedAt)};
+  usageIncomplete:usage?.partial??false,sources:usage?.sources??[],stoppedAt:task.status==='active'?undefined:task.timing?.stoppedAt??updatedAt,...usageTime(task,at,updatedAt)};
 }
 export type ResourceUsage=ReturnType<typeof projectUsage>;
 export function elapsedLabel(ms:number|null){

@@ -35,7 +35,7 @@ test('an actual local defect can be reproduced, paused, fixed and verified throu
 test('the public interface contains only goal and evidence checks and rejects retired input fields',async()=>{
  const catalog=coreCatalog(),start=catalog.find(tool=>tool.name==='cairn_start')!.inputSchema as any,finish=catalog.find(tool=>tool.name==='cairn_finish')!.inputSchema as any;
  assert.ok(!('profile' in start.properties));assert.ok(!('submitReserveMs' in start.properties.budget.properties));
- assert.deepEqual(Object.keys(finish.properties.report.properties),['summary']);
+ assert.deepEqual(Object.keys(finish.properties),['outcome','summary']);
  const store=new Store(':memory:'),engine=new Engine(store),session={host:'codex' as const,sessionId:'normal',cwd:'/workspace'},runtime=new ToolRuntime(engine,session);
  try{
   await assert.rejects(runtime.invoke('cairn_start',{goal:'Work',profile:'emergency'}));

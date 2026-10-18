@@ -1,10 +1,10 @@
 # Cairn
 
-[English](README.md) | 简体中文
+[English](README.md) | 简体中文 | [文档导航](docs/README.zh-CN.md)
 
 **为 Pi、Claude Code、Codex 保留目标、证据链和可恢复的进度。**
 
-Cairn 4.8 提供六个工具：**开始、恢复、读取、即时更新、恢复摘要、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，每次有意义的状态变化立即保存，保留结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
+Cairn 4.9 提供六个工具：**开始、恢复、读取、即时更新、恢复摘要、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，每次有意义的状态变化立即保存，保留结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
 
 模型、账号、会话、工具审批和并发由原有 CLI 管理。Cairn 使用 TypeScript 与 SQLite 保存目标记录，并提供蓝白进度看板。普通任务无需配置工具白名单或 MCP 上游。
 
@@ -24,9 +24,10 @@ Cairn 4.8 提供六个工具：**开始、恢复、读取、即时更新、恢�
 |---|---|---|
 | Pi 原生扩展 | 原生 `message_end` 的主会话用量 | 原生返回事件，业务工具与 Cairn 分开 |
 | Claude Code / Codex 原生 hooks | 从 hooks 指定的本机会话文件中增量提取已知格式的数值用量，属于兼容适配；不导入正文 | 原生返回/失败事件 |
+| 可选 Pi/Codex 调度器 | 各阶段宿主返回的用量，缓存包含在输入 | 宿主阶段报告的调用次数；不冒充原生返回事件统计 |
 | 仅 MCP（包括当前 Multica 接入） | 宿主未提供，显示 `—` | 无法观测宿主其他工具，显示 `—` |
 
-Claude/Codex 的提取有读取上限；旧会话内容先建立基线，未知格式、缺失文件及 hook 未运行均不估算用量。其 token 统计是 **Cairn 执行期间已观测的主会话增量**，不保证覆盖创建前/结束后的回复或独立子会话。看板统一注明“仅统计已观测的主会话用量”。历史任务不补造 token、调用次数或执行时间；尚未提供的字段显示 `—`，有真实观测的零值才显示 `0`。
+Claude/Codex 的提取有读取上限；旧会话内容先建立基线，未知格式、缺失文件及 hook 未运行均不估算用量。其 token 统计是 **Cairn 执行期间已观测的主会话增量**，不保证覆盖创建前/结束后的回复或独立子会话。看板注明“仅统计宿主已提供的用量”。自动调度另累计各隔离阶段实际返回的数字，来源标记为 pi/scheduler 或 codex/scheduler；包括 Explore 与输出纠错。历史任务不补造 token、调用次数或执行时间；尚未提供的字段显示 `—`，有真实观测的零值才显示 `0`。
 
 统计不构成取证，不参与目标完成判定，也不作为调用预算或并发限制。普通 curated 任务继续由 AI 自主选择工具。
 
@@ -106,6 +107,18 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 
 无 `--target` 时安装脚本只更新全局命令。详见 [Multica 接入指南](docs/multica.zh-CN.md)。
 
+## 可选：自动 Reason／Explore 调度
+
+普通六工具接入默认不启动调度器。需要黑板自动推进探索时，可先 `cairn submit` 保存目标，再显式运行：
+
+```sh
+cairn run TASK_ID --executor pi --model global:deepseek-v4.1-flash \
+  --effort high --parallel 2 --takeover
+# 或 --executor codex --model gpt-6.1-sol --effort xhigh
+```
+
+调度器通过宿主原生执行首轮尝试或黑板审核，再按需探索与验收。默认 `--start-mode auto`：新目标先 Bootstrap，已有事实、开放问题或工作进展先 Reason；可显式选 `bootstrap-first` 或 `reason-first`。自动选路不增加模型调用，选择与原因在派发前保存，恢复不会把任务倒回起点。默认 `--coordinator-mode fresh-full` 与原版一致，每次 Reason 新建会话、读取完整公开图；可选 `--coordinator-mode reuse-delta` 复用协调会话与增量输入。Explore 始终使用独立会话；支持 general curated 任务，工具与权限仍归宿主。`--parallel` 只限制同时探索的分支数，不设轮数、token 或总耗时预算；没有有效进展或宿主无法继续时保存缺口并退出。已有任务接管必须明确 `--takeover`。使用 `cairn serve`、`status`、`graph --format timeline` 查看已保存进展。详见[可选调度层与恢复边界](docs/scheduler.zh-CN.md)。
+
 ## 模型的最短使用流程
 
 ### 开始 → 自由使用工具 → 完成验收
@@ -123,7 +136,7 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 
 **2. Agent 使用宿主已有工具读取 `package.json`。** 默认不保存读取的工具名、参数和结果，不生成 `E1` 等原始取证编号。
 
-**3. `cairn_finish`：** 一次写入整理后的结论并检查完成条件。
+**3. `cairn_checkpoint`：** 保存有依据的结果并显式关联完成条件。
 
 ```json
 {
@@ -133,12 +146,13 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
     "text": "package.json 的 name 字段为 cairn。",
     "status": "supported",
     "basis": "读取项目清单，核对 name 字段。",
-    "references": ["package.json"]
+    "references": ["package.json"],
+    "covers": ["c1"]
   }]
 }
 ```
 
-单一完成条件会自动关联新增的已支持结论；多个条件用 `covers: ["c1", "c2"]` 关联。未满足条件时保持 `active`，返回 `phase: "incomplete"` 和缺口。程序检查记录格式、结论状态和覆盖关系，**不会自动打开引用验证内容，也不能替 AI 判断因果是否成立**。
+随后调用 `cairn_finish {}`。模型侧的条件覆盖必须显式给出；中间事实使用 `covers:[]`，多个条件用 `covers: ["c1", "c2"]` 关联。未满足条件时保持 `active`，返回 `phase: "incomplete"` 和缺口。默认检查记录格式、结论状态和覆盖关系。外部验证为可选宿主能力；**默认不会打开引用验证内容，也不能替 AI 判断因果是否成立**。
 
 ### 长任务：保存依据和可见的执行进度
 
@@ -162,7 +176,7 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 - `progress.status` 用 `pending`、`running`、`completed`、`blocked`、`cancelled` 表示工作状态。它与目标是否通过验收分别保存。
 - `questions` 是未解决问题，`next` 是下一步。无需登记每次思考或每个工具调用。
 
-阶段记录的 `summary` 描述当前进展，不覆盖已有最终报告摘要；结束时明确传入 `summary` 或 `report.summary` 设置最终报告。简单任务可直接 finish，无需先 checkpoint。无新增内容地重试已完成的 finish，会返回已有状态。
+阶段记录的 `summary` 描述当前进展，不覆盖已有最终报告摘要；通过 checkpoint 的 `report.summary` 或 finish 的短 `summary` 设置最终摘要。简单任务保存一次有依据的 checkpoint 即可。无新增内容地重试已完成的 finish，会返回已有状态。
 
 | 工具 | 用途 |
 | --- | --- |
@@ -247,6 +261,8 @@ cairn feedback TASK_ID --text '边界输入仍失败，请核对' --author '用�
 | 普通 `curated`，传 `maxCalls`／`maxParallel` | 拒绝配置：不统计调用，就不能宣称执行硬限制 |
 | 显式 `captured` | 可限制网关调用和实际经过 hook 的原生调用；不能保证覆盖宿主所有工具路径 |
 
+宿主可通过 `CAIRN_DEADLINE`（ISO 时间）和 `CAIRN_SUBMIT_RESERVE_MS`（默认 30000 毫秒）提供时限。创建、恢复和重开时取更早截止时间与更大预留；在宿主工具／生命周期回调中检查，进入预留窗口及到期各提醒一次，无需先建进度项；在途模型请求可能使提醒延迟或错过。它只要求保存依据、结论或缺口，实际终止由宿主负责。任务完成状态与宿主最近的 running / settled / interrupted / closed 状态分别展示。
+
 工具次数、到期或预算耗尽都不代表成功。确实需要停止时保存未满足条件和下一步，标记暂停；之后恢复继续。原演示的六次调用上限只是该样例配置，不是通用默认值。
 
 ## 主 Agent 自主分支排查
@@ -303,7 +319,7 @@ cairn ui --forget
 
 没有可靠原任务关联的宿主计划事件会跳过，避免迟到结果写进另一个目标。仅 captured Codex 在已有调用保留正确任务／执行代次关联时，才可映射成功的 `update_plan` 结果；Claude／Pi 不保证同步内部计划。普通模式不为此新增工具关联记录。
 
-界面只读且只监听本机回环地址。Agent 继续在原 CLI 工作；关闭看板不会停止任务。目标覆盖率可以随结论修订而下降。空白时检查看板和 CLI 是否使用同一数据库与工作区。
+界面只监听本机回环地址，提供受同源、CSRF token 与 revision 保护的提示、暂停和反馈重开操作。Agent 继续在原 CLI 工作；关闭看板不会停止任务。目标覆盖率可以随结论修订而下降。空白时检查看板和 CLI 是否使用同一数据库与工作区。
 
 ```sh
 cairn task list
@@ -337,7 +353,7 @@ cairn export TASK_ID --format html --out evidence.html
 
 **子 Agent 适合独立子任务或需要新上下文的检查。** 主 Agent 在复核开始和接受结果时分别即时保存业务状态。子 Agent 的新上下文不会自动获得主目标身份或写权限；持久交接到另一原生会话时，仍需要 Adapter 的显式 resume／takeover。无需建立新的 worker 池或固定 reason／explore 交接流程。
 
-恢复摘要控制在 **16 KiB 以内**，带总量和截断标记；持久记录不随摘要截断而删除。`cairn_read` 的 evidence 视图按结论 key／ID 读取整理依据，details 读取完整任务，history 读取事件历史。分页与完整恢复格式见 [架构说明](docs/architecture.md#persistence-and-compact-restoration)。
+恢复摘要以 **12,000 bytes** 为裁剪目标；全图可完整内联时整个返回控制在 **16,000 bytes** 以内，带总量和截断标记；持久记录不随摘要截断而删除。`cairn_read` 的 evidence 视图按结论 key／ID 读取整理依据，details 读取完整任务，history 读取事件历史。分页与完整恢复格式见 [架构说明](docs/architecture.md#persistence-and-compact-restoration)。
 
 用户中断优先，暂停后没有续跑提示；完成检查的补充提示有次数上限。
 
@@ -446,7 +462,7 @@ cairn uninstall --target codex
 
 数据库默认 `<workspace>/.cairn/state.db`；`CAIRN_DB`／`--db` 可覆盖，`CAIRN_WORKSPACE` 可选择工作区。已有 TypeScript SQLite 任务保持原语义：没有 `evidenceMode` 字段的历史任务仍按 captured 解释，不会自动转换。公开接口创建的新任务默认 curated。早期 Python 数据格式不自动迁移，请勿把任务数据提交到 Git。
 
-Bootstrap 保留“在当前会话先直接尝试解决”的策略：理解目标与约束、执行有价值的行动、复核并修正。无需单独 bootstrap worker、保活提示、模型池、轮询 dispatcher 或固定 reason／explore 流程。
+普通宿主驱动接入保留“在当前会话先直接尝试解决”的策略：理解目标与约束、执行有价值的行动、复核并修正。它没有独立的 Bootstrap 阶段；可选调度器才按启动策略进入 Bootstrap 或 Reason，无需额外模型服务。
 
 ## 开发与验证
 

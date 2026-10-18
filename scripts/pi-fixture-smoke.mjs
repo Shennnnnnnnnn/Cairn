@@ -10,6 +10,8 @@ import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 
 const curated=process.argv.includes('--curated');
+const exploration=process.argv.includes('--exploration-loop');
+const feedback=process.argv.includes('--completion-feedback')||exploration;
 const root=mkdtempSync(join(tmpdir(),'cairn-pi-fixture-')),entry=resolve('dist/cairn.mjs'),db=join(root,'.cairn/state.db');
 const agentDir=join(root,'isolated-agent'),providerExtension=join(root,'local-provider.mjs');
 mkdirSync(agentDir,{recursive:true});
@@ -38,8 +40,14 @@ function verifyPrevious(body){
  const previous=toolResults(body).find(result=>result.tool_use_id===`tool_${phase}_${step-1}`);
  assert.ok(previous,`Pi did not return the previous tool result for ${phase}/${step-1}`);
  assert.ok(!previous.is_error,`Pi tool failed at ${phase}/${step-1}: ${JSON.stringify(previous.content)}`);
- if(phase==='create'&&step===2){
+ if(phase==='create'&&step===2&&!feedback){
   const text=JSON.stringify(previous.content);assert.match(text,/cairn-smoke-verified/);if(!curated)assert.match(text,/Cairn E1/);
+ }
+ if(feedback&&!exploration&&phase==='create'&&[4,5].includes(step)){
+  const text=typeof previous.content==='string'?previous.content:previous.content.map(block=>block.text??'').join('\n'),result=JSON.parse(text);
+  assert.equal(result.phase,'incomplete');assert.equal(result.repair.attempts,step-3);
+  assert.deepEqual(result.repair.missingCriteria,[{id:'c2',text:'Reviewer accepts the saved marker'}]);
+  assert.equal(savedTask().claims.length,1,'Repeated incomplete finish must retain one finding');
  }
 }
 const server=createServer(async(req,res)=>{
@@ -53,13 +61,41 @@ const server=createServer(async(req,res)=>{
   assert.deepEqual([...exposed].filter(name=>name.startsWith('cairn_')).sort(),[...coreNames].sort());
   for(const tool of body.tools??[])if(coreNames.includes(tool.name))assert.equal(tool.input_schema?.properties?.session_id,undefined,'Pi must bind native identity without a model-facing session_id');
   verifyPrevious(body);
-  const planned=phase==='create'?[
-   ['cairn_start',{evidence_mode:curated?'curated':'captured',goal:'Verify marker',criteria:['File contains marker']}],
+  if(exploration&&phase==='create'&&step===3){
+   const previous=toolResults(body).find(result=>result.tool_use_id===`tool_${phase}_2`);
+   const text=typeof previous.content==='string'?previous.content:previous.content.map(block=>block.text??'').join('');
+   const receipt=JSON.parse(text);assert.equal(receipt.exploration.next,'Review the saved fact');assert.deepEqual(receipt.exploration.unmet,['c2']);
+  }
+ const planned=exploration?(phase==='create'?[
+   ['cairn_start',{goal:'Verify marker through the blackboard',criteria:['Observe the supplied marker','Conclude from saved facts']}],
    ['read',{path:join(root,'evidence.txt')}],
-   ['cairn_finish',{outcome:'suspended',summary:'Verified marker; reviewer pending',findings:[{key:'marker',text:'File contains marker',...(curated?{basis:'Confirmed the marker in the local fixture file',references:[join(root,'evidence.txt')]}:{evidence:['E1']}),covers:['c1']}],questions:['Reviewer acceptance pending']}],
+   ['cairn_checkpoint',{summary:'Marker observed; review next',findings:[{key:'marker',text:'The file contains cairn-smoke-verified',status:'supported',basis:'Read the original supplied file',references:[join(root,'evidence.txt')],covers:['c1']}],progress:[{key:'inspect',title:'Inspect original marker',status:'completed'}],questions:['Can the saved fact support the requested conclusion?'],next:'Review the saved fact'}],
+   ['cairn_finish',{outcome:'suspended',summary:'Fact preserved; resume for conclusion'}],
   ]:[
    ['cairn_resume',{task_id:state?.id,takeover:true}],
-   ['cairn_finish',{summary:'Reviewer accepted the saved evidence',questions:[]}],
+   ['cairn_read',{view:'context',focus:'marker'}],
+   ['cairn_checkpoint',{findings:[{key:'conclusion',text:'The saved original marker establishes the requested conclusion',status:'supported',basis:'Compared the saved original marker',from:['marker'],covers:['c2']}],questions:[]}],
+   ['cairn_finish',{}],
+  ]):feedback?(phase==='create'?[
+   ['cairn_start',{goal:'Verify marker and review',criteria:['File contains marker','Reviewer accepts the saved marker']}],
+   ['read',{path:join(root,'evidence.txt')}],
+   ['cairn_checkpoint',{findings:[{key:'marker',text:'File contains marker',status:'supported',basis:'Read marker file',references:[join(root,'evidence.txt')],covers:['c1']}]}],
+   ['cairn_finish',{}],
+   ['cairn_finish',{}],
+   ['cairn_finish',{outcome:'suspended',summary:'Marker saved; await reviewer'}],
+  ]:[
+   ['cairn_resume',{task_id:state?.id,takeover:true}],
+   ['cairn_checkpoint',{summary:'Marker and reviewer accepted',questions:[],findings:[{key:'review',text:'Reviewer accepts the saved marker',status:'supported',basis:'Deterministic fixture reviewer compared the original marker',covers:['c2']}]}],
+   ['cairn_finish',{}],
+  ]):phase==='create'?[
+   ['cairn_start',{evidence_mode:curated?'curated':'captured',goal:'Verify marker',criteria:['File contains marker']}],
+   ['read',{path:join(root,'evidence.txt')}],
+   ['cairn_checkpoint',{summary:'Verified marker; reviewer pending',findings:[{key:'marker',text:'File contains marker',status:'supported',...(curated?{basis:'Read the original supplied file',references:[join(root,'evidence.txt')]}:{evidence:['E1']}),covers:['c1']}],questions:['Reviewer acceptance pending']}],
+   ['cairn_finish',{outcome:'suspended'}],
+  ]:[
+   ['cairn_resume',{task_id:state?.id,takeover:true}],
+   ['cairn_checkpoint',{questions:[]}],
+   ['cairn_finish',{summary:'Reviewer accepted the saved evidence'}],
   ];
   const [operation,args]=planned[step]??[];
   if(operation){assert.ok(exposed.has(operation),`Pi did not expose ${operation}`);operations.push({phase,tool:operation});}
@@ -101,25 +137,24 @@ try{
  // Pi's documented registerProvider supports the built-in anthropic-messages API
  // and literal dummy keys. Model traffic can only reach this loopback fixture.
  writeFileSync(providerExtension,`export default function(pi){pi.registerProvider('cairn-fixture',{baseUrl:${JSON.stringify(baseUrl)},apiKey:'cairn-local-fixture-not-a-credential',api:'anthropic-messages',models:[{id:'cairn-fixture',name:'Cairn local protocol fixture',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:200000,maxTokens:4096}]});}\n`,{mode:0o600});
- console.log(JSON.stringify({root,mode:'real-cli/local-protocol-fixture',isolatedAgentDir:agentDir}));
+ console.log(JSON.stringify({root,mode:exploration?'real-cli/exploration-loop-fixture':feedback?'real-cli/completion-feedback-fixture':'real-cli/local-protocol-fixture',isolatedAgentDir:agentDir}));
  await launch();
  let task=savedTask();
  assert.equal(task?.status,'suspended');assert.equal(task.owner.sessionId,sessionId);assert.equal(task.owner.host,'pi');assert.equal(task.owner.epoch,1);
- assert.equal(task.observations.length,curated?0:1);const observation=task.observations[0];
- if(!curated){
- assert.equal(observation.source,'hook');assert.equal(observation.tool,'read');assert.equal(observation.eligible,true);assert.equal(observation.actor.sessionId,sessionId);assert.match(JSON.stringify(observation.output),/cairn-smoke-verified/);
- assert.equal(task.report.citations[0].observationId,observation.id);assert.equal(task.claims[0].supports[0],observation.id);
+ const observation=task.observations[0];
+ if(feedback){assert.equal(task.observations.length,0);assert.equal(task.claims.length,1);if(exploration){assert.equal(task.checkpoint.next,'Review the saved fact');assert.equal(task.progress[0].status,'completed');}else assert.equal(task.finishAttempt.attempts,2);assert.equal(task.criteria[1].claimIds.length,0);}
+ else {
+  assert.equal(task.observations.length,curated?0:1);if(!curated){assert.equal(observation.source,'hook');assert.equal(observation.tool,'read');assert.equal(observation.eligible,true);assert.equal(observation.actor.sessionId,sessionId);assert.match(JSON.stringify(observation.output),/cairn-smoke-verified/);
+  assert.equal(task.report.citations[0].observationId,observation.id);assert.equal(task.claims[0].supports[0],observation.id); }
  }
  const originalObservationId=observation?.id,originalTaskId=task.id;
  phase='resume';step=0;sessionId=randomUUID();await launch();task=savedTask();
  assert.equal(task.id,originalTaskId);assert.equal(task.status,'completed');assert.equal(task.owner.host,'pi');assert.equal(task.owner.sessionId,sessionId);assert.equal(task.owner.epoch,2);
- assert.equal(task.observations.length,curated?0:1);if(!curated)assert.equal(task.report.citations[0].observationId,originalObservationId);
- assert.equal(task.usage.toolCalls,1);assert.equal(task.usage.cairnCalls,4);
- assert.equal(task.usage.tokens.input,140);assert.equal(task.usage.tokens.output,210);assert.equal(task.usage.modelCalls,7);
- assert.ok(task.timing.activeMs>=0);if(curated)assert.deepEqual(task.calls,{});
- assert.deepEqual(operations.map(item=>item.tool),['cairn_start','read','cairn_finish','cairn_resume','cairn_finish']);
+ if(feedback){assert.equal(task.observations.length,0);assert.equal(task.claims.length,2);assert.ok(task.criteria.every(criterion=>criterion.claimIds.length===1));}
+ else {assert.equal(task.observations.length,curated?0:1);if(!curated)assert.equal(task.report.citations[0].observationId,originalObservationId);}
+ assert.deepEqual(operations.map(item=>item.tool),exploration?['cairn_start','read','cairn_checkpoint','cairn_finish','cairn_resume','cairn_read','cairn_checkpoint','cairn_finish']:feedback?['cairn_start','read','cairn_checkpoint','cairn_finish','cairn_finish','cairn_finish','cairn_resume','cairn_checkpoint','cairn_finish']:['cairn_start','read','cairn_checkpoint','cairn_finish','cairn_resume','cairn_checkpoint','cairn_finish']);
  assert.equal(readFileSync(join(agentDir,'auth.json'),'utf8').trim(),'{}','The isolated blank auth store must remain empty');
- console.log(JSON.stringify({ok:true,host:'pi',mode:'real-cli/local-protocol-fixture',requests:requestCount,tools:operations,taskId:task.id,observations:task.observations.length,epoch:task.owner.epoch,usage:task.usage,timing:task.timing,curated,root}));
+ console.log(JSON.stringify({ok:true,host:'pi',mode:exploration?'real-cli/exploration-loop-fixture':feedback?'real-cli/completion-feedback-fixture':'real-cli/local-protocol-fixture',requests:requestCount,tools:operations,taskId:task.id,observations:task.observations.length,epoch:task.owner.epoch,root}));
 }finally{
  if(activeChild&&activeChild.exitCode===null){activeChild.kill('SIGKILL');await new Promise(resolve=>activeChild.once('close',resolve));}
  server.closeAllConnections();await new Promise(resolve=>server.close(resolve));

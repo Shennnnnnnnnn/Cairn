@@ -1,6 +1,6 @@
 # 通用目标工作流：自由使用工具，保留依据与进度
 
-适用于 Cairn 4.7 的默认 `curated` 模式。它不要求配置工具白名单，不保存工具名、参数或原始返回。AI 使用 Pi、Claude Code、Codex 已有的能力，在每次状态变化时即时保存目标进度、整理后的依据、结论和文件／链接引用。
+适用于 Cairn 4.9 的默认 `curated` 模式。它不要求配置工具白名单，不保存工具名、参数或原始返回。AI 使用 Pi、Claude Code、Codex 已有的能力，在每次状态变化时即时保存目标进度、整理后的依据、结论和文件／链接引用。
 
 本指南先回答设计问题，再给一个从初始输入到暂停、恢复和完成的完整例子。JSON 块是 **Agent 调用 Cairn 工具的参数**，不是终端命令。
 
@@ -29,7 +29,7 @@ AI 在宿主中完成实际工作；Cairn 保存目标与证据关系。你可�
 
 阶段节点从起点展开；依据→结论→完成条件→目标的连线来自保存的关系。阶段之间不因排列顺序自动生成因果关系。图支持缩放、平移、适应画布、全屏和横纵布局，时间线和报告仍可单独查看。
 
-Agent 可用 cairn_update 即时传单项 `progress`，也可在 start／checkpoint／finish 中传初始或交接状态，用同一个可读 `key` 更新同一工作项。无需按每次工具调用登记。
+Agent 可用 cairn_update 即时传单项 `progress`，也可在 start／checkpoint 中传初始或交接状态；模型 finish 只接收 outcome 和短摘要，用同一个可读 `key` 更新同一工作项。无需按每次工具调用登记。
 
 ```json
 {
@@ -44,7 +44,7 @@ Agent 可用 cairn_update 即时传单项 `progress`，也可在 start／checkpo
 
 这是 checkpoint 参数示例。支持的状态为 `pending`、`running`、`completed`、`blocked`、`cancelled`。暂停会将仍在执行的项改为阻塞；恢复后由 Agent 根据实际情况更新。
 
-**界面显示最近记录的状态，不是进程存活探测。** `active` 意味着目标仍可推进，不能证明终端里的模型此刻正在运行。默认不采集工具遥测，因此不会用工具调用数推断忙闲。curated 业务状态通过 cairn_update 即时保存，不自动同步宿主计划。
+**界面显示最近记录的状态，不是进程存活探测。** `active` 意味着目标仍可推进，不能证明终端里的模型此刻正在运行。仅采集宿主提供的数字用量，不记录工具内容，也不会用工具调用数推断忙闲。curated 业务状态通过 cairn_update 即时保存，不自动同步宿主计划。
 
 没有可靠原任务关联的计划事件必须跳过，避免暂停 A、开始 B 后，A 的迟到计划改变 B。只有 captured Codex 已保存的调用关联仍符合当前任务／代次时，才会映射成功的 `update_plan`；Claude／Pi 不保证镜像内部计划。普通模式不会为了计划同步重新保存工具关联元数据。
 
@@ -72,13 +72,13 @@ Agent 可用 cairn_update 即时传单项 `progress`，也可在 start／checkpo
 
 需要时间目标时可设置 `budget.deadline`，填写实际的 ISO 8601 时间。普通 curated 模式中它只用于提醒，过期不会把任务标成完成，也不会拦截宿主工具。更适合把“先用约 20 分钟给出可验证结论，不能确定时保留缺口”这样的偏好写入初始约束。
 
-curated 模式传 `maxCalls`／`maxParallel` 会报错，因为系统不统计工具调用，无法可靠执行这些硬限制。确实需要受控取证预算时，新建显式 `evidence_mode: "captured"` 的任务；其限制只覆盖网关与实际经过 hooks 的路径，不能宣称限制了宿主所有执行路径。
+curated 模式传 `maxCalls`／`maxParallel` 会报错，因为用量统计并不覆盖所有宿主执行路径，不能用它执行这些硬限制。确实需要受控取证预算时，新建显式 `evidence_mode: "captured"` 的任务；其限制只覆盖网关与实际经过 hooks 的路径，不能宣称限制了宿主所有执行路径。
 
 **完成以目标条件及其依据为准。** 工具调用多、步骤全部勾选、预算耗尽或时间到都不算完成。不能继续时保存问题和下一步，暂停后可以接着做。
 
 ## 3. 子 Agent 能替代新会话吗
 
-**4.2 起，主 Agent 会按共享 skill 自主选择分支与助手数量。** 判断发生在当前模型会话中，实际委派使用宿主提供的工具。Cairn 保存 branches、归属与结果，仍不提供硬编码的调度器或模型 worker 池。MCP 连接身份本身不会启动模型会话，Multica 的并发任务上限也不是排查应开几个助手。
+**4.2 起，主 Agent 会按共享 skill 自主选择分支与助手数量。** 判断发生在当前模型会话中，实际委派使用宿主提供的工具。Cairn 保存 branches、归属与结果，默认使用宿主自主委派。需要自动推进时，可选择 cairn run 的薄调度层，详见[调度指南](scheduler.zh-CN.md)。MCP 连接身份本身不会启动模型会话，Multica 的并发任务上限也不是排查应开几个助手。
 
 关系图现在有独立的排查分支节点：可展开子分支，并显示负责人、执行状态、结果与依据。浅蓝色表示“助手已返回，待主 Agent 汇总”；橙黄表示执行中；紫蓝表示主 Agent 已审阅完成。分支不等于已启动的助手，主会话也可以执行分支。完整参数与流程见[自主委派说明](../skills/cairn/references/delegation.md)。
 
@@ -95,7 +95,7 @@ curated 模式传 `maxCalls`／`maxParallel` 会报错，因为系统不统计�
 
 子 Agent 适合并行核对独立问题、审阅结果，或为某个子任务提供更干净的上下文。主 Agent 审阅返回结果，再登记到同一个目标中。
 
-完整跨会话恢复还涉及原生身份、生命周期、上下文绑定和旧负责人隔离。子 Agent 的新上下文不会自动获得主目标的写权限，也不会自动触发主目标接管。持久交接给另一个原生会话时，仍使用 `cairn_resume(task_id=实际ID,takeover=true)`。不需要另外构造模型 worker 池或固定 reason／explore 调度。
+完整跨会话恢复还涉及原生身份、生命周期、上下文绑定和旧负责人隔离。子 Agent 的新上下文不会自动获得主目标的写权限，也不会自动触发主目标接管。持久交接给另一个原生会话时，仍使用 `cairn_resume(task_id=实际ID,takeover=true)`。可选 Scheduler 复用宿主执行 Bootstrap／Reason／Explore；它不替代宿主模型、权限或会话。
 
 ## 4. 不约束工具，还能保留证据链吗
 
@@ -113,7 +113,7 @@ curated 模式传 `maxCalls`／`maxParallel` 会报错，因为系统不统计�
 
 时间线以目标创建、进展保存、暂停、接管恢复、完成检查和完成等关键节点为主，优先显示可读摘要、状态和时间；大段正文按需展开。captured 的原始取证事件可单独筛选。
 
-默认 curated 没有工具调用日志。时间线不是 AI 每一步内部思考的流水账，也不会把原始 JSON 作为主要阅读方式。阶段 `summary` 描述当前进展，不覆盖已有报告摘要；最终 finish 的 `summary` 或 `report.summary` 明确形成报告。
+默认 curated 没有工具调用日志。时间线不是 AI 每一步内部思考的流水账，也不会把原始 JSON 作为主要阅读方式。阶段 `summary` 描述当前进展，不覆盖已有报告摘要；最终 finish 的 `summary` 或 checkpoint 的 `report.summary` 明确形成报告。
 
 ## 6. Observation 是什么角色
 
@@ -213,6 +213,7 @@ Agent 使用宿主文件工具或终端读取 JSON。Cairn 不保存这次调用
     "key": "unit-conversion",
     "text": "显示端可能漏掉分到元的换算。",
     "status": "proposed",
+    "covers": [],
     "basis": "模拟输入的 API 值为 1640 分，显示值却为 1640 元；参考值为 16.4 元。",
     "references": ["price-case.json"]
   }],
@@ -255,7 +256,7 @@ Agent 调用 `cairn_resume`：
 
 ### F. 完成目标验收
 
-确认文件和核算内容后，Agent 调用 `cairn_finish`。下面内容只对应上述模拟数据，实际任务应引用实际核验结果：
+确认文件和核算内容后，Agent 调用 `cairn_checkpoint` 保存事实增量。下面内容只对应上述模拟数据，实际任务应引用实际核验结果：
 
 ```json
 {
@@ -295,7 +296,7 @@ Agent 调用 `cairn_resume`：
 }
 ```
 
-结构和条件覆盖通过后返回 `status: "completed"`。若漏了条件、没有支撑依据或结论仍是 proposed，则保持 active 并列出缺口；Agent 应补查或暂停。看板中执行项、目标完成条件与报告分别可读。
+保存后，若返回全局复核缺口，读取当前图快照并用 `cairn_update review={snapshot,summary}` 确认；派生结论失效仍须重新核验。再调用 `cairn_finish {}`。结构和条件覆盖通过后返回 `status: "completed"`。若漏了条件、没有支撑依据或结论仍是 proposed，则保持 active 并列出缺口；Agent 应补查并更新 checkpoint，或暂停。看板中执行项、目标完成条件与报告分别可读。
 
 程序的通过结果表示“记录和条件覆盖符合约定”，不等于程序独立证明了文件内容和诊断真伪。Agent 和使用者仍需审阅依据是否真的支持结论。
 

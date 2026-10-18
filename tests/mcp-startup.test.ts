@@ -88,7 +88,7 @@ test('bare MCP connections restore a remembered goal across directories with dis
   assert.equal(started.evidenceMode, 'curated');
   await call(first, 'cairn_checkpoint', {
     summary: 'package.json establishes Node >=24; review remains',
-    findings: [{ key: 'node', text: 'Node 24 or newer is required', basis: 'package.json engines.node is >=24.0.0', references: ['/fixture/package.json'], covers: ['c1'] }],
+    findings: [{ key: 'node', text: 'Node 24 or newer is required', status:'supported', basis: 'package.json engines.node is >=24.0.0', references: ['/fixture/package.json'], covers: ['c1'] }],
   });
   await call(first, 'cairn_finish', { outcome: 'suspended', summary: 'Saved for a fresh connection to review' });
   assert.equal(snapshot(db, started.taskId).task.status, 'suspended');
@@ -106,7 +106,7 @@ test('bare MCP connections restore a remembered goal across directories with dis
   assert.equal(resumed.owner.epoch, 2);
   assert.equal(resumed.claims[0].basis, 'package.json engines.node is >=24.0.0');
   const revision = snapshot(db, started.taskId).task.revision;
-  await rejected(first, 'cairn_checkpoint', { summary: 'Late result from the previous connection' }, 'stale_owner');
+  await rejected(first, 'cairn_checkpoint', { next: 'Late result from the previous connection' }, 'stale_owner');
   assert.equal(snapshot(db, started.taskId).task.revision, revision);
 
   const finished = await call(second, 'cairn_finish', { summary: 'Node requirement verified from package.json' });

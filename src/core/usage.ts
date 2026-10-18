@@ -50,3 +50,24 @@ export function tokenUsage(engine:Engine,session:Session,id:string,tokens:TokenU
   save(engine,attribution,options.source??`${session.host}/native`,{tokens:delta,...(options.modelCall&&!previous?{modelCalls:1}:{})});
  });
 }
+
+/** Numeric totals from one isolated scheduler invocation; never model-authored. */
+export function phaseUsage(engine:Engine,session:Session,id:string,metrics:Record<string,unknown>|undefined){
+ if(!metrics||!id)return;
+ const raw=metrics.usage as Record<string,unknown>|null|undefined;
+ const integer=(value:unknown):value is number=>Number.isSafeInteger(value)&&Number(value)>=0;
+ const tokens=raw&&integer(raw.input_tokens)&&integer(raw.output_tokens)&&integer(raw.cached_input_tokens)&&integer(raw.cache_write_input_tokens)?{
+  input:raw.input_tokens,output:raw.output_tokens,cacheRead:raw.cached_input_tokens,cacheWrite:raw.cache_write_input_tokens,reasoning:0,
+ }:undefined;
+ const calls=integer(metrics.toolCalls)?metrics.toolCalls:undefined,models=integer(metrics.assistantTurns)&&metrics.assistantTurns>0?metrics.assistantTurns:undefined;
+ if(!(tokens&&validTokens(tokens))&&calls===undefined&&models===undefined)return;
+ engine.store.transaction(()=>{
+  const task=owner(engine,session),key=usageKey(session,`phase:${id}`);
+  if(!task||task.status!=='active'||engine.store.db.prepare('SELECT key FROM usage_samples WHERE key=?').get(key))return;
+  engine.store.db.prepare('INSERT INTO usage_samples VALUES (?,?,?,?)').run(key,task.id,task.owner.epoch,JSON.stringify({done:true}));
+  if(metrics.usageIsLowerBound===true){task.usage??={sources:[],updatedAt:engine.at()};task.usage.partial=true;}
+  save(engine,task,`${metrics.host==='pi'||metrics.host==='codex'?metrics.host:'host'}/scheduler`,{
+   ...(tokens&&validTokens(tokens)?{tokens}:{}),...(calls===undefined?{}:{toolCalls:calls}),...(models===undefined?{}:{modelCalls:models}),
+  });
+ });
+}

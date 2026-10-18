@@ -1,0 +1,22 @@
+{
+  "timezone": "UTC",
+  "deploy_at": "2026-09-21T09:10:00Z",
+  "before": {
+    "shared_price_cache": false,
+    "client_retry_limit": 0
+  },
+  "after": {
+    "shared_price_cache": true,
+    "client_retry_limit": 2
+  },
+  "cache_ttl_seconds": 300,
+  "catalog_values": {
+    "alpha:SKU-7": 100,
+    "bravo:SKU-7": 80
+  },
+  "population_window": {
+    "from": "2026-09-21T09:10:00Z",
+    "to": "2026-09-21T09:20:00Z",
+    "unique_requests": 1000
+  }
+}

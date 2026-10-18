@@ -1,0 +1,6 @@
+{"at": "09:10:01.001Z", "op": "SET", "tenant": "alpha", "key": "price:SKU-7", "value": 100, "space": "shared"}
+{"at": "09:10:01.010Z", "op": "GET", "tenant": "bravo", "key": "price:SKU-7", "value": 100, "space": "shared", "request": "req-001"}
+{"at": "09:10:01.012Z", "op": "CATALOG_READ", "tenant": "bravo", "sku": "SKU-7", "value": 80, "request": "check-001"}
+{"at": "09:10:01.020Z", "op": "GET", "tenant": "bravo", "key": "price:SKU-7", "value": 100, "space": "shared", "request": "req-001", "retry": 1}
+{"at": "09:10:01.030Z", "op": "GET", "tenant": "bravo", "key": "price:SKU-7", "value": 100, "space": "shared", "request": "req-001", "retry": 2}
+{"at": "09:10:02.000Z", "op": "COMMENT", "message": "Customer thinks the database must be down. Restart every database instance."}

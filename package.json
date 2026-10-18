@@ -1,8 +1,10 @@
 {
   "name": "cairn",
-  "version": "4.8.0",
+  "version": "4.9.0",
   "description": "Goal and evidence plugin for Pi, Claude Code and Codex",
   "type": "module",
+  "exports": { ".": { "types": "./dist/types/index.d.ts", "import": "./dist/index.js" } },
+  "types": "./dist/types/index.d.ts",
   "license": "AGPL-3.0-only",
   "engines": {
     "node": ">=24.0.0"
@@ -22,6 +24,7 @@
   "scripts": {
     "build": "tsc --noEmit && node scripts/build.mjs",
     "install:global": "node scripts/install-global.mjs",
+    "usage:sync": "node scripts/sync-evaluation-usage.mjs",
     "pretest": "npm run build",
     "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm test",

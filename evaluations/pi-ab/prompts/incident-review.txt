@@ -1,0 +1,1 @@
+现在已加入 review/ 中的独立复核证据。请沿用当前 Pi session 的上下文，复核并修正初诊；先保存初诊报告为 REPORT.initial.md、answer.initial.json，再更新 REPORT.md 和 answer.json（phase=reviewed）。计算完整审计的实际影响，解释哪些初始异常被排除、哪些结论保持以及为什么；记录 changes 和剩余限制。只在当前工作目录操作，其他约束不变。此阶段最多 240 秒。

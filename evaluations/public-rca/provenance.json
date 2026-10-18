@@ -1,0 +1,27 @@
+{
+  "retrievedAt": "2026-10-16",
+  "competitionContext": "https://netman.aiops.org/~peidan/ANM2024/Week1/AIOpsCourse2024.pdf",
+  "mirrorRecord": "https://zenodo.org/records/19176851",
+  "mirrorMetadataLicense": {
+    "id": "cc-by-4.0"
+  },
+  "mirrorDescription": "<p>AIOps 2022 Companion Dataset. The original data has since been removed and is no longer readily available online. Having previously downloaded a copy, I am re-uploading it here for the benefit of the community.</p>",
+  "outerArchiveBytes": 9506493153,
+  "outerArchiveMD5Declared": "md5:a468e018a256ebc5793e4c0d84f0c010",
+  "outerArchiveFullHashVerified": false,
+  "selectedFilesVerified": "ZIP CRC32 and SHA256 of extracted content; source-files.json",
+  "sourceManifestHash": "776d01f9c54fccf5d90aedba534c9f10e680a7eb0cc716b21d7e144778f30160",
+  "labelPath": "training_data_with_faults/training_data_with_faults_groundtruth/groundtruth-k8s-2-2022-03-20.csv",
+  "labelSHA256": "ca663af867fbfabbf52fc7c4633954ada78acc5a1c5f992f295dbc63dbbe1af0",
+  "selection": "first four ascending timestamps of label file, no outcome-based selection",
+  "transformation": "inclusive [timestamp-600,timestamp+600], all container/node/service CSV metric rows, same numeric strings and fields, neutral case names",
+  "excluded": "logs/traces/istio/jvm, all other days; original fault labels and source directory names are not copied into agent workspaces",
+  "mirrorPublisherDocumentation": "https://raw.githubusercontent.com/LLM4AIOps/RCLAgent-V2/main/README.md",
+  "supplementaryDescription": {
+    "archivePath": "training_data_with_faults/training_data_with_faults/Φ«¡τ╗âµò░µì«Φ»┤µÿÄ.xlsx",
+    "localPath": "sources/data-description.xlsx",
+    "providedToAgents": false,
+    "purpose": "post-start independent review only",
+    "sha256": "479f58a585149a7ed021298efe08e6774c3e011ecedfc13092fd67b53773321d"
+  }
+}

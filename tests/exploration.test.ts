@@ -97,7 +97,7 @@ test('human feedback appends without owner binding in active, suspended and comp
   f.engine.resume(f.task.id,f.session);await f.source();await f.review();
   await f.update({finding:{key:'source',covers:['c1'],text:'Complete',basis:'Verified'}});await f.review();await f.runtime.invoke('cairn_finish',{});
   assert.equal(f.store.get(f.task.id).status,'completed');await feedback('completed');
-  assert.equal(f.store.get(f.task.id).status,'completed');assert.deepEqual(f.store.get(f.task.id).owner,owner);
+  assert.equal(f.store.get(f.task.id).status,'completed');assert.deepEqual(f.store.get(f.task.id).owner,{...owner,epoch:owner.epoch+1});
   const count=f.store.events(f.task.id).length;assert.equal((await feedback('completed')).changed,false);assert.equal(f.store.events(f.task.id).length,count);
   await assert.rejects(human.invoke('cairn_update',{feedback:{task_id:f.task.id,key:'completed',text:'Mutated history',author:'Operator'}}),/immutable/);
   await assert.rejects(human.invoke('cairn_update',{finding:{key:'intruder',text:'No',basis:'No'}}),/Bind this MCP/);

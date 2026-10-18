@@ -1,0 +1,7 @@
+component,metric,before,after,unit,scope
+pricing,quote_attempts,1000,1168,count,1000 unique requests
+pricing,http_5xx,0,0,count,1000 unique requests
+redis,p99_latency,4,4,ms,pricing shared redis
+catalog_db,p95_latency,12,13,ms,pricing catalog database
+catalog_db,cpu,32,34,percent,pricing catalog database
+unrelated_batch_db,cpu,33,98,percent,batch import database on another cluster

@@ -59,7 +59,11 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
   if(event.type==='PreToolUse')toolUsage(engine,session,event.callId,'start',local);
   if(['PostToolUse','PostToolUseFailure'].includes(event.type))toolUsage(engine,session,event.callId,'end',local,!!event.isError,local&&/(?:^|__)cairn_(?:start|resume)$/.test(event.tool));
  }
- if(event.tool&&isCairnTool(host,event.tool))return {};
+ if(event.tool&&isCairnTool(host,event.tool)){
+  // Management-only loops also need save guidance, without capturing Cairn calls.
+  const task=engine.active(session),guidance=task&&event.type.startsWith('PostToolUse')?engine.budgetGuidance(task.id,session):undefined;
+  return guidance?{context:guidance}:{};
+ }
  const nativeCallId=event.callId?`${host}:${event.sessionId}:${event.callId}`:undefined;
  // The host may switch goals while an old native call is still returning. Its
  // persisted call id identifies the original task; the current binding does not.
@@ -83,6 +87,7 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
  }
  const task=event.type.startsWith('PostToolUse')&&nativeCallId?engine.store.taskForCall(nativeCallId)??currentTask:currentTask;
  const marker=host==='pi'?'Cairn tools are bound to this native Pi session. Omit session_id; do not invent one.':`Cairn host=${host} session_id=${session.sessionId}. Supply this real session_id only on the first cairn_start or cairn_resume of this MCP connection; subsequent calls are already bound. Never guess a session id.`;
+ if(task&&['SessionStart','SessionEnd','Settled','Interrupt'].includes(event.type))engine.recordExecution(task.id,session,event.type==='Interrupt'||event.type==='Settled'&&event.aborted?'interrupted':event.type==='SessionStart'?'running':event.type==='Settled'?'settled':'closed');
  if(event.type==='SessionStart'){
   if(!task)return {context:`${marker} Cairn is enabled only after starting or resuming a task.`};
   if(task.status==='completed')return {context:`${marker}\nTask ${task.id} is completed. Use cairn_read with task_id=${task.id} to inspect it. Explicit cairn_resume with reopen={reason} continues this goal when authorized; cairn_start creates a different goal.\n${JSON.stringify(engine.context(task.id))}`};
@@ -92,16 +97,16 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
  }
  if(!task)return {};
  if(event.type==='Interrupt'||event.type==='SessionEnd'||event.type==='Settled'&&event.aborted){try{engine.suspend(task.id,session,'host');}catch{}return {};}
- if(event.type==='PostCompact'||event.type==='PreCompact'||event.type==='RestoreContext')return {context:JSON.stringify(engine.context(task.id))};
- if(event.type==='Stop')return event.aborted||event.stopHookActive?{}:{continue:engine.continuation(task.id,session)};
+ if(event.type==='PostCompact'||event.type==='PreCompact'||event.type==='RestoreContext')return {context:[event.type==='PreCompact'&&host==='pi'?engine.concludeGuidance(task.id,session):undefined,JSON.stringify(engine.context(task.id))].filter(Boolean).join('\n')};
+ if(event.type==='Stop')return event.aborted||event.stopHookActive?{}:{continue:engine.budgetGuidance(task.id,session)??engine.concludeGuidance(task.id,session)??engine.continuation(task.id,session)};
  if(!event.tool)return {};
  if(task.evidenceMode==='curated'){
   // Native tools remain entirely under the host's control: no call reservations,
-  // budget decisions or raw inputs/results are persisted. Numeric usage has
-  // a separate opaque dedup receipt; it is never an evidence record.
+  // raw inputs/results, or tool metadata are persisted. Deadline reminders are advisory.
   // A late plan result cannot be associated with its original task without call
-  // metadata. Use explicit semantic updates instead of guessing that binding.
-  return {};
+  // metadata. Use explicit milestone progress instead of guessing that binding.
+  const guidance=event.type.startsWith('PostToolUse')?engine.budgetGuidance(task.id,session)??engine.explorationGuidance(task.id,session):undefined;
+  return guidance?{context:guidance}:{};
  }
  const callId=`${host}:${event.sessionId}:${event.callId??''}`;
  if(!event.callId)return {}; // Never guess a tool identity or deduplicate unrelated calls.
@@ -126,7 +131,8 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
   const index=engine.store.get(task.id).observations.findIndex(o=>o.id===observation.id)+1;
   if(currentTask?.id!==task.id)return {context:`Cairn result belongs to previous task ${task.id}, E${index}: ${observation.status}, eligible=${observation.eligible} for that task only. It is not evidence for the current goal.`};
   if(!observation.eligible)return {context:`Cairn audit-only result for task ${task.id}, E${index}: ${observation.status}, eligible=false. This late or interrupted result cannot support current conclusions.`};
-  return {context:`Cairn E${index}: ${observation.status}, eligible=${observation.eligible}, scope=${JSON.stringify(observation.scope)}. Reference E${index} in a checkpoint or finish; use cairn_read for original evidence when needed.`};
+  const budgetGuidance=engine.budgetGuidance(task.id,session);
+  return {context:`Cairn E${index}: ${observation.status}, eligible=${observation.eligible}, scope=${JSON.stringify(observation.scope)}. Reference E${index} in a checkpoint finding; finish only checks saved coverage. Use cairn_read for original evidence when needed.${budgetGuidance?`\n${budgetGuidance}`:''}`};
  }
  return {};
 }

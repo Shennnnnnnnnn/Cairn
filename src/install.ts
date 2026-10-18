@@ -12,6 +12,8 @@ type Change={file:string;kind:'json'|'toml'|'array';keys?:string[];before?:unkno
 type Receipt={target:Target;version:string;installedAt:string;plugin:string;changes:Change[];ownedPaths?:string[];ownedContent?:Record<string,string>};
 const shellQuote=(value:string)=>`'${value.replaceAll("'","'\\''")}'`;
 const codexRegistration=/^\s*\[\s*mcp_servers\s*\.\s*(?:cairn|"cairn"|'cairn')\s*\]\s*(?:#.*)?$/m;
+// Codex stdio MCP filters inherited variables. Forward names, never freeze host values.
+const codexEnvironment=['CAIRN_DB','CAIRN_WORKSPACE','CAIRN_VERIFY_COMMAND','CAIRN_VERIFY_ARTIFACTS','CAIRN_VERIFY_TIMEOUT_MS','CAIRN_DEADLINE','CAIRN_SUBMIT_RESERVE_MS'];
 function fingerprint(path:string):string|undefined{
  if(!existsSync(path))return;
  const hash=createHash('sha256');
@@ -57,7 +59,7 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
   if(codexRegistration.test(unmanaged)||unmanaged.includes('# BEGIN CAIRN MANAGED'))throw new CairnError('install_conflict','Codex already has a cairn MCP registration outside this installer');
   // Project-scoped direct registration needs no user-level plugin-cache activation.
   // The same directory remains a valid native marketplace plugin for distribution.
-  const block=`# BEGIN CAIRN MANAGED\n[mcp_servers.cairn]\ncommand = ${JSON.stringify(process.execPath)}\nargs = [${[join(loc.plugin,'runtime/cairn.mjs'),'mcp','--host','codex'].map(s=>JSON.stringify(s)).join(', ')}]\n# END CAIRN MANAGED`;
+  const block=`# BEGIN CAIRN MANAGED\n[mcp_servers.cairn]\ncommand = ${JSON.stringify(process.execPath)}\nargs = [${[join(loc.plugin,'runtime/cairn.mjs'),'mcp','--host','codex'].map(s=>JSON.stringify(s)).join(', ')}]\nenv_vars = ${JSON.stringify(codexEnvironment)}\n# END CAIRN MANAGED`;
   changes.push({file,kind:'toml',value:block});
   const hookFile=join(loc.base,'.codex/hooks.json'),hooks=readJson(hookFile);
   const template=readJson(join(source,'hooks/hooks.json'));

@@ -158,8 +158,8 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
       progress: [{key:'evidence',title:'核对服务与价格样例',status:'completed'},{key:'mechanism',title:'确认单位映射机制',status:'blocked',detail:'暂停，等待新会话继续'}],
       summary: '本地样例源价格 10.26 元、显示 1026 元，相差 100 倍；健康工具未发现进程崩溃。需要进一步查单位映射与版本影响范围。',
       findings: [
-        { key: 'crash', text: '价格异常由 quote-display 进程崩溃引起', status: 'refuted', against: ['E1'] },
-        { key: 'price-ratio', text: '1.4 客户端将样例源价格 10.26 元显示为 1026 元，放大 100 倍', evidence: ['E2'] },
+        { key: 'crash', text: '价格异常由 quote-display 进程崩溃引起', status: 'refuted', against: ['E1'], covers: [] },
+        { key: 'price-ratio', text: '1.4 客户端将样例源价格 10.26 元显示为 1026 元，放大 100 倍', status: 'supported', evidence: ['E2'], covers: [] },
       ],
       questions: ['1.4 客户端是否对已经是元的价格重复换算？', '这次虚构窗口中哪些版本、多少用户受影响？'],
       next: '新会话显式接管后查询 client_mapping 和 version_impact；补齐目标证据后交付建议。',
@@ -172,16 +172,16 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
     if (context.owner?.epoch !== 2 || context.checkpoint?.questions?.length !== 2) throw new CairnError('demo_restore_failed', 'Takeover did not preserve the checkpoint and its questions');
     await call('cairn_tool_client_mapping', { version: '1.4' });
     await call('cairn_tool_version_impact', { service: 'quote-display' });
-    const finished = await call('cairn_finish', {
-      outcome: 'completed',
+    await call('cairn_checkpoint', {
       progress: [{key:'evidence',title:'核对服务与价格样例',status:'completed'},{key:'mechanism',title:'确认单位映射机制',status:'completed'},{key:'impact',title:'确认影响范围并交付建议',status:'completed'}],
       summary: '本地虚构样例：源价格已经是元，1.4 客户端重复乘以 100，导致 10.26 元显示为 1026 元；进程健康证据反驳崩溃假设。该窗口仅 1.4 的 300/1000 用户受影响（30%）。建议止损为回退显示映射或引导升级 1.5，修复为按明确单位只换算一次，预防为增加单位契约与版本回归测试；这些建议尚未执行。',
       findings: [
-        { key: 'unit-conversion', text: '1.4 的输入已经是 CNY 元，代码却再次乘以 100，与 10.26→1026 的样例吻合；进程崩溃假设已由 E1 反驳', evidence: ['E1', 'E2', 'E3'], covers: ['c1'] },
-        { key: 'impact', text: '虚构窗口中 1.4 的 300 名用户受影响，占总计 1000 人的 30%；1.5 的 700 名用户未受影响。建议回退映射或升级、删除重复换算并增加单位契约及版本回归测试，尚未执行', evidence: ['E2', 'E3', 'E4'], covers: ['c2'] },
+        { key: 'unit-conversion', text: '1.4 的输入已经是 CNY 元，代码却再次乘以 100，与 10.26→1026 的样例吻合；进程崩溃假设已由 E1 反驳', status: 'supported', evidence: ['E1', 'E2', 'E3'], covers: ['c1'] },
+        { key: 'impact', text: '虚构窗口中 1.4 的 300 名用户受影响，占总计 1000 人的 30%；1.5 的 700 名用户未受影响。建议回退映射或升级、删除重复换算并增加单位契约及版本回归测试，尚未执行', status: 'supported', evidence: ['E2', 'E3', 'E4'], covers: ['c2'] },
       ],
       questions: [], next: '演示已完成；真实环境需要实际验证修复效果。',
     });
+    const finished = await call('cairn_finish', {summary:'本地虚构样例已验证：1.4 单位映射重复乘以100，300/1000用户受影响。建议修复映射与补充单位回归；建议尚未执行。'});
     if (finished.phase !== 'completed' || !finished.validation?.ok) throw new CairnError('demo_incomplete', `Demo completion validation failed: ${JSON.stringify(finished.validation)}`);
     await close();
     signal?.throwIfAborted();

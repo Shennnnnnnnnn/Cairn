@@ -1,0 +1,17 @@
+import {readFileSync,writeFileSync,existsSync,cpSync,mkdirSync,readdirSync,statSync} from 'node:fs';
+import {join,resolve,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createHash} from 'node:crypto';
+const here=dirname(fileURLToPath(import.meta.url)),repo=resolve(here,'../..'),root=join(here,'runs/2026-10-17-codex-sol-xhigh-round7b');
+const sha=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
+const hashes=p=>Object.fromEntries(readdirSync(p).sort().flatMap(n=>statSync(join(p,n)).isDirectory()?Object.entries(hashes(join(p,n))).map(([k,v])=>[n+'/'+k,v]):[[n,sha(join(p,n))]]));
+const m=JSON.parse(readFileSync(join(root,'manifest.json'),'utf8')),archive=join(root,'implementation-after');
+if(existsSync(archive)||m.implementations.after)throw new Error('Never replace a frozen implementation');
+for(const arm of m.arms)if(existsSync(join(root,arm)))throw new Error('Freeze all implementations before any actor is started');
+for(const arm of m.arms)if(existsSync(join(root,arm,'initial.grade.json')))throw new Error('Unexpected early grading');
+mkdirSync(archive);for(const name of ['src','dist','skills'])cpSync(join(repo,name),join(archive,name),{recursive:true});
+cpSync(join(root,'driver.frozen.mjs'),join(root,'driver.after.mjs'));
+m.implementations.after=hashes(archive);m.driverAfterHash=sha(join(root,'driver.after.mjs'));m.afterPreparedAt=new Date().toISOString();
+m.afterSourceHashes=hashes(join(repo,'src'));m.optimizationNotes='docs/optimization-round7.zh-CN.md';
+writeFileSync(join(root,'manifest.json'),JSON.stringify(m,null,2)+'\n');
+console.log(JSON.stringify({event:'optimized_implementation_frozen',files:Object.keys(m.implementations.after).length,driverUnchanged:m.driverAfterHash===m.driverHash,root}));

@@ -1,0 +1,15 @@
+import {mkdtempSync,mkdirSync,readFileSync,existsSync} from 'node:fs';
+import {join,dirname} from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+const here=dirname(fileURLToPath(import.meta.url)),root=join(here,'runs/2026-10-17-pi-deepseek-round9-repeated');
+const implementation=join(root,'implementation'),driver=await import(pathToFileURL(join(root,'driver.frozen.mjs')).href);
+const dir=mkdtempSync(join(here,'runs/probe-pi-round9-')),work=join(dir,'workspace');mkdirSync(work);
+const verifyCommand=[process.execPath,join(here,'probe-verifier.mjs')],artifacts=['marker.txt'];
+const metrics=await driver.runPi({work,dir,implementation,verifyCommand,artifacts,common:'这是独立的合成接入探针，无案例、隐藏标签或网络检索。只访问本工作区，不读取其他路径。',prompt:'请执行合成接入探针：write 创建 marker.txt，内容为 alpha 和一个换行。cairn_start 一个目标：保留给定 marker，criteria 一条：marker 与给定输入一致。cairn_checkpoint 保存一条 keyed supported finding，basis 为提示原始输入及所写文件，references:["marker.txt"]，covers:["c1"]；保存 artifacts 和一个短 handoff。最后 cairn_finish {}，简短说明完成。不得调用其他模型、联网或读取其他文件。'});
+const load=path=>JSON.parse(readFileSync(path,'utf8'));
+const protocol=driver.assertCairnProtocol({work,metrics,verifyCommand,artifacts,launch:load(join(dir,'launch.json')),tools:load(join(dir,'initial.tools.json'))});
+const {Engine,Store}=await import(pathToFileURL(join(implementation,'dist/index.js')).href),store=new Store(':memory:'),engine=new Engine(store),task=protocol.tasks[0];
+const success=metrics.exitCode===0&&!metrics.turnFailed&&metrics.toolErrors===0&&JSON.stringify(metrics.actualModels)===JSON.stringify([driver.model])&&JSON.stringify(metrics.actualEfforts)===JSON.stringify([driver.effort])&&task.status==='completed'&&engine.verificationCurrent(task)&&engine.evaluateReport(task,task.report).ok&&existsSync(join(work,'marker.txt'));
+store.close();
+const record={success,root:dir,implementation,metrics,taskId:task.id,ownDatabase:protocol.database,owner:task.owner,currentProof:task.verification?.proof,kind:'Synthetic isolated Pi integration; no cases or hidden labels; excluded from formal totals'};
+driver.save(join(dir,'probe.metrics.json'),record);console.log(JSON.stringify({success,root:dir,model:metrics.actualModels,effort:metrics.actualEfforts,usage:metrics.nativeUsage,toolErrors:metrics.toolErrors,taskStatus:task.status}));if(!success)process.exitCode=1;

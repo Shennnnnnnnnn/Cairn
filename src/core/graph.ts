@@ -1,3 +1,4 @@
+import { publicTask } from './types.js';
 import { explorationTopology, needsReview, factNodeId } from './exploration.js';
 import { branchRun, branchStatus } from './branches.js';
 import type { Task, Check, Claim, Criterion, EvidenceMode, FactVersion } from './types.js';
@@ -37,6 +38,7 @@ export function evidenceRelations(task:{evidenceMode?:EvidenceMode;claims:Claim[
 
 /** All persisted semantic content, without UI geometry, raw IO or a host transcript. */
 export function semanticGraph(task:Task,validation:Check):SemanticGraph {
+  task=publicTask(task);
   const nodes:SemanticNode[]=[],edges:SemanticEdge[]=[];
   const factRef=(fact:FactVersion)=>({id:fact.id,revision:fact.revision,node:factNodeId(task,fact)});
   const add=(id:string,kind:string,label:string,status:string,source:SemanticNode['source'],data:Record<string,unknown>,branch?:string)=>{
@@ -63,6 +65,7 @@ export function semanticGraph(task:Task,validation:Check):SemanticGraph {
     const status=task.status!=='active'&&work.status==='running'?(task.status==='suspended'?'blocked':'pending'):work.status;
     add(id,'work',work.title,status,work.source,{...work,status,recordedStatus:work.status},work.branch);
     edge(work.branch?`branch:${work.branch}`:'origin',id,'stage');
+    for(const from of work.from??[])edge(from,id,'dependency');
   }
   if(task.evidenceMode!=='curated'){
     for(const action of task.actions){
@@ -82,6 +85,7 @@ export function semanticGraph(task:Task,validation:Check):SemanticGraph {
       edge(claim.branch?`branch:${claim.branch}`:'origin',`basis:${claim.id}`,'context');
     }
     edge(claim.branch?`branch:${claim.branch}`:'origin',`claim:${claim.id}`,'membership');
+    for(const from of claim.from??[])edge(from,`claim:${claim.id}`,'dependency');
   }
   const topology=explorationTopology(task);
   for(const {id,fact}of topology.versions)add(id,'fact',fact.text,'superseded','agent',{...fact,currentRevision:task.claims.find(claim=>claim.id===fact.id)?.revision});
@@ -110,7 +114,7 @@ export function relatedGraph(graph:SemanticGraph,ref:string) {
     while(changed){changed=false;for(const e of graph.edges)if(e.relation==='branch'&&branches.has(e.from)&&!branches.has(e.to)){branches.add(e.to);changed=true;}}
     for(const node of graph.nodes)if(branches.has(node.id)||node.branch&&branches.has(`branch:${node.branch}`))selected.add(node.id);
   }
-  const proof=new Set(['basis','supports','refutes','criterion','addresses','result','input','produces','revises']);let changed=true;
+  const proof=new Set(['basis','supports','refutes','criterion','addresses','result','input','produces','revises','dependency']);let changed=true;
   while(changed){
     changed=false;
     for(const e of graph.edges)if(proof.has(e.relation)&&(selected.has(e.from)||selected.has(e.to))){

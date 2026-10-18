@@ -6,6 +6,7 @@ import {resolve,join,dirname} from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
+import {publishEvaluationUsage} from '../evaluations/public-rca/session-usage.mjs';
 const host=process.argv[2];if(!['pi','claude','codex'].includes(host))throw new Error('Usage: node scripts/host-smoke.mjs pi|claude|codex');
 const root=mkdtempSync(join(tmpdir(),`cairn-live-${host}-`)),entry=resolve('dist/cairn.mjs');
 const env={...process.env,PATH:`${dirname(process.execPath)}:/opt/homebrew/bin:/Users/shen/.local/bin:${process.env.PATH??''}`};
@@ -18,13 +19,14 @@ console.log(JSON.stringify({host,root,plugin}));
 async function launch(prompt,phase){
  let command=host,args=[];
  if(host==='pi')args=['--offline','--no-context-files','--no-extensions','--extension',join(plugin,'runtime/pi-extension.mjs'),'--no-skills','--skill',join(plugin,'skills/cairn/SKILL.md'),'--tools','read,cairn_*','--session-dir',join(root,'sessions'),'--mode','json','--thinking','low','-p',prompt];
- if(host==='claude')args=['--plugin-dir',plugin,'--setting-sources','','--tools','default','--allowedTools','Read',...['start','resume','read','checkpoint','finish'].map(n=>`mcp__plugin_cairn_cairn__cairn_${n}`),'--session-id',randomUUID(),'--output-format','stream-json','--verbose','--include-hook-events','--effort','low','--max-budget-usd','3','-p',prompt];
+ if(host==='claude')args=['--plugin-dir',plugin,'--setting-sources','','--tools','default','--allowedTools','Read',...['start','resume','read','update','checkpoint','finish'].map(n=>`mcp__plugin_cairn_cairn__cairn_${n}`),'--session-id',randomUUID(),'--output-format','stream-json','--verbose','--include-hook-events','--effort','low','--max-budget-usd','3','-p',prompt];
  if(host==='codex')args=['exec','--ignore-user-config','--skip-git-repo-check','--dangerously-bypass-hook-trust','--json','-s','workspace-write','-c','features.hooks=true','-c',`mcp_servers.cairn=${toml({command:process.execPath,args:[join(plugin,'runtime/cairn.mjs'),'mcp','--host','codex'],default_tools_approval_mode:'approve'})}`,'-c',`hooks=${toml(JSON.parse(readFileSync(join(root,'.codex/hooks.json'),'utf8')).hooks)}`,'-c','model_reasoning_effort="low"',prompt];
  const child=spawn(command,args,{cwd:root,env,stdio:['ignore','pipe','pipe']});let stdout='',stderr='';
  child.stdout.on('data',c=>{stdout+=c;});child.stderr.on('data',c=>{stderr+=c;});
  const timer=setTimeout(()=>child.kill('SIGTERM'),150000);
  const code=await new Promise((res,rej)=>{child.on('error',rej);child.on('exit',res);});clearTimeout(timer);
  writeFileSync(join(root,`${phase}.jsonl`),stdout,{mode:0o600});writeFileSync(join(root,`${phase}.stderr`),stderr,{mode:0o600});
+ if(host==='pi')await publishEvaluationUsage(join(root,'sessions'));
  console.log(JSON.stringify({phase,exitCode:code,stdoutBytes:stdout.length,stderrTail:stderr.slice(-1500)}));
  if(code!==0)throw new Error(`Host failed. Inspect ${root}/${phase}.stderr and .jsonl`);
  if(host==='pi'){

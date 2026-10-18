@@ -1,12 +1,24 @@
 # Cairn
 
-English | [简体中文](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md) | [Documentation index](docs/README.zh-CN.md)
 
 **Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
 
-Cairn 4.8 provides **start, resume, read, update, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then immediately saves each meaningful state change, conclusion, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
+Cairn 4.9 provides **start, resume, read, update, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then immediately saves each meaningful state change, conclusion, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
 
 Your CLI owns the model, account, sessions, tool approvals and concurrency. Cairn keeps the goal and its progress in SQLite, with an optional blue-and-white dashboard. No upstream gateway or tool whitelist is required for an ordinary task.
+
+The shared six-tool protocol now supports multi-hop joint prerequisites, finding revision history, delegated branch leases and reopening completed general goals after external feedback. The package also exports a typed `createHarness` entry point for embedding in custom hosts. See the [harness integration guide](docs/harness.zh-CN.md) and [implementation comparison](docs/optimization-roadmap.zh-CN.md).
+
+For longer explorations, save a small checkpoint when reusable facts emerge, a hypothesis changes, counterevidence appears or a direction closes. Use the returned blackboard agenda to choose the next useful test. Short tasks save one grounded checkpoint then finish {}; no worker pool or tool-by-tool bookkeeping is required.
+
+After saved findings cover the criteria, finish with `{}`. The model-facing finish accepts only outcome and a short summary. Save findings and progress immediately with update; checkpoint also accepts batched findings, coverage and files. The host saves versioned handoffs automatically; SDK invoke retains legacy inputs. Explicit host-required files are collected automatically. The dashboard separates task completion, artifact acceptance and independent outcome assessment; missing assessment stays unreviewed. See the [implementation record](docs/optimization-round6.zh-CN.md), [artifact/handoff protocol](docs/artifacts-handoffs.zh-CN.md) and [OpenRig multi-session comparison](docs/multi-session-reference.zh-CN.md).
+
+Findings that explicitly reference declared artifacts bind to their file versions. After a file changes, review and explicitly resave the affected finding; resubmitting files alone never refreshes old support. Completed task views retire old actions, and reopening saves a new generation's handoff while preserving history. See [round seven](docs/optimization-round7.zh-CN.md).
+
+Codex registration explicitly forwards `CAIRN_DB`, verification and deadline settings through `env_vars`. Update existing installations with `cairn update --target codex` and restart the connection so MCP environment filtering cannot silently omit host configuration.
+
+Checkpoint object-array encoding compatibility now covers findings, progress, artifacts and handoffs, including Pi preparation before host validation. Finish stays small; generic exploration compares mechanisms on the same subject before changing scope. See [round-nine implementation](docs/optimization-round9.zh-CN.md) and the [same-model Pi comparison](evaluations/public-rca/comparison-round9.zh-CN.md): three cases repeated three times per arm, no evaluator budgets, 9/9 joint accuracy in both arms, 8/9 vs 9/9 effective deliveries, and 39.3% fewer recorded tokens with Cairn. The missing native delivery followed a connection failure; this does not establish a reasoning gain. Cost still varies and handoff recovery was not exercised.
 
 ## Quick start
 
@@ -48,6 +60,18 @@ Give the agent the goal and any tool guidance in your initial request:
 
 Tool guidance is task input. Cairn does not hardcode which diagnostic, code or research tools the agent must use. The host still enforces its own permissions.
 
+## Optional automatic Reason/Explore scheduling
+
+The ordinary six-tool integration leaves scheduling disabled. To let the saved blackboard drive exploration, first save a goal with `cairn submit`, then opt in:
+
+```sh
+cairn run TASK_ID --executor pi --model global:deepseek-v4.1-flash \
+  --effort high --parallel 2 --takeover
+# Or --executor codex --model gpt-6.1-sol --effort xhigh
+```
+
+The scheduler uses native host execution for direct work or initial review, followed by exploration and verified completion as needed. `--start-mode auto` (default) selects Bootstrap for a new goal and Reason for saved findings, questions or work; select `bootstrap-first` or `reason-first` explicitly when needed. Selection and rationale are saved before dispatch, with no extra model call; recovery preserves progress. By default, each Reason starts a fresh session with the full public graph (`--coordinator-mode fresh-full`), following the original design; opt into coordinator reuse and delta input with `--coordinator-mode reuse-delta`. Explore sessions remain separate. It supports general curated tasks; tools and permissions remain with the host. `--parallel` controls concurrent exploration branches, without imposing phase, token or total runtime budgets. Lack of meaningful progress or an unusable host saves the remaining gap and exits. Taking over an existing task requires explicit `--takeover`. Inspect saved progress with `cairn serve`, `status` and `graph --format timeline`. See the [scheduler guide and recovery boundaries](docs/scheduler.zh-CN.md).
+
 ## The shortest model workflow
 
 Generic `cairn mcp`, including Multica, binds a fresh connection identity automatically; omit `session_id`. Native Claude/Codex adapters supply the actual startup-hook `session_id` once on the first start/resume. Pi binds its native identity automatically. Subsequent calls use the connection binding.
@@ -63,7 +87,7 @@ Generic `cairn mcp`, including Multica, binds a fresh connection identity automa
 
 The agent reads `package.json` with its preferred host tool. Cairn creates no raw observation or E# alias in this default mode.
 
-**`cairn_finish`:** save the conclusion and check completion together.
+**`cairn_checkpoint`:** save the grounded result and explicit coverage.
 
 ```json
 {
@@ -73,12 +97,13 @@ The agent reads `package.json` with its preferred host tool. Cairn creates no ra
     "text": "package.json declares name=cairn.",
     "status": "supported",
     "basis": "Read the name field in the project manifest.",
-    "references": ["package.json"]
+    "references": ["package.json"],
+    "covers": ["c1"]
   }]
 }
 ```
 
-A new supported finding covers the sole criterion automatically. Multiple criteria use `covers: ["c1", "c2"]`. Missing supported findings or coverage keep the task active with `phase: "incomplete"`. The program checks the recorded structure and coverage; it does **not** open a file/link to verify its contents or establish causal truth.
+Then call `cairn_finish {}`. Model findings require explicit `covers`; intermediate facts use `covers:[]`. Multiple criteria use `covers: ["c1", "c2"]`. Missing supported findings or coverage keep the task active with `phase: "incomplete"`. By default, the program checks recorded structure and coverage; it does **not** open a file/link to verify its contents or establish causal truth. Hosts can add the optional completion verifier described below.
 
 Use `cairn_update` immediately for each branch, progress or finding change. `cairn_checkpoint` saves recovery summaries and open questions. Include stable finding `key` values, `basis`, `references`, unresolved `questions`, a `next` action and optional progress:
 
@@ -94,7 +119,7 @@ Use `cairn_update` immediately for each branch, progress or finding change. `cai
 }
 ```
 
-Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelled`. They describe reported work; they are separate from the goal's completion conditions. Checkpoint summaries describe the recovery state and do not overwrite an existing report summary. An explicit finish `summary` or `report.summary` sets the final report summary.
+Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelled`. They describe reported work; they are separate from the goal's completion conditions. Checkpoint summaries describe the recovery state and do not overwrite an existing report summary. An explicit finish `summary` or checkpoint `report.summary` sets the final report summary.
 
 | Fixed tool | Purpose |
 | --- | --- |
@@ -106,6 +131,16 @@ Progress statuses are `pending`, `running`, `completed`, `blocked` and `cancelle
 | `cairn_finish` | Save and validate completion, or suspend incomplete work |
 
 The [Chinese goal workflow guide](docs/goal-workflow.zh-CN.md) provides a complete example without tool configuration or call records.
+
+## Optional host verification and deadlines
+
+Checkpoint and finish return compact receipts; use `cairn_read` for full evidence. A model checkpoint requires a real increment (recovery questions/next are valid): keyed findings with status/grounds/covers, or changed questions/next/progress/files. Summary is optional; summary-only calls are rejected. The receipt distinguishes added and revised facts; cosmetic retries do not advance the state. Branch control retains its explicit contract.
+
+Before creating a task, a trusted host can set `CAIRN_VERIFY_COMMAND` to a JSON argv array such as `["node","/absolute/path/verify.mjs"]` and optionally `CAIRN_VERIFY_TIMEOUT_MS` (default 10000). No shell is used. The command receives task JSON on stdin and returns `{"ok":true}` or `{"ok":false,"issues":[{"message":"Regression failed","claims":["finding-key"]}]}` on stdout. Verification errors, timeouts and rejected results prevent completion; late results cannot complete a changed or interrupted task. A pass proves only what that verifier checks.
+
+SDK hosts can supply `completionVerifier: {id, verify(task, signal)}` to `createHarness` and finish through the tools or `engine.finishVerified(...)`. Synchronous `engine.finish(...)` checks existing receipts. Rechecking a completed general task with `engine.verify(...)` can reopen it on counterevidence, preserving its previous completion and clearing criterion coverage.
+
+`CAIRN_DEADLINE` (ISO timestamp) and `CAIRN_SUBMIT_RESERVE_MS` (default 30000) provide advisory host timing. Create, resume and reopen use the earlier deadline and larger reserve. Reserve/expiry reminders work without progress items and are checked on host tool/lifecycle callbacks. An in-flight model request can delay or miss a reminder; the host still owns termination. Task completion, verification scope and the latest host lifecycle event are shown separately.
 
 ## Goals and budgets
 
@@ -147,7 +182,7 @@ Open the printed loopback URL. Without `--port`, Cairn tries `8000` and chooses 
 
 The semantic graph is also the agent working context. Small graphs are inline in start/resume/context; larger graphs provide immutable cairn_read view=graph access. Read all pages with snapshot/checksum/nextOffset. view=handoff plus a branch/node ref returns the goal, constraints, assignment, evidence-connected subgraph and full-graph access without transferring ownership. format=index locates nodes; since requests changes from a previously read snapshot. See the [graph context protocol](skills/cairn/references/graph-context.md). The UI and model share evidence relation projection; raw tool IO is excluded.
 
-Exploration provenance uses branch.from (supported finding keys/IDs or origin) and finding.producedBy. Source versions are pinned, and changed inputs make derived findings stale. Exploration tasks queue new evidence for snapshot-fenced global review through cairn_update review={snapshot,summary}. A review acknowledgement does not repair stale evidence. Human feedback can be appended in any status with `cairn feedback TASK_ID --text TEXT --author NAME --key KEY`; explicit cairn_resume reopen={reason} preserves historical completion and advances ownership epoch. See the [exploration protocol](skills/cairn/references/exploration.md).
+Exploration provenance uses branch.from (supported finding keys/IDs or origin) and finding.producedBy. Source versions are pinned, and changed inputs make derived findings stale. Exploration tasks queue new evidence for snapshot-fenced global review through cairn_update review={snapshot,summary}. Scheduler phases use the same explicit review gate and expose the immutable snapshot in globalReview. A review acknowledgement does not repair stale evidence. Human feedback can be appended in any status with `cairn feedback TASK_ID --text TEXT --author NAME --key KEY`; explicit cairn_resume reopen={reason} preserves historical completion and advances ownership epoch. See the [exploration protocol](skills/cairn/references/exploration.md).
 
 Select **▷ 回放** to play the graph on a **continuous recorded-time timeline**. At 1×, one recorded second takes one playback second; choose 5×, 10×, 30× or 60× to speed up. The playhead, elapsed/total duration and proportionally placed record markers follow actual save intervals. Seek to any time: the graph holds the latest known state at or before that time, without inventing unrecorded operations. Previous/next jump between recorded changes. Pause, restart and return live remain available; state loading briefly buffers playback.
 
@@ -159,7 +194,7 @@ From 4.1, each committed event retains its domain state, including finding revis
 
 The dashboard displays the most recently committed progress. An `active` task or a zero tool count does not prove that a process is currently alive. Curated tasks retain only numeric host usage and opaque deduplication receipts, with no tool-call content; business state uses immediate semantic updates. Native plan results without a reliable original task association are skipped, so a delayed event cannot change another goal.
 
-The dashboard is read-only and loopback-only. Closing it does not stop the agent. Use the same database/workspace as the host. Goal coverage can decrease if a supporting conclusion is revised or refuted.
+The dashboard is loopback-only. Human hint, pause and reopen writes require the local CSRF token, same origin and a current task revision. Closing it does not stop the agent. Use the same database/workspace as the host. Goal coverage can decrease if a supporting conclusion is revised or refuted.
 
 ```sh
 cairn task list
@@ -187,9 +222,9 @@ Resume in a new session or another CLI using `cairn_resume`:
 
 Takeover increments the execution epoch. Old sessions cannot change or complete the task. Running progress items become blocked on suspension, and the resumed agent explicitly updates them as work continues. Native chat history stays with the host; Cairn restores the goal, findings, references, progress, open questions and next step.
 
-Subagents are useful for independent checks or a fresh working context. The main agent remains responsible for reviewing their outputs and saving a goal checkpoint. A child context does not automatically acquire the main task's identity or write access. A durable handoff to another native session still uses the adapter's explicit resume/takeover flow. Cairn adds no worker pool or fixed reason/explore pipeline.
+Subagents are useful for independent checks or a fresh working context. The main agent remains responsible for reviewing their outputs and saving a goal checkpoint. A child context does not automatically acquire the main task's identity or write access. For shared work, the owner can explicitly delegate progress and a separate Worker can claim a fenced lease, submit proposals and wait for owner review; see the [branch workflow](docs/harness.zh-CN.md). A durable handoff of the entire goal still uses explicit resume/takeover. Cairn adds no worker pool or fixed reason/explore pipeline.
 
-Recovery context is bounded to **16 KiB**, with totals and explicit truncation indicators. Persisted records remain complete. `cairn_read {"view":"evidence","ref":"project-name"}` reads a curated finding by key or ID; omit `ref` for the index. History uses record pagination, while large details and event payloads use character offsets. Use `view: "details"` and a returned `revision` to detect concurrent changes, or `view: "history", ref: "event:123"` for a specific audit event.
+Recovery summaries target **12,000 bytes**; an inline complete graph is included only when the whole envelope fits within **16,000 bytes**, with totals and explicit truncation indicators. Persisted records remain complete. `cairn_read {"view":"evidence","ref":"project-name"}` reads a curated finding by key or ID; omit `ref` for the index. History uses record pagination, while large details and event payloads use character offsets. Use `view: "details"` and a returned `revision` to detect concurrent changes, or `view: "history", ref: "event:123"` for a specific audit event.
 
 User interruption is authoritative, suspended work has no continuation prompts, and completion hints are bounded.
 
@@ -295,7 +330,7 @@ Global command installation and host adapter installation are separate. Use the 
 
 Data defaults to `<workspace>/.cairn/state.db`. `CAIRN_DB` or `--db` overrides it; `CAIRN_WORKSPACE` selects the workspace root. Existing TypeScript SQLite tasks retain their selected semantics: records without `evidenceMode` remain **captured**. New public general starts default to curated; existing tasks are not silently converted. Earlier Python formats have no automatic migration. Keep task data out of Git.
 
-The original bootstrap's direct first attempt remains in the ongoing session: understand the goal, act, review the result and adapt. There is no separate bootstrap worker, keepalive prompting, model pool or polling dispatcher.
+The original bootstrap's direct first attempt remains in the ongoing session: understand the goal, act, review the result and adapt. The default integration has no separate Bootstrap phase. Explicit Scheduler use selects Bootstrap or Reason at startup and reuses native hosts without an additional model service.
 
 ```sh
 npm test

@@ -42,7 +42,7 @@ test('large graphs retain old evidence and long text, with pinned pages across w
   const f=fixture();try{
     const task=f.engine.create(session,{origin:'input',goal:'global reasoning',criteria:['verify'],evidenceMode:'curated'});
     f.engine.checkpoint(task.id,session,{summary:'many findings',findings:Array.from({length:80},(_,i)=>({key:`f${i}`,text:(i===0?'OLD_CRITICAL_FACT ':'Recent finding ')+String(i)+' 内容'.repeat(180),basis:'Complete support '.repeat(30)+`END_${i}`,references:[`fixture/${i}.json`]}))});
-    const context=f.engine.context(task.id);assert.equal(context.graph.complete,false);assert.ok(!JSON.stringify(context.claims).includes('OLD_CRITICAL_FACT'));
+    const context=f.engine.context(task.id);assert.equal(context.graph.complete,false);assert.ok(context.claims.length<80);assert.ok(context.truncated.claims>0);
     assert.ok(Buffer.byteLength(JSON.stringify(context))<=16000);
     const beforeCount=f.store.events(task.id).length;
     const result=await all(f.runtime,{view:'graph',task_id:task.id,limit:1300},()=>{

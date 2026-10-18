@@ -126,7 +126,7 @@ test('global installer reports integration failure after global installation and
 
 test('built runtimes expose only Node builtin external imports', async () => {
   assert.deepEqual(manifest.dependencies ?? {}, {});
-  for (const entry of ['dist/cairn.mjs', 'dist/pi-extension.mjs']) {
+  for (const entry of ['dist/cairn.mjs', 'dist/pi-extension.mjs', 'dist/index.js']) {
     const result = await build({ entryPoints: [join(source, entry)], bundle: true, platform: 'node', format: 'esm', target: 'node24', write: false, metafile: true, packages: 'external', logLevel: 'silent' });
     const external = Object.values(result.metafile.outputs).flatMap(output => output.imports).filter(item => item.external);
     assert.ok(external.length > 0);
@@ -166,6 +166,9 @@ test('packed global install works offline away from the checkout and supplies al
       assert.equal(result.status, 0, result.stdout + result.stderr);
       return result.stdout;
     };
+    const embedded = spawnSync(process.execPath, ['--input-type=module', '-e', `const {createHarness}=await import(${JSON.stringify(pathToFileURL(join(packageDir,'dist/index.js')).href)});const h=createHarness({database:':memory:'});console.log((await h.tools.list()).length);await h.close();`], {cwd:workspace,env,encoding:'utf8',timeout:10000});
+    assert.equal(embedded.status,0,embedded.stderr);assert.equal(embedded.stdout.trim(),'6');
+    assert.ok(existsSync(join(packageDir,'dist/types/index.d.ts')));
     assert.equal(invoke(['--version']).trim(), manifest.version);
     assert.match(invoke(['help']), new RegExp(`Cairn ${manifest.version.replaceAll('.', '\\.')}`));
     const probeMcp = async (runtime: string, host: string) => {

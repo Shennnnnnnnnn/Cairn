@@ -1,6 +1,10 @@
-# Cairn 4.7 plugin architecture
+# Cairn 4.9 plugin architecture
 
-Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
+Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions and tools. The default six-tool harness adds no dispatcher or model API credentials. An opt-in `Scheduler` / `cairn run` supplies a persistent Bootstrap/Reason/Explore loop through a `HostExecutor` callback; the provided Pi/Codex adapters invoke the native CLI and retain host permissions. See [the scheduler guide](scheduler.zh-CN.md). Concurrency is an explicit process resource setting, not a task budget.
+
+The optional scheduler generates compact phase instructions from the same schema used to validate results. Output correction resumes the original native session and accepts only observed zero-action candidates; Pi disables tools, while Codex audits public actions after execution. By default (`fresh-full`), each Reason uses a fresh native session and the full public graph. With explicit `reuse-delta`, a closed Bootstrap/Reason coordinator can receive deltas with a full public snapshot locator. Explore retains independent sessions in both modes. Coordinator cursors reset on restart/takeover. Stale-review checks compare saved blackboard state; actual file versions participate in repeated-completion guards without silently refreshing old finding references. These mechanisms do not establish independent semantic correctness.
+
+Initial entry is separately configurable as `auto`, `bootstrap-first` or `reason-first`. Auto reviews saved findings, observations, actions, progress, questions, next steps or deliverables before doing more work; an empty work state starts with the original direct Bootstrap attempt. It uses no domain heuristics or additional model call. Selection is persisted before dispatch and exposed through status and timeline; later recovery preserves prior progress even if the new invocation requests another entry. Legacy scheduler records remain recoverable without inventing a past selection. Entry selection does not grant evidence or criterion coverage.
 
 ## Model interface: six operations
 
@@ -15,11 +19,11 @@ Cairn preserves goals, curated evidence and recoverable progress inside existing
 | `cairn_checkpoint` | Save recovery summary, questions and next action |
 | `cairn_finish` | Validate the final outcome, or suspend with gaps |
 
-The model does not separately maintain claim IDs, criterion links and report citations. A small task uses start → host tools → finish. Longer tasks save semantic updates when they occur and recovery summaries before handoff or compaction. Initial tool guidance is goal/constraint input, rather than a framework-specific tool registry requirement.
+The model does not separately maintain claim IDs, criterion links and report citations. A small task uses start → host tools → update finding → finish. Longer tasks save semantic updates when they occur and recovery summaries before handoff or compaction. Initial tool guidance is goal/constraint input, rather than a framework-specific tool registry requirement.
 
 Finding `key` values identify intentional revisions. `covers` associates supported findings with c# criteria; a new supported finding covers the sole criterion automatically. Finding statuses are `proposed`, `supported`, `refuted` and `inconclusive`. Work progress is separate: `{key,title,status,detail?}` uses `pending`, `running`, `completed`, `blocked` and `cancelled`. Updating a work item does not prove its corresponding goal condition.
 
-Checkpoint `summary` describes current progress without replacing an existing report summary. An explicit finish `summary` or `report.summary` supplies the final report summary. The core regenerates the report's reference links from the saved findings. Missing conditions keep `status: active` and return `phase: incomplete`. A stopped attempt or expired budget is never completion.
+Checkpoint `summary` describes current progress without replacing an existing report summary. An explicit finish `summary` or checkpoint `report.summary` supplies the final report summary. Model-facing finish accepts only outcome and a short summary; SDK invoke retains the wider legacy input. The core regenerates the report's reference links from the saved findings. Missing conditions keep `status: active` and return `phase: incomplete`. A stopped attempt or expired budget is never completion.
 
 ## Two evidence modes
 
@@ -33,7 +37,7 @@ Curated findings store:
 - `references`: file paths, URLs or other useful source pointers selected by the agent.
 - Conclusion state, readable key and criterion coverage.
 
-Supported findings need a recorded basis or references. The core validates their structure, recorded state and report/criterion relationships. It does not resolve file/link content, attest that a cited file was read, or establish causal correctness. References remain explicitly agent-curated. A model declaration of `supported` is not independent verification.
+Supported findings need a recorded basis or references. The core validates their structure, recorded state and report/criterion relationships. It can validate explicitly declared local reference paths and bind artifact hashes, but does not attest that a cited file was read or establish semantic/causal correctness. References remain explicitly agent-curated. A model declaration of `supported` is not independent verification.
 
 No `tool.started`, raw observation, tool name or tool IO is stored for curated host tools. Numeric resource statistics use a separate hashed receipt table. Pre/post hooks do not reserve a quota, block native tools, retain inputs/results or create E# aliases. Curated business state comes from explicit semantic updates, not uncorrelated host plan events. Goal/checkpoint/resume/finish events still form a persistent task history.
 
@@ -63,13 +67,13 @@ Generic MCP database selection uses `--db`, then `CAIRN_DB`, then `userHome()/.c
 
 No identity is guessed from recent activity or a database row. Read-only inspection can address another task; editing requires the active bound owner, matching cwd and execution epoch. A new child-agent context is not automatically bound to its parent's goal.
 
-Subagents can conduct independent checks or work in fresh context using the host's native mechanism. The primary owner reviews the results and saves the canonical checkpoint. Another durable native session can become the owner only through explicit resume/takeover. A child context is not a portable substitute for a new native session, its lifecycle hooks or task fencing.
+Subagents can conduct independent checks using the host's native mechanism. An owner can explicitly delegate a progress item; a separate session claims a token-bearing lease and submits only proposed findings. The owner reviews and merges the branch, then explicitly promotes conclusions. Claim, heartbeat, expiry, release and epoch fencing are transactional. Leases are coordination state, never evidence. Another durable native session can become the owner only through explicit resume/takeover. A child context is not a portable substitute for a new native session, its lifecycle hooks or task fencing.
 
 Takeover increments the epoch and settles the previous owner's in-flight bookkeeping. Old owners cannot mutate or finish the task. In captured mode late observations remain audit-only. Suspension turns running progress items into blocked work, retains their meaning and suppresses continuation prompts. Resumption does not assume a previously running process is still alive. Completed tasks reject ordinary writes; explicit reopen with a reason advances the owner epoch and preserves the historical completion. Repeating a content-free finish returns its recorded status. MCP connections pin their bound epoch, including when the same native session explicitly reopens a task.
 
 ## Autonomous investigation branches
 
-The shared skill and tool/context descriptions ask the current model to decide whether and how many host-native helpers are useful. This decision uses independent questions, evidence, coordination cost and host/user limits. There is no Cairn process that schedules model workers. Branches can also be investigated by the main session.
+The shared skill and tool/context descriptions ask the current model to decide whether and how many host-native helpers are useful. This decision uses independent questions, evidence, coordination cost and host/user limits. In the default tool integration the host schedules helpers; the optional Scheduler explicitly dispatches native phases through HostExecutor. Branches can also be investigated by the main session.
 
 `Branch` persists a stable key, parent, question, executor/assignee, optional real agent ID, status, result/stopping summary, epoch and execution attempt. Checkpoints update branches atomically with findings and progress; each may point to a branch key. Parent cycles, foreign references and duplicate active agent bindings are rejected. Completed/cancelled branches require a summary. Pending, running, blocked or unreviewed branches keep completion incomplete, as do known current-epoch native helpers still running. Suspension can be saved immediately.
 
@@ -119,15 +123,15 @@ Captured calls reserve explicit budgets and append original results; curated cal
 
 ## Blue-and-white progress UI
 
-`cairn ui` starts an optional read-only loopback HTTP server against the shared database. SSE invalidates compact projections after a committed audit sequence changes. Dashboard traffic creates no model calls or task audit events.
+`cairn ui` starts an optional loopback HTTP server against the shared database. SSE invalidates compact projections after a committed audit sequence changes. Read-only dashboard traffic creates no model calls or task audit events. Human mutations append their own attributed events.
 
 The CLI can remember one UI database with `cairn ui --db FILE --remember`; `cairn ui --forget` clears that preference and exits. Selection is explicit `--db`, then `CAIRN_DB`, then the saved UI database, then the workspace database. The versioned preference is atomically saved under `userHome()/.cairn/ui.json` with private file permissions. This affects only the UI path; task/MCP/hook selection is unchanged. When no port is specified, the CLI tries port 8000 and falls back to a free port only on an address-in-use error. Explicit port failures remain visible. Failed startup does not replace a remembered preference.
 
-The relationship graph is the default main view; there is no separate progress board. It includes starting context, authored work stages, evidence, conclusions, completion criteria and the goal. Teal origin and rose goal colors preserve roles; indigo completed/result nodes, amber running work and pale dashed pending work preserve the earlier UI's status semantics. Goal nodes retain their role color and display satisfaction separately. Labels supplement color. Work stages form an explicit branch from the starting context, without fabricated causal links to findings.
+The relationship graph is the default main view; there is no separate progress board. It includes starting context, authored work stages, evidence, conclusions, completion criteria and the goal. Teal origin and rose goal colors preserve roles; indigo completed/result nodes, amber running work and pale dashed pending work preserve the earlier UI's status semantics. Goal nodes retain their role color and display satisfaction separately. Labels supplement color. Explicit findings/progress.from values express joint prerequisites. The engine resolves same-batch aliases to canonical IDs and checks the whole graph for cycles before commit. The graph uses longest-path ranks, with criterion and goal nodes after exploration. Records without declared dependencies retain contextual start edges. No dependency is invented from plan order. HTML exports share the same graph projection.
 
 The graph displays stored, reported state, not live process liveness. `active` does not mean a process is running. Paused/stale work is not shown as executing; missing telemetry does not mean idle. Goal coverage comes from core validation and may decrease after revised findings. Raw observations are labelled as original evidence where present; curated conclusions display basis/references and agent provenance. The timeline emphasizes human-readable change summaries and expandable detail, with captured evidence events filterable separately. Phase labels describe persisted state, not a fixed execution pipeline.
 
-The server has no browser mutation endpoints. Host/origin checks, no CORS permission and nonce CSP protect local data from cross-site access. Closing the UI does not stop the host. Bootstrap remains a direct useful first attempt in the ongoing host session, without a second model runtime.
+Host/origin checks, no CORS permission and nonce CSP protect local data. Only hints, suspend and reopen have POST routes; each requires the per-server CSRF token, JSON with a bounded body and an atomically checked task revision. Lease credentials are removed from read-only projections and exports. Closing the UI does not stop the host. Bootstrap remains a direct useful first attempt in the ongoing host session, without a second model runtime.
 
 ## Immediate semantic updates and native execution records
 
@@ -171,3 +175,11 @@ Attributed human feedback is append-only in any status and does not bind or chan
 Pi consumes finalized native assistant usage. A start/resume response can precede task binding, so the adapter temporarily holds its numbers in memory until success. An exact task/epoch binding keeps that turn's final reply attributed after finish; the next user turn resets the binding. Claude/Codex read only numeric usage shapes from the exact host-supplied file in at most 4 MiB increments. Per-message maxima deduplicate Claude partial records; Codex cumulative counters are baselined and cannot be rewound by an older concurrent hook. Receipt transactions make cursor retries idempotent. Initial/oversized history and unsupported formats may limit coverage, which is explicitly described as observed main-session usage, never total account cost.
 
 Usage saves an atomic `usage.updated` event/history frame without increasing the semantic revision, invalidating completion or queuing evidence review. The timeline treats these as advanced records. `Store.save` also maintains a task activity timer across actual active/suspended/completed transitions, with a partial marker for older tasks first observed while active. Dashboard/replay time comes from the live/playback clock; active time freezes on suspension and completion, while wall time continues until completion. No historical counters or active intervals are fabricated.
+
+## Integration boundary in 4.9
+
+Mainline immediate updates, semantic Branch provenance, snapshot-fenced global review, native execution events, numeric accounting and natural-time replay coexist with delegated progress leases, artifact acceptance, immutable handoffs and the optional scheduler. These are separate facts: a semantic branch is not a worker lease, a process returning is not a reviewed result, and artifact acceptance is not independent correctness.
+
+Scheduler inputs include semantic branches, native runs and globalReview with its immutable snapshot. Owner phases can explicitly acknowledge that snapshot via review:{snapshot,summary}; worker phases cannot. Findings saved after that snapshot remain pending. Stale source facts still require re-investigation. Scheduler startup reviews saved feedback and semantic work rather than guessing difficulty. Native phase usage is attributed with a hashed invocation receipt; repeated receipt processing cannot duplicate totals.
+
+The competition profile, delivery/confirm operations and fixed incident report fields remain retired. Reports use summary and generated citations; domain-specific structure belongs in the task's artifacts or verifier. Historical evaluation documents preserve their frozen versions and do not measure this integrated release.

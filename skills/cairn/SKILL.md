@@ -1,6 +1,6 @@
 ---
 name: cairn
-description: Preserve a goal, meaningful progress, curated findings and references across sessions or CLIs when the user invokes Cairn or needs persistent completion criteria.
+description: Preserve goals, grounded findings and recoverable handoffs inside the current host.
 ---
 
 # Cairn
@@ -37,7 +37,7 @@ Native hooks save execution start/return automatically when supported, including
 
 Before examining a delegated result, save `reviewing`; after checking its sources, uncertainty and contradictions, save `completed` with the result summary. Use `awaiting_review` while the business result is waiting. Preserve separate updates when these transitions occur at different times.
 
-Use `cairn_checkpoint` for a recovery summary, open questions and next action before compaction or handoff. It is not the trigger for ordinary state updates.
+Use `cairn_checkpoint` for changed findings, recovery questions/next, explicit artifacts and layered handoffs before compaction or handoff. A summary-only model call is rejected; save meaningful incremental state. It is not the trigger for ordinary state updates.
 
 ## Delegation and ownership
 
@@ -47,7 +47,7 @@ Each helper gets a bounded question, relevant inputs, permitted actions, expecte
 
 ## Finish and recover
 
-Completion depends on observable goal coverage and checked findings. Inspect finish validation gaps and continue useful work or suspend with the missing evidence and next action. A time limit, stopped attempt or written recommendation is not a completed fix. User interruption ends execution immediately.
+Model-facing `cairn_finish` accepts only outcome and an optional short summary; use `{}` to check saved coverage. Save findings and files before finish. Completion depends on observable goal coverage and checked findings. Artifact acceptance, host execution state and independent correctness assessment remain separate. Inspect finish validation gaps and continue useful work or suspend with the missing evidence and next action. A time limit, stopped attempt or written recommendation is not a completed fix. User interruption ends execution immediately.
 
 Human feedback is attributed external input, not a confirmed fact. It can be appended in any task status without transferring ownership. A completed task changes only through explicit cairn_resume reopen={reason}; this preserves its previous completion and advances the owner epoch. Reconcile the feedback and revised evidence before finishing again.
 
@@ -61,3 +61,7 @@ Resume the saved task explicitly; changing owners requires takeover. Review save
 - For graph snapshots, pagination, related evidence and deltas, read [references/graph-context.md](references/graph-context.md) when the graph is not inline or preparing a handoff.
 
 - For exploration provenance, review and external feedback, read [references/exploration.md](references/exploration.md) when recording exploration inputs/results or reopening a task.
+
+## Optional orchestration
+
+The default six-tool integration uses this host's normal tool loop. Only an explicit cairn run or SDK Scheduler enables automatic Bootstrap/Reason/Explore. auto uses saved work or pending review to choose Reason-first; otherwise Bootstrap attempts the original goal directly. Explicit bootstrap-first/reason-first override the initial route, while recovery preserves saved phases. The scheduler delegates execution to the host, not a separate model API. Its owner results use the same global snapshot review gate; worker results remain proposed. Read [references/harness.md](references/harness.md) for artifact, handoff and lease payloads when needed.

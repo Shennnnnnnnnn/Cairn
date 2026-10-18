@@ -1,4 +1,6 @@
 export const styles = `
+.human-form{display:grid;gap:10px;margin:18px 0;padding-top:16px;border-top:1px solid #dce3f4}.human-form textarea{min-height:95px;resize:vertical;box-sizing:border-box;width:100%}.human-form label{font-size:13px;font-weight:600}.human-form button{justify-self:start}button:disabled{opacity:.55;cursor:wait}
+
 :root{--paper:#f8fafc;--panel:#fff;--ink:#334155;--muted:#94a3b8;--line:#e2e8f0;--brand:#5b67e8;--brand-soft:#eef2ff;--amber:#d48b29;--red:#df6e7d;font:13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--paper);font-synthesis:none}
 *{box-sizing:border-box}body{margin:0}button,input,select{font:inherit;color:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.45}button,a,input,select{outline-offset:3px}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #a5b4fc}[hidden]{display:none!important}button,a{-webkit-tap-highlight-color:transparent}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}::-webkit-scrollbar-track{background:transparent}
@@ -40,4 +42,5 @@ export const styles = `
 
 .node .change-outline,.node .change-dot{display:none}.replay-mode .node.checkpoint-changed .change-outline,.replay-mode .node.checkpoint-changed .change-dot{display:block}.icon-btn[aria-pressed=true]{color:#2563eb;border-color:#93c5fd;background:#eff6ff}
 .edge.relation-input{stroke:#60a5fa;stroke-width:2}.edge.relation-produces{stroke:#34d399;stroke-width:2}.provenance-label{font-size:10px;fill:#4b6d9b;paint-order:stroke;stroke:#f8fafc;stroke-width:5;stroke-linejoin:round}
+.assurance-row{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 0 0;font-size:12px;color:#64748b}.assessment-state{font-size:12px;color:#64748b}.assessment-state.failed{color:#b91c1c}.assessment-state.passed{color:#047857}.assessment-state.stale,.assessment-state.inconclusive{color:#b45309}
 `;

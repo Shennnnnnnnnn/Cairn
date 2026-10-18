@@ -1,0 +1,1 @@
+{"ok":true,"kind":"provider-schema-probe-only","provider":"sub2api-copy-copy","model":"kimi-k3","thinking":"off","maxTokens":1024,"exitCode":0,"errors":[],"usage":[{"input":4213,"output":41,"cacheRead":512,"cacheWrite":0,"reasoning":22,"totalTokens":4766,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}],"text":"SCHEMA_OK"}
