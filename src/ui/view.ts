@@ -103,13 +103,14 @@ const titles: Record<string, string> = {
   'hint.added': '补充人工提示', 'report.saved': '保存报告', 'delivery.recorded': '收到交付回执', 'team.confirmed': '队伍确认', 'continuation.suggested': '提醒未完成事项',
   'task.verified':'外部完成验证','host.execution':'宿主执行状态','budget.conclude_requested':'预算收尾提醒','task.reopened':'外部反馈重开目标','branch.claim':'分支已认领','branch.heartbeat':'续租分支','branch.release':'释放分支','branch.checkpoint':'提交分支发现','branch.merge':'主会话审核分支','conclude.requested':'请求保存探索结果',
   'exploration.review_requested':'回看黑板并选择方向','outcome.assessed':'独立结论审查',
+  'scheduler.claimed':'启动自动探索','scheduler.dispatched':'派发宿主阶段','scheduler.reasoned':'完成黑板审阅','scheduler.phase_failed':'宿主阶段失败','scheduler.explore_failed':'探索分支受阻','scheduler.completion_rejected':'完成验收未通过','scheduler.stale_reason':'黑板变化，重新审阅','scheduler.released':'自动探索已停止','scheduler.stopping':'保存探索缺口',
 };
 /** Timeline projections allow only authored summaries and lifecycle metadata, never raw tool results. */
 export function projectEvent(row: { seq: number; kind: string; at: string; payload: any }): TimelineEvent {
   const payload = row.payload ?? {}, input = payload.input ?? payload;
   const value = (v: unknown) => typeof v === 'string' ? v : '';
   let title = titles[row.kind] ?? '更新任务记录', status = '', detail = '', summary = '';
-  const advanced = ['tool.started', 'observation.captured', 'claim.revised', 'criterion.updated', 'action.updated', 'report.saved','branch.heartbeat'].includes(row.kind);
+  const advanced = ['tool.started', 'observation.captured', 'claim.revised', 'criterion.updated', 'action.updated', 'report.saved','branch.heartbeat','scheduler.heartbeat','scheduler.session','scheduler.result_saved','scheduler.settled'].includes(row.kind);
   if (row.kind === 'task.finished' || row.kind === 'task.checked') {
     status = value(payload.phase);
     title = ({ completed: '已完成', suspended: '暂停任务', incomplete: '完成检查未通过', ready_for_delivery: '报告已就绪，待交付', awaiting_confirmation: '等待队伍确认' } as Record<string, string>)[status] ?? '完成检查';
@@ -119,6 +120,16 @@ export function projectEvent(row: { seq: number; kind: string; at: string; paylo
   else if(row.kind==='outcome.assessed'){status=value(payload.assessment?.status);summary=value(payload.assessment?.summary);detail=`${value(payload.assessment?.reviewer)} · ${value(payload.assessment?.scope)}`;}
   else if(row.kind==='host.execution'){summary=`宿主状态：${value(payload.state)}（与任务完成状态独立）`;}
   else if(row.kind==='budget.conclude_requested'){summary=`收尾提醒：${value(payload.stage)}`;}
+  else if(row.kind==='scheduler.start_selected'){
+    title='选择启动方式';status=value(payload.selected);
+    summary=`${value(payload.requested)} → ${value(payload.selected)}`;detail=value(payload.reason);
+  }
+  else if(row.kind.startsWith('scheduler.')){
+    status=value(payload.status);
+    summary=[value(payload.phase),value(payload.branch?.title??payload.branch),value(payload.error??payload.reason)].filter(Boolean).join(' · ')||value(payload.status)||'保存调度状态';
+    const usage=payload.metrics?.usage;
+    detail=[value(payload.sessionRef),usage?`记录 tokens：输入 ${Number(usage.input_tokens??0)}，输出 ${Number(usage.output_tokens??0)}`:'',typeof payload.metrics?.wallSeconds==='number'?`宿主耗时：${payload.metrics.wallSeconds.toFixed(1)} 秒`:''].filter(Boolean).join('\n');
+  }
   else if (row.kind === 'task.resumed') { summary = payload.takeover ? '新会话接管目标，继续已有结论与未解决问题。' : '继续当前会话保存的目标与进展。'; }
   else if (row.kind === 'tool.started' || row.kind === 'observation.captured') { summary = value(input.tool ?? payload.tool); status = value(payload.status); }
   else summary = value(input.summary ?? input.text ?? input.goal ?? input.reason ?? input.key ?? payload.result?.text ?? payload.summary);

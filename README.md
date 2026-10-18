@@ -60,6 +60,18 @@ Give the agent the goal and any tool guidance in your initial request:
 
 Tool guidance is task input. Cairn does not hardcode which diagnostic, code or research tools the agent must use. The host still enforces its own permissions.
 
+## Optional automatic Reason/Explore scheduling
+
+The ordinary five-tool integration leaves scheduling disabled. To let the saved blackboard drive exploration, first save a goal with `cairn submit`, then opt in:
+
+```sh
+cairn run TASK_ID --executor pi --model global:deepseek-v4.1-flash \
+  --effort high --parallel 2 --takeover
+# Or --executor codex --model gpt-6.1-sol --effort xhigh
+```
+
+The scheduler uses native host execution for direct work or initial review, followed by exploration and verified completion as needed. `--start-mode auto` (default) selects Bootstrap for a new goal and Reason for saved findings, questions or work; select `bootstrap-first` or `reason-first` explicitly when needed. Selection and rationale are saved before dispatch, with no extra model call; recovery preserves progress. By default, each Reason starts a fresh session with the full public graph (`--coordinator-mode fresh-full`), following the original design; opt into coordinator reuse and delta input with `--coordinator-mode reuse-delta`. Explore sessions remain separate. It supports general curated tasks; tools and permissions remain with the host. `--parallel` controls concurrent exploration branches, without imposing phase, token or total runtime budgets. Lack of meaningful progress or an unusable host saves the remaining gap and exits. Taking over an existing task requires explicit `--takeover`. Inspect saved progress with `cairn serve`, `status` and `graph --format timeline`. See the [scheduler guide and recovery boundaries](docs/scheduler.zh-CN.md).
+
 ## The shortest model workflow
 
 Generic `cairn mcp`, including Multica, binds a fresh connection identity automatically; omit `session_id`. Native Claude/Codex adapters supply the actual startup-hook `session_id` once on the first start/resume. Pi binds its native identity automatically. Subsequent calls use the connection binding.

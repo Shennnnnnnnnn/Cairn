@@ -1,5 +1,47 @@
 # Verification record
 
+## 可选启动策略与自动选路 — 2026-10-18
+
+本轮完整 `npm run check` **384/384** 通过，包含类型检查、重新构建、HTTP/SSE、原生宿主夹具及所有已有回归。新增18项测试覆盖CLI默认/显式三种入口、SDK非法值、自动审核已存事实/问题/下一步/Intent/报告、显式覆盖初始策略、Reason-first→Explore→Reason在两种上下文策略下的会话隔离、SQLite重载后保留原入口、旧任务在途进程检查及可观察的选择事件。
+
+新增CLI测试最初因创建第二个任务时复用了尚有活动目标的测试身份而失败，调整为每个独立任务使用独立身份后，定向测试及完整回归均通过；没有放宽真实任务所有者或恢复校验。所有宿主执行均为本地脚本化夹具，零新增付费模型调用。
+
+`startMode` 默认 `auto`，仅按公开黑板状态选择初始入口，不额外调用模型预测任务难度；Bootstrap和Reason仍自主决定是否直接完成或提出探索。选择在首次派发前保存，暂停恢复不会因更换参数重跑已执行阶段。普通五工具入口不启用调度器。配置与恢复边界见[调度指南](scheduler.zh-CN.md#启动策略)。
+
+这是Round15封存之后的实现变化；Round15的366项检查及模型成绩仍对应当时的冻结源码。本次没有重新运行模型、改写其封存结果或证明两种入口的准确率/耗时差异。
+
+## 原版协调策略与阶段精简 — 2026-10-18（Round15）
+
+本轮完整 `npm run check` **366/366** 通过，包含 TypeScript、重新构建、HTTP/SSE、宿主与通用 harness 回归。新增7项测试先验证旧版本缺失行为，再覆盖 fresh-full/reuse-delta 的完整图与增量、独立 Explore、两种模式直接完成、worker状态/覆盖由宿主赋予、next列表无损兼容和完成/新Intent互斥。原有输出纠错测试显式选择reuse-delta，避免把可选策略误当默认。
+
+冻结后六个新版无模型 pipeline 夹具与两个原版 Python 运行时夹具全部通过，原版真实走通Bootstrap→Conclude→Reason→Explore→Reason。无额外付费探针；夹具不计模型成绩。正式DeepSeek四组36次对照及无预算适配按[运行前协议](../evaluations/public-rca/protocol-round15.zh-CN.md)执行。[检查与实现差异收据](../evaluations/public-rca/runs/2026-10-18-deepseek-original-context-round15/implementation-check.json)、[冻结夹具](../evaluations/public-rca/runs/2026-10-18-deepseek-original-context-round15/integration-fixture.json)、[实现说明](optimization-round15.zh-CN.md)。
+
+正式36次均正常结束，36份报告共58个分片完整阅读、ACK封存后评分。原生Pi／原版Python／新版完整图／新版增量图各正确9/9、完成9/9、错误完成0/9；统一产物验收分别8/9、9/9、9/9、9/9。累计已记录tokens分别18.574M、24.337M、14.132M、17.334M，耗时中位251.2、265.1、259.3、262.5秒。新版默认相对原生少23.9%tokens、相对原版少41.9%，但多数差异发生在Bootstrap，不能归因于协调模式；完整图没有普通Reason，增量图仅一次成功产物反馈Reason，均没有真实Explore／Conclude或参数纠错。原版禁用阶段超时会去掉常用阶段切换触发器，不代表其默认分段表现。
+
+37次真实Pi调用、37个私有凭据目录均清理；新旧源码、评分器、输入、封存报告和全局配置无漂移，独立session账本及阶段增量对账无差异。7个样本因8条可恢复连接错误保留用量下界；没有终局服务失败，也没有真实崩溃恢复证据。正文核查仍有时序、单位和缺测推断问题，标签正确不能视为全文正确。9个actor使用共享/tmp写自己的临时文件，1次父目录读取尝试失败；公开观察未见同名文件区间重叠或隐藏答案访问，不声称OS隔离。详见[Round15完整报告](../evaluations/public-rca/comparison-round15.zh-CN.md)及其中审计收据。
+
+## 阶段契约与协调上下文 — 2026-10-18
+
+Round13 冻结前 `npm run check` **359/359** 通过，包括 TypeScript、重新构建、原生宿主夹具和本地 HTTP/SSE。新增通用回归覆盖同会话参数纠错、交替重复错误终止、纠错期间新增提示、原子 Intent 提交、零动作校验、增量黑板与完整快照、不安全目录回退、取消、恢复旧 Reason 的进程隔离，以及产物修复重验与旧引用版本约束。产物修复及恢复隔离缺陷均先以失败测试复现后修正。
+
+冻结后的真实调度调用路径另有 **8 项无模型接入夹具**通过，覆盖 Pi／Codex 的直接完成、同会话纠错及独立 Explore、仅修产物的 Reason、异常累计用量保留、started-only 动作拒绝；零新增付费探针。[冻结版本与检查记录](../evaluations/public-rca/runs/2026-10-18-scheduler-contract-round13-final/freeze-receipt.json)、[接入夹具](../evaluations/public-rca/runs/2026-10-18-scheduler-contract-round13-final/integration-fixture.json)独立保存。这些合成夹具不计模型成绩或恢复成功率。
+
+[实现说明](optimization-round13.zh-CN.md)与[调度器指南](scheduler.zh-CN.md)记录行为和宿主限制。普通协调会话复用是新增开销优化；Codex 输出纠错的零动作检查是事后审计拒绝，不能声称执行前禁工具。模型效果以本轮 54 次冻结对照单独记录，不由这些夹具推断准确率。
+
+54次无预算实测均结束；47份公开报告共71分片完整阅读封存，7份缺失均为GLM服务失败，之后才统一隐藏评分。DeepSeek原生／Cairn正确均9/9，记录tokens少44.9%、耗时中位少10.2%；Sol正确8/9→9/9，tokens多7.9%、耗时中位多12.8%。GLM原生／Cairn正确4/9、3/9，完成6/9、5/9，两组各两次错误完成；服务正常的五组配对正确均3/5。三次输出修复均同会话零工具并通过产物验收，根因正确仅1/3；四次Conclude均未恢复交付。实际没有Reason／Explore阶段，不能从本轮宣称delta或探索闭环的实测收益。额外数值、单位和缺测错误另列，标签正确不代表全文正确。详见[Round13完整报告](../evaluations/public-rca/comparison-round13.zh-CN.md)。
+
+## Optional scheduler — 2026-10-18
+
+After all Round12 model processes exited, the current workspace passed **332/332** tests through `npm run check`, including TypeScript, rebuilt bundles, CLI/provider compatibility, lease regressions and HTTP/SSE. The production Pi adapter now preserves opaque model IDs and accepts a separate optional provider. The frozen model experiments already used correct IDs through independent native drivers; the scheduler core and Engine are byte-identical to the measured version. [Version boundary and validation hashes](../evaluations/public-rca/runs/2026-10-18-scheduler-three-model-round12-final/post-freeze-cli-fix.json) record the two source and six generated-file differences.
+
+Before freezing the implementation, `npm run check` passed **327/327** tests, including TypeScript checking, build and local HTTP/SSE tests. New domain-independent host fixtures cover direct Bootstrap completion through a verifier, parallel Explore proposals and explicit owner review, semantic no-progress termination, changing hints, duplicate dispatch exclusion, stale owner results, same-session conclude, cross-epoch recovery and blocked recovery when native liveness is unknown. Native CLI adapter checks cover argv, public-event filtering, token accounting, process-group cancellation and private session locks without model calls.
+
+The five-tool harness remains the default. The optional [scheduler](scheduler.zh-CN.md) uses host execution; interface tests do not establish model accuracy or universally reliable process recovery. Round12 records real model results separately using a frozen implementation and all phase costs.
+
+An additional lease regression file runs two native-host fixtures for 11.1 seconds with an initial 10-second lease: normal Explore and cross-epoch same-session recovery Conclude. Both dispatcher and actual worker leases renew, then proposals are reviewed and completed. The focused run passed 3/3 (parent plus two scenarios), with TypeScript checking; it changes no frozen implementation files.
+
+[Round12](../evaluations/public-rca/comparison-round12.zh-CN.md) retains 90 attempts after the user requested a complete Pi rerun, plus three original probes. All 49 available public reports were read and hash-sealed before hidden grading. The latest comparison is restored Pi36 plus retained Sol18: DeepSeek is correct and completed 9/9 in both arms; Sol is correct 9/9 in both arms but completes 9/9 native versus 8/9 with Cairn. Restored GLM ends with service errors in all 18 attempts, so its inference performance cannot be ranked. One Sol task exercises a real Bootstrap→Reason→Explore→Reason artifact-repair loop; this does not establish a general diagnosis-accuracy benefit or reliable fault recovery. Shared `/tmp` writes in seven Pi actors and a failed parent-directory read are disclosed separately from unchanged input hashes; Pi has no OS sandbox.
+
 ## 第九轮：四类对象数组兼容与因果比较
 
 完整构建及272/272回归通过。Pi验证前prepareArguments与共同模型入口统一规范化；上轮三个真实拒绝载荷在本机Pi校验器重放3/3通过，严格字段/版本/所有权不放宽。固定无领域请求的普通增量收据大小保持不变。
@@ -293,3 +335,12 @@ The historical Codex test approved only its temporary Cairn MCP server and trust
 
 
 Submitted-file integrity and the distinction between replay, inspection, contract checks and semantic correctness are specified in [artifacts and handoffs](artifacts-handoffs.zh-CN.md).
+
+
+## Round14 — unchanged framework, Pi Kimi K3 (2026-10-18)
+
+[Measured comparison](../evaluations/public-rca/comparison-round14.zh-CN.md):18 fresh unbudgeted attempts, exact user-selected provider/model `sub2api-copy-copy/kimi-k3` (display `sub2api-kimi`), high. The src/dist/skills snapshot matches Round13 byte for byte; no production changes or new full-suite run. Three current no-model Pi pipeline fixtures passed.
+
+Native/Cairn root matches6/9 each, workflow completions9/9 each, false completions3/9 each. Acceptance6/9→9/9; effective correct delivery5/9→6/9. Recorded tokens5,630,293→4,732,815; median CLI/workflow time488.4s→474.7s, noncached input361,536→474,239. Four ordinary same-session Reason/delta continuations and seven zero-action output repairs passed native identity/stop checks. These yielded two real artifact repair loops, not measured root-cause improvement or fault recovery; no actual Explore/Conclude occurred.
+
+All18 public reports were read/ACK/sealed before hidden labels. Twenty-nine actual CLI invocations and credential cleanup receipts; ledger/phase/actor sums match, protected input and current implementation drift0. Two native connection errors recovered through Pi and keep usage lower-bound flags. Frozen analysis retained an old concurrency invariant; an audited derived analysis corrected only that check/self-source target with all18 grade hashes unchanged. The report retains this correction, targeted prose/CSV findings and public scope review.

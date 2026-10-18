@@ -1,6 +1,10 @@
 # Cairn harness architecture
 
-Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions, tools and concurrency. Cairn has no model worker pool, keepalive prompt, polling dispatcher or model API credentials.
+Cairn preserves goals, curated evidence and recoverable progress inside existing CLIs. The host owns models, accounts, sessions, permissions and tools. The default five-tool harness adds no dispatcher or model API credentials. An opt-in `Scheduler` / `cairn run` supplies a persistent Bootstrap/Reason/Explore loop through a `HostExecutor` callback; the provided Pi/Codex adapters invoke the native CLI and retain host permissions. See [the scheduler guide](scheduler.zh-CN.md). Concurrency is an explicit process resource setting, not a task budget.
+
+The optional scheduler generates compact phase instructions from the same schema used to validate results. Output correction resumes the original native session and accepts only observed zero-action candidates; Pi disables tools, while Codex audits public actions after execution. By default (`fresh-full`), each Reason uses a fresh native session and the full public graph. With explicit `reuse-delta`, a closed Bootstrap/Reason coordinator can receive deltas with a full public snapshot locator. Explore retains independent sessions in both modes. Coordinator cursors reset on restart/takeover. Stale-review checks compare saved blackboard state; actual file versions participate in repeated-completion guards without silently refreshing old finding references. These mechanisms do not establish independent semantic correctness.
+
+Initial entry is separately configurable as `auto`, `bootstrap-first` or `reason-first`. Auto reviews saved findings, observations, actions, progress, questions, next steps or deliverables before doing more work; an empty work state starts with the original direct Bootstrap attempt. It uses no domain heuristics or additional model call. Selection is persisted before dispatch and exposed through status and timeline; later recovery preserves prior progress even if the new invocation requests another entry. Legacy scheduler records remain recoverable without inventing a past selection. Entry selection does not grant evidence or criterion coverage.
 
 ## Model interface: five operations
 

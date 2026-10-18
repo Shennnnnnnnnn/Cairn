@@ -4,3 +4,7 @@ export { Store } from './core/store.js';
 export { normalizeCausality, workRef } from './core/causality.js';
 export { localReferenceIssue } from './core/references.js';
 export * from './core/types.js';
+export {Scheduler,schedulerFingerprint} from './scheduler.js';
+export type {SchedulerPhase,CoordinatorMode,HostRequest,HostResult,HostExecutor,SchedulerOptions,SchedulerResult} from './scheduler.js';
+export {CliHostExecutor,createHostExecutor} from './scheduler/host.js';
+export type {CliHostOptions} from './scheduler/host.js';

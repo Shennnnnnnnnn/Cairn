@@ -88,6 +88,18 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 
 无 `--target` 时安装脚本只更新全局命令。详见 [Multica 接入指南](docs/multica.zh-CN.md)。
 
+## 可选：自动 Reason／Explore 调度
+
+普通五工具接入默认不启动调度器。需要黑板自动推进探索时，可先 `cairn submit` 保存目标，再显式运行：
+
+```sh
+cairn run TASK_ID --executor pi --model global:deepseek-v4.1-flash \
+  --effort high --parallel 2 --takeover
+# 或 --executor codex --model gpt-6.1-sol --effort xhigh
+```
+
+调度器通过宿主原生执行首轮尝试或黑板审核，再按需探索与验收。默认 `--start-mode auto`：新目标先 Bootstrap，已有事实、开放问题或工作进展先 Reason；可显式选 `bootstrap-first` 或 `reason-first`。自动选路不增加模型调用，选择与原因在派发前保存，恢复不会把任务倒回起点。默认 `--coordinator-mode fresh-full` 与原版一致，每次 Reason 新建会话、读取完整公开图；可选 `--coordinator-mode reuse-delta` 复用协调会话与增量输入。Explore 始终使用独立会话；支持 general curated 任务，工具与权限仍归宿主。`--parallel` 只限制同时探索的分支数，不设轮数、token 或总耗时预算；没有有效进展或宿主无法继续时保存缺口并退出。已有任务接管必须明确 `--takeover`。使用 `cairn serve`、`status`、`graph --format timeline` 查看已保存进展。详见[可选调度层与恢复边界](docs/scheduler.zh-CN.md)。
+
 ## 模型的最短使用流程
 
 ### 开始 → 自由使用工具 → 完成验收
@@ -343,7 +355,7 @@ cairn uninstall --target codex
 
 数据库默认 `<workspace>/.cairn/state.db`；`CAIRN_DB`／`--db` 可覆盖，`CAIRN_WORKSPACE` 可选择工作区。已有 TypeScript SQLite 任务保持原语义：没有 `evidenceMode` 字段的历史任务仍按 captured 解释，不会自动转换。新 public general 任务才默认 curated。早期 Python 数据格式不自动迁移，请勿把任务数据提交到 Git。
 
-Bootstrap 保留“在当前会话先直接尝试解决”的策略：理解目标与约束、执行有价值的行动、复核并修正。无需单独 bootstrap worker、保活提示、模型池、轮询 dispatcher 或固定 reason／explore 流程。
+普通宿主驱动接入保留“在当前会话先直接尝试解决”的策略：理解目标与约束、执行有价值的行动、复核并修正。它没有独立的 Bootstrap 阶段；可选调度器才按启动策略进入 Bootstrap 或 Reason，无需额外模型服务。
 
 ## 开发与验证
 

@@ -94,6 +94,23 @@ export interface VerificationRecord {
   at:string; checkedRevision:number; epoch:number; proof:string;
   method?:VerificationResult['method']; scope?:string; artifacts?:Artifact[];
 }
+/** Optional orchestration metadata. Knowledge remains in findings/progress, not leases. */
+export interface SchedulerFlight {
+  id:string; phase:'bootstrap'|'reason'|'explore'|'conclude'; startedAt:string;
+  branch?:{key:string;title:string}; sessionRef?:string; fingerprint:string;
+  /** Validated public result saved before applying it; never private reasoning. */
+  candidate?:unknown;
+}
+export type SchedulerStartMode = 'auto'|'bootstrap-first'|'reason-first';
+export interface SchedulerState {
+  version:1; epoch:number; bootstrapDone:boolean; sequence:number;
+  /** Initial entry selection; recovery keeps the saved phase instead of restarting it. */
+  start?:{requested:SchedulerStartMode;selected:Exclude<SchedulerStartMode,'auto'>;basis:'explicit'|'saved-state'|'new-task';reason:string};
+  status:'running'|'idle'|'failed'|'interrupted'|'completed'|'suspended';
+  lease?:{token:string;expiresAt:string}; inflight:SchedulerFlight[];
+  reasonFingerprint?:string; failedBranches:string[]; feedback?:string;
+  completionAttempt?:string;
+}
 export interface Task {
   id: string; title?:string; origin: string; goal: string; constraints: string[]; criteria: Criterion[]; profile: 'general' | 'emergency';
   scope: Scope; owner: Owner; revision: number; createdAt: string; budget: Budget;
@@ -116,6 +133,7 @@ export interface Task {
   finishAttempt?: { fingerprint: string; attempts: number };
   continuation?: { revision: number; count: number }; interrupted: boolean;
   explorationNotice?:{key:string;at:string;hintId?:string};
+  scheduler?:SchedulerState;
 }
 export interface CompletionRepair {
   unchanged: boolean; attempts: number;
@@ -131,5 +149,6 @@ export class CairnError extends Error {
 export function publicTask(task: Task): Task {
   const result=structuredClone(task);
   for(const item of result.progress??[])if(item.lease)Reflect.deleteProperty(item.lease,'token');
+  if(result.scheduler?.lease)Reflect.deleteProperty(result.scheduler.lease,'token');
   return result;
 }
