@@ -12,6 +12,6 @@ for(const row of m.schedule.filter(r=>r.arm==='cairn')){
  const store=new Store(':memory:'),engine=new Engine(store),tasks=[];
  try{for(const task of source){let reportCheck={ok:false,issues:['No report']},current=false,error;try{if(task.report)reportCheck=engine.evaluateReport(task,task.report);current=engine.verificationCurrent(task);}catch(e){error=e.message;}tasks.push({id:task.id,status:task.status,reportCheck,current,error});}}finally{store.close();}
  const record={id:row.id,singleTaskGoal:protocol.singleTaskGoal,tasks,completedCandidateCurrent:protocol.singleTaskGoal&&tasks.length===1&&tasks[0].status==='completed'&&tasks[0].reportCheck.ok&&tasks[0].current,sourceDatabaseWritten:false,modelCalled:false};
- const path=join(dir,'initial.cairn-assurance.json');if(existsSync(path))throw new Error('Assessment already exists');writeFileSync(path,JSON.stringify(record,null,2)+'\n',{mode:0o600,flag:'wx'});records.push(record);
+ const path=join(dir,'initial.cairn-assurance.json');if(existsSync(path)){if(JSON.stringify(load(path))!==JSON.stringify(record))throw new Error('Read-only assessment changed');}else writeFileSync(path,JSON.stringify(record,null,2)+'\n',{mode:0o600,flag:'wx'});records.push(record);
 }
 console.log(JSON.stringify({assessed:records.length,current:records.filter(r=>r.completedCandidateCurrent).length}));
