@@ -1,4 +1,4 @@
-export type Host = 'pi' | 'claude' | 'codex' | 'mcp';
+export type Host = 'pi' | 'claude' | 'codex' | 'dsh' | 'mcp';
 export interface Session { host: Host; sessionId: string; cwd: string; epoch?: number }
 export interface Owner extends Session { epoch: number }
 export interface Capabilities { capture: boolean; preTool: boolean; restore: boolean; stop: boolean }

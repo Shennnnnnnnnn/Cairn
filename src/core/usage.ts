@@ -32,8 +32,15 @@ export function toolUsage(engine:Engine,session:Session,id:string,phase:'start'|
   if(phase==='end')save(engine,task,`${session.host}/native`,{toolCalls:(prior?.cairn??cairn)?0:1,cairnCalls:(prior?.cairn??cairn)?1:0,toolErrors:isError?1:0});
  });
 }
+/** A failed native attempt with no counters must leave billing unknown. */
+export function incompleteUsage(engine:Engine,session:Session,source=`${session.host}/native`){
+ engine.store.transaction(()=>{
+  const task=owner(engine,session);if(!task||task.usage?.partial)return;
+  task.usage??={sources:[],updatedAt:engine.at()};task.usage.partial=true;save(engine,task,source,{});
+ });
+}
 /** A host message ID or cumulative stream ID, never text supplied by the model. */
-export function tokenUsage(engine:Engine,session:Session,id:string,tokens:TokenUsage,options:{baseline?:boolean;cumulative?:boolean;modelCall?:boolean;source?:string;binding?:{taskId:string;epoch:number}}={}){
+export function tokenUsage(engine:Engine,session:Session,id:string,tokens:TokenUsage,options:{baseline?:boolean;cumulative?:boolean;modelCall?:boolean;partial?:boolean;source?:string;binding?:{taskId:string;epoch:number}}={}){
  if(!id||!validTokens(tokens))return;
  engine.store.transaction(()=>{
   const key=usageKey(session,`tokens:${id}`),row=engine.store.db.prepare('SELECT * FROM usage_samples WHERE key=?').get(key);
@@ -47,6 +54,7 @@ export function tokenUsage(engine:Engine,session:Session,id:string,tokens:TokenU
   engine.store.db.prepare('INSERT INTO usage_samples VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,options.baseline?null:task?.id??null,task?.owner.epoch??null,JSON.stringify({tokens:next}));
   const bound=attribution&&options.binding?.taskId===attribution.id&&options.binding.epoch===attribution.owner.epoch;
   if(options.baseline||options.cumulative&&!previous||!attribution||attribution.status!=='active'&&!bound||previous&&!Object.values(delta).some(Boolean))return;
+  if(options.partial){attribution.usage??={sources:[],updatedAt:engine.at()};attribution.usage.partial=true;}
   save(engine,attribution,options.source??`${session.host}/native`,{tokens:delta,...(options.modelCall&&!previous?{modelCalls:1}:{})});
  });
 }

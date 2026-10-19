@@ -9,16 +9,17 @@ import {spawn,spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 
-const curated=process.argv.includes('--curated');
+const dsh=process.argv.includes('--dsh');
+const curated=dsh||process.argv.includes('--curated');
 const exploration=process.argv.includes('--exploration-loop');
 const feedback=process.argv.includes('--completion-feedback')||exploration;
-const root=mkdtempSync(join(tmpdir(),'cairn-pi-fixture-')),entry=resolve('dist/cairn.mjs'),db=join(root,'.cairn/state.db');
+const root=mkdtempSync(join(tmpdir(),dsh?'cairn-dsh-fixture-':'cairn-pi-fixture-')),entry=resolve('dist/cairn.mjs'),db=join(root,'.cairn/state.db');
 const agentDir=join(root,'isolated-agent'),providerExtension=join(root,'local-provider.mjs');
 mkdirSync(agentDir,{recursive:true});
 writeFileSync(join(agentDir,'auth.json'),'{}\n',{mode:0o600});
 // Deliberately inherit no model keys, auth tokens, proxy settings or user configuration paths.
 const env={PATH:`${dirname(process.execPath)}:/opt/homebrew/bin:/usr/bin:/bin`,PI_CODING_AGENT_DIR:agentDir,CAIRN_DB:db,NO_COLOR:'1'};
-const installed=spawnSync(process.execPath,[entry,'install','--target','pi','--root',root],{env,encoding:'utf8',timeout:15000});
+const installed=spawnSync(process.execPath,[entry,'install','--target',dsh?'dsh':'pi','--root',root],{env,encoding:'utf8',timeout:15000});
 if(installed.status!==0)throw new Error(`Pi fixture install failed: ${installed.stderr||installed.error?.message}`);
 const plugin=JSON.parse(installed.stdout).plugin;
 writeFileSync(join(root,'evidence.txt'),'cairn-smoke-verified\n');
@@ -38,7 +39,7 @@ function toolResults(body){
 function verifyPrevious(body){
  if(!step)return;
  const previous=toolResults(body).find(result=>result.tool_use_id===`tool_${phase}_${step-1}`);
- assert.ok(previous,`Pi did not return the previous tool result for ${phase}/${step-1}`);
+ assert.ok(previous,`Host did not return the previous tool result for ${phase}/${step-1}`);
  assert.ok(!previous.is_error,`Pi tool failed at ${phase}/${step-1}: ${JSON.stringify(previous.content)}`);
  if(phase==='create'&&step===2&&!feedback){
   const text=JSON.stringify(previous.content);assert.match(text,/cairn-smoke-verified/);if(!curated)assert.match(text,/Cairn E1/);
@@ -57,7 +58,7 @@ const server=createServer(async(req,res)=>{
   requestCount++;assert.ok(requestCount<=16,'Fixture exceeded its bounded request budget');
   const body=JSON.parse(raw),state=savedTask();
   const exposed=new Set((body.tools??[]).map(tool=>tool.name));
-  for(const name of coreNames)assert.ok(exposed.has(name),`Pi did not expose ${name}`);
+  for(const name of coreNames)assert.ok(exposed.has(name),`Host did not expose ${name}: ${[...exposed].join(",")}`);
   assert.deepEqual([...exposed].filter(name=>name.startsWith('cairn_')).sort(),[...coreNames].sort());
   for(const tool of body.tools??[])if(coreNames.includes(tool.name))assert.equal(tool.input_schema?.properties?.session_id,undefined,'Pi must bind native identity without a model-facing session_id');
   verifyPrevious(body);
@@ -98,7 +99,7 @@ const server=createServer(async(req,res)=>{
    ['cairn_finish',{summary:'Reviewer accepted the saved evidence'}],
   ];
   const [operation,args]=planned[step]??[];
-  if(operation){assert.ok(exposed.has(operation),`Pi did not expose ${operation}`);operations.push({phase,tool:operation});}
+  if(operation){assert.ok(exposed.has(operation),`Host did not expose ${operation}`);operations.push({phase,tool:operation});}
   const block=operation?{type:'tool_use',id:`tool_${phase}_${step}`,name:operation,input:args}:{type:'text',text:'FIXTURE_DONE'};
   step++;
   const message={id:`msg_${requestCount}`,type:'message',role:'assistant',model:body.model,content:[block],stop_reason:operation?'tool_use':'end_turn',stop_sequence:null,usage:{input_tokens:20,output_tokens:30}};
@@ -119,16 +120,18 @@ const server=createServer(async(req,res)=>{
 });
 async function launch(){
  const args=['--offline','--no-context-files','--no-extensions','--extension',providerExtension,'--extension',join(plugin,'runtime/pi-extension.mjs'),'--no-skills','--no-prompt-templates','--tools','read,cairn_*','--provider','cairn-fixture','--model','cairn-fixture','--thinking','off','--session-id',sessionId,'--session-dir',join(root,'sessions'),'--mode','json','-p',`Bounded local Cairn protocol fixture: execute the supplied tool actions for phase ${phase}.`];
- const child=spawn('pi',args,{cwd:root,env,stdio:['ignore','pipe','pipe']});activeChild=child;
+ const dshBin=process.env.CAIRN_DSH_BIN;
+ if(dsh&&!dshBin)throw new Error('Set CAIRN_DSH_BIN to the official DSH CLI');
+ const child=spawn(dsh?process.execPath:'pi',dsh?[dshBin,'--profile','headless','--patch',join(root,'dsh-patch.json'),'--json',`Protocol fixture ${phase}`]:args,{cwd:root,env:{...env,...(dsh?{DSH_HOME:join(root,'dsh-home'),CAIRN_FIXTURE_KEY:'dummy',DSH_TELEMETRY_MODE:'OFF'}:{})},stdio:['ignore','pipe','pipe']});activeChild=child;
  let stdout='',stderr='',timedOut=false,killTimer;
  child.stdout.on('data',chunk=>stdout+=chunk);child.stderr.on('data',chunk=>stderr+=chunk);
  const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');killTimer=setTimeout(()=>child.kill('SIGKILL'),3000);},45000);
  let code;
  try{code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});}
  finally{clearTimeout(timer);clearTimeout(killTimer);activeChild=undefined;writeFileSync(join(root,`${phase}.jsonl`),stdout,{mode:0o600});writeFileSync(join(root,`${phase}.stderr`),stderr,{mode:0o600});}
- if(timedOut||code!==0)throw new Error(`Pi CLI ${timedOut?'timed out':`failed (${code})`}; fixture logs: ${root}`);
+ if(timedOut||code!==0)throw new Error(`Host CLI ${timedOut?'timed out':`failed (${code})`}; fixture logs: ${root}`);
  if(failures.length)throw new Error(`Local protocol fixture rejected Pi requests: ${failures.join('; ')}; logs: ${root}`);
- assert.ok(stdout.includes('FIXTURE_DONE'),`Pi did not finish the ${phase} fixture; logs: ${root}`);
+ assert.ok(stdout.includes('FIXTURE_DONE'),`Host did not finish the ${phase} fixture; logs: ${root}`);
 }
 
 try{
@@ -137,10 +140,21 @@ try{
  // Pi's documented registerProvider supports the built-in anthropic-messages API
  // and literal dummy keys. Model traffic can only reach this loopback fixture.
  writeFileSync(providerExtension,`export default function(pi){pi.registerProvider('cairn-fixture',{baseUrl:${JSON.stringify(baseUrl)},apiKey:'cairn-local-fixture-not-a-credential',api:'anthropic-messages',models:[{id:'cairn-fixture',name:'Cairn local protocol fixture',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:200000,maxTokens:4096}]});}\n`,{mode:0o600});
+ if(dsh){
+  const readPlugin=join(root,'fixture-read.mjs');
+  writeFileSync(readPlugin,`import fs from 'node:fs';export default {name:'fixture-read',inject:['agents','tools'],apply(ctx){ctx.on('agent/created',({agent})=>{agent.ctx.tools.register({name:'read',description:'Read the original fixture marker',parameters:{type:'object',properties:{path:{type:'string'}},required:['path']},output:{schema:{},render:(_a,v)=>[{type:'text',text:v}]},execute:async(args)=>fs.readFileSync(args.path,'utf8')});});}};`);
+  writeFileSync(join(root,'dsh-patch.json'),JSON.stringify([
+   {id:'agent-default-model',config:{provider:'cairn-fixture',model:'cairn-fixture'}},
+   {id:'llm-pi-ai',config:{providers:{'cairn-fixture':{api:'anthropic-messages',apiKeyEnv:'CAIRN_FIXTURE_KEY',baseURL:baseUrl,models:[{id:'cairn-fixture',name:'Fixture',input:['text'],contextWindow:200000}],reasoning:'off'}}}},
+   ...['session-title-llm','session-telemetry-otel','tool-bash','tool-pwsh','tool-subagent','tool-subagent-fork','tool-workflow','tool-web'].map(id=>({id,disabled:true})),
+   {insert:[{id:'fixture-read',name:readPlugin},{id:'cairn',name:join(plugin,'runtime/dsh-extension.mjs'),config:{includeSkill:false}}]},
+   {id:'headless-runner',inject:['headlessStartup','cairnReady']}
+  ]));
+ }
  console.log(JSON.stringify({root,mode:exploration?'real-cli/exploration-loop-fixture':feedback?'real-cli/completion-feedback-fixture':'real-cli/local-protocol-fixture',isolatedAgentDir:agentDir}));
  await launch();
- let task=savedTask();
- assert.equal(task?.status,'suspended');assert.equal(task.owner.sessionId,sessionId);assert.equal(task.owner.host,'pi');assert.equal(task.owner.epoch,1);
+ let task=savedTask();if(dsh)sessionId=task.owner.sessionId;
+ assert.equal(task?.status,'suspended');assert.equal(task.owner.sessionId,sessionId);assert.equal(task.owner.host,dsh?'dsh':'pi');assert.equal(task.owner.epoch,1);
  const observation=task.observations[0];
  if(feedback){assert.equal(task.observations.length,0);assert.equal(task.claims.length,1);if(exploration){assert.equal(task.checkpoint.next,'Review the saved fact');assert.equal(task.progress[0].status,'completed');}else assert.equal(task.finishAttempt.attempts,2);assert.equal(task.criteria[1].claimIds.length,0);}
  else {
@@ -148,13 +162,13 @@ try{
   assert.equal(task.report.citations[0].observationId,observation.id);assert.equal(task.claims[0].supports[0],observation.id); }
  }
  const originalObservationId=observation?.id,originalTaskId=task.id;
- phase='resume';step=0;sessionId=randomUUID();await launch();task=savedTask();
- assert.equal(task.id,originalTaskId);assert.equal(task.status,'completed');assert.equal(task.owner.host,'pi');assert.equal(task.owner.sessionId,sessionId);assert.equal(task.owner.epoch,2);
+ phase='resume';step=0;sessionId=randomUUID();await launch();task=savedTask();if(dsh)sessionId=task.owner.sessionId;
+ assert.equal(task.id,originalTaskId);assert.equal(task.status,'completed');assert.equal(task.owner.host,dsh?'dsh':'pi');assert.equal(task.owner.sessionId,sessionId);assert.equal(task.owner.epoch,2);
  if(feedback){assert.equal(task.observations.length,0);assert.equal(task.claims.length,2);assert.ok(task.criteria.every(criterion=>criterion.claimIds.length===1));}
  else {assert.equal(task.observations.length,curated?0:1);if(!curated)assert.equal(task.report.citations[0].observationId,originalObservationId);}
  assert.deepEqual(operations.map(item=>item.tool),exploration?['cairn_start','read','cairn_checkpoint','cairn_finish','cairn_resume','cairn_read','cairn_checkpoint','cairn_finish']:feedback?['cairn_start','read','cairn_checkpoint','cairn_finish','cairn_finish','cairn_finish','cairn_resume','cairn_checkpoint','cairn_finish']:['cairn_start','read','cairn_checkpoint','cairn_finish','cairn_resume','cairn_checkpoint','cairn_finish']);
  assert.equal(readFileSync(join(agentDir,'auth.json'),'utf8').trim(),'{}','The isolated blank auth store must remain empty');
- console.log(JSON.stringify({ok:true,host:'pi',mode:exploration?'real-cli/exploration-loop-fixture':feedback?'real-cli/completion-feedback-fixture':'real-cli/local-protocol-fixture',requests:requestCount,tools:operations,taskId:task.id,observations:task.observations.length,epoch:task.owner.epoch,root}));
+ console.log(JSON.stringify({ok:true,host:dsh?'dsh':'pi',mode:exploration?'real-cli/exploration-loop-fixture':feedback?'real-cli/completion-feedback-fixture':'real-cli/local-protocol-fixture',requests:requestCount,tools:operations,taskId:task.id,observations:task.observations.length,epoch:task.owner.epoch,root}));
 }finally{
  if(activeChild&&activeChild.exitCode===null){activeChild.kill('SIGKILL');await new Promise(resolve=>activeChild.once('close',resolve));}
  server.closeAllConnections();await new Promise(resolve=>server.close(resolve));

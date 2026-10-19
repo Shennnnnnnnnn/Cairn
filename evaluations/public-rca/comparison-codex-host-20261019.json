@@ -1,0 +1,735 @@
+{
+  "date": "2026-10-19",
+  "scope": "Three frozen public cases, one fresh run each, native host + Cairn six tools, no task budget. Codex uses Sol xhigh; three earlier hosts use DeepSeek Flash. Not a host-only controlled model comparison.",
+  "model": "gpt-6.1-sol",
+  "effort": "xhigh",
+  "hostVersion": "0.163.0-alpha.10.2",
+  "cairnVersion": "4.9.0",
+  "summary": {
+    "codex": {
+      "attempts": 3,
+      "runtimeCompleted": 3,
+      "cairnAndDeliveryCompleted": 3,
+      "correct": 2,
+      "falseCompletions": 1,
+      "secondsMean": 360.0,
+      "secondsMedian": 349.0,
+      "tokensMean": 1618301.3333333333,
+      "tokensTotal": 4854904,
+      "usageLowerBoundCases": 0
+    }
+  },
+  "records": [
+    {
+      "host": "codex",
+      "case": "new-01",
+      "id": "01a151c5-fa28-7219-84c3-68e39fde2816",
+      "identifier": "SHEN-28",
+      "runId": "01a151c6-775f-7425-be39-8cbc42b42daf",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_2b3a7d13-455f-45c0-b318-f6645da27997",
+      "cairnStatus": "completed",
+      "queryCount": 32,
+      "completed": true,
+      "nativeSessionId": "01a151c6-c5b3-7f41-88b9-300ad194bcad",
+      "seconds": 340.0,
+      "queueAndPreparationSeconds": 19.0,
+      "endToEndSeconds": 359.0,
+      "strictToolsOnly": false,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "725219bd1104b3af88ddab92a7931d8fbc02b583983e070e4fb642787d39b2f2",
+      "nativeToolAudit": {
+        "source": "exact native rollout item_completed/McpToolCall",
+        "calls": 68,
+        "onlyScopedToolsAndResourceDiscovery": true,
+        "extraResourceDiscoveryCalls": 2,
+        "crossTaskListReads": 0,
+        "toolErrors": 4,
+        "counts": {
+          "platform_issue_read": 2,
+          "list_mcp_resources": 1,
+          "list_mcp_resource_templates": 1,
+          "platform_issue_update": 1,
+          "cairn_start": 1,
+          "evidence_query": 34,
+          "cairn_update": 17,
+          "cairn_read": 5,
+          "platform_report_save": 1,
+          "cairn_checkpoint": 2,
+          "platform_report_submit": 1,
+          "platform_report_receipt": 1,
+          "cairn_finish": 1
+        }
+      },
+      "nativeUsage": {
+        "host": "codex",
+        "rows": 203,
+        "sessionId": "01a151c6-c5b3-7f41-88b9-300ad194bcad",
+        "models": [
+          "gpt-6.1-sol"
+        ],
+        "providers": [
+          "openai"
+        ],
+        "efforts": [
+          "xhigh"
+        ],
+        "modelCalls": 20,
+        "tokens": {
+          "input": 1619515,
+          "output": 17892,
+          "cacheRead": 1362432,
+          "cacheWrite": 0,
+          "total": 1637407
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 1637407,
+      "usageLowerBound": false,
+      "blackboardUsage": null,
+      "findings": 6,
+      "inputHashes": [
+        "2dc5dbe26867efaa118249487270a10a6ce87c76b8600e5699369cb7330d7d7d"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "b5e7627dde835daca7cd9a2f42129a58458fd278bd9972c03a575b50f227e875",
+        "answer.json": "b22faea99878f2015eb4291422b386204c300c86acff9b9d028872e9b907af87",
+        "receipt.json": "0ce1f0639ac114a3bd4fbb94ced0e7194e03116d2b12799599f9186e6bb1b6c6"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.82,
+        "fault_family": "memory",
+        "level": "service",
+        "location": "shippingservice",
+        "reason": "node-5 的 shippingservice-0/-1/-2 和 shippingservice2-0 在1647750960..1647751320的usage均值分别达固定limit数值的99.9762%、99.9771%、99.9705%、99.9625%，且此前为零的memory_failcnt持续单调增长；优先定位服务组内存限制压力。服务组按名称归纳、缺拓扑，不能选唯一pod；触发负载及内存/I/O先后未知。",
+        "service": "shippingservice"
+      },
+      "grade": {
+        "case": "new-01",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": false,
+        "top1Level": true,
+        "jointTop1": false,
+        "rawJointTop1": false,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647750907",
+          "level": "service",
+          "cmdb_id": "shippingservice",
+          "failure_type": "k8s容器读io负载"
+        },
+        "expectedFamily": "disk_io",
+        "predictions": [
+          {
+            "confidence": 0.82,
+            "fault_family": "memory",
+            "level": "service",
+            "location": "shippingservice",
+            "reason": "node-5 的 shippingservice-0/-1/-2 和 shippingservice2-0 在1647750960..1647751320的usage均值分别达固定limit数值的99.9762%、99.9771%、99.9705%、99.9625%，且此前为零的memory_failcnt持续单调增长；优先定位服务组内存限制压力。服务组按名称归纳、缺拓扑，不能选唯一pod；触发负载及内存/I/O先后未知。",
+            "service": "shippingservice"
+          },
+          {
+            "confidence": 0.35,
+            "fault_family": "disk_io",
+            "level": "node",
+            "location": "node-5",
+            "reason": "节点读、队列及I/O等待同窗显著增大，可能是独立读负载先行；但shipping容器同时近内存限制并增长failcnt，且缺设备/高频因果证据，故disk_io为替代解释而非已证实首因。",
+            "service": null
+          }
+        ]
+      },
+      "correct": false,
+      "businessDelivered": true,
+      "falseCompletion": true,
+      "harnessFalseCompletion": true,
+      "tools": {
+        "platform_issue_read": 2,
+        "list_mcp_resources": 1,
+        "list_mcp_resource_templates": 1,
+        "platform_issue_update": 1,
+        "cairn_start": 1,
+        "evidence_query": 34,
+        "cairn_update": 17,
+        "cairn_read": 5,
+        "platform_report_save": 1,
+        "cairn_checkpoint": 2,
+        "platform_report_submit": 1,
+        "platform_report_receipt": 1,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 1,
+      "platformTools": {
+        "platform_issue_read": 2,
+        "list_mcp_resources": 1,
+        "list_mcp_resource_templates": 1,
+        "platform_issue_update": 1,
+        "cairn_start": 1,
+        "evidence_query": 28,
+        "cairn_update": 15,
+        "cairn_read": 4,
+        "platform_report_save": 1,
+        "cairn_checkpoint": 2,
+        "platform_report_submit": 1,
+        "platform_report_receipt": 1,
+        "cairn_finish": 1
+      },
+      "toolAuditSource": "native rollout; platform event uploads may be incomplete"
+    },
+    {
+      "host": "codex",
+      "case": "new-02",
+      "id": "01a151c5-fc7e-72ec-ad73-33caea547ce3",
+      "identifier": "SHEN-29",
+      "runId": "01a151c6-7940-7ef4-8657-b07bce6fda54",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_0af8dcd1-1f2f-417d-a783-369ad3acee38",
+      "cairnStatus": "completed",
+      "queryCount": 18,
+      "completed": true,
+      "nativeSessionId": "01a151c7-38ee-7063-a31f-bdbb9a04a794",
+      "seconds": 391.0,
+      "queueAndPreparationSeconds": 48.0,
+      "endToEndSeconds": 439.0,
+      "strictToolsOnly": false,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "0bfbd76b62fa22f89ec4f121774de727b400f2e7d9b96cac0210971aca99c2c6",
+      "nativeToolAudit": {
+        "source": "exact native rollout item_completed/McpToolCall",
+        "calls": 54,
+        "onlyScopedToolsAndResourceDiscovery": true,
+        "extraResourceDiscoveryCalls": 2,
+        "crossTaskListReads": 0,
+        "toolErrors": 4,
+        "counts": {
+          "platform_issue_read": 2,
+          "list_mcp_resources": 1,
+          "list_mcp_resource_templates": 1,
+          "platform_issue_update": 1,
+          "cairn_read": 5,
+          "evidence_query": 19,
+          "cairn_start": 1,
+          "cairn_update": 18,
+          "platform_report_save": 1,
+          "platform_report_submit": 1,
+          "platform_report_receipt": 1,
+          "cairn_checkpoint": 2,
+          "cairn_finish": 1
+        }
+      },
+      "nativeUsage": {
+        "host": "codex",
+        "rows": 195,
+        "sessionId": "01a151c7-38ee-7063-a31f-bdbb9a04a794",
+        "models": [
+          "gpt-6.1-sol"
+        ],
+        "providers": [
+          "openai"
+        ],
+        "efforts": [
+          "xhigh"
+        ],
+        "modelCalls": 21,
+        "tokens": {
+          "input": 1435228,
+          "output": 15735,
+          "cacheRead": 1319552,
+          "cacheWrite": 0,
+          "total": 1450963
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 1450963,
+      "usageLowerBound": false,
+      "blackboardUsage": null,
+      "findings": 8,
+      "inputHashes": [
+        "460b8b9351b8718d43fbb13d1f4b0805eac771af48af1afbeb3a1c3843c08939"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "afee48103ba2fdc1bf9e1779ba7bc5e7094f949cbef1de39c00f7987c2754d95",
+        "answer.json": "948a8577e31ecb7cb8c12b6cd7a6c7c3837dfef30f62e7dbcc204fc0d5b5aa0f",
+        "receipt.json": "8c8f30fd05e8d610ae20fb72ed5b6e0915034c730a6ebebacd1bd911be640004"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.86,
+        "fault_family": "cpu",
+        "level": "node",
+        "location": "node-2",
+        "reason": "1647762540与1647762600两个采样点出现用户态为主的CPU活动突增，CPU均值相对前10点为9.479953倍，user为18.442136倍，load.1为3.406546倍；1647762660回落。其他节点CPU及同节点内存/磁盘未见对应突变。仅能定位node/cpu，未知触发进程、饱和与业务因果。",
+        "service": null
+      },
+      "grade": {
+        "case": "new-02",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647762523",
+          "level": "node",
+          "cmdb_id": "node-2",
+          "failure_type": "node节点CPU故障"
+        },
+        "expectedFamily": "cpu",
+        "predictions": [
+          {
+            "confidence": 0.86,
+            "fault_family": "cpu",
+            "level": "node",
+            "location": "node-2",
+            "reason": "1647762540与1647762600两个采样点出现用户态为主的CPU活动突增，CPU均值相对前10点为9.479953倍，user为18.442136倍，load.1为3.406546倍；1647762660回落。其他节点CPU及同节点内存/磁盘未见对应突变。仅能定位node/cpu，未知触发进程、饱和与业务因果。",
+            "service": null
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "platform_issue_read": 2,
+        "list_mcp_resources": 1,
+        "list_mcp_resource_templates": 1,
+        "platform_issue_update": 1,
+        "cairn_read": 5,
+        "evidence_query": 19,
+        "cairn_start": 1,
+        "cairn_update": 18,
+        "platform_report_save": 1,
+        "platform_report_submit": 1,
+        "platform_report_receipt": 1,
+        "cairn_checkpoint": 2,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 1,
+      "platformTools": {
+        "list_mcp_resources": 1,
+        "list_mcp_resource_templates": 1,
+        "platform_issue_update": 1,
+        "cairn_read": 4,
+        "evidence_query": 9,
+        "cairn_update": 14,
+        "platform_report_save": 1,
+        "platform_report_submit": 1,
+        "platform_issue_read": 1,
+        "platform_report_receipt": 1,
+        "cairn_checkpoint": 2,
+        "cairn_finish": 1
+      },
+      "toolAuditSource": "native rollout; platform event uploads may be incomplete"
+    },
+    {
+      "host": "codex",
+      "case": "new-03",
+      "id": "01a151c5-fe80-7a0d-8d0a-c13b605e4b37",
+      "identifier": "SHEN-30",
+      "runId": "01a151c6-7bdb-71ab-bbc6-cdff2207dc5c",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_a352d539-3130-47b2-95b4-259cadccee8f",
+      "cairnStatus": "completed",
+      "queryCount": 20,
+      "completed": true,
+      "nativeSessionId": "01a151cb-a7fe-79c2-a48b-5fc9092aebc2",
+      "seconds": 349.0,
+      "queueAndPreparationSeconds": 339.0,
+      "endToEndSeconds": 688.0,
+      "strictToolsOnly": false,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "af644dc291c5f4ba7742dd56c4dd54ecdc319935b6c50d1c7ed6d8db589d2bc8",
+      "nativeToolAudit": {
+        "source": "exact native rollout item_completed/McpToolCall",
+        "calls": 61,
+        "onlyScopedToolsAndResourceDiscovery": true,
+        "extraResourceDiscoveryCalls": 2,
+        "crossTaskListReads": 0,
+        "toolErrors": 3,
+        "counts": {
+          "platform_issue_read": 2,
+          "platform_issue_update": 1,
+          "list_mcp_resource_templates": 1,
+          "list_mcp_resources": 1,
+          "cairn_start": 1,
+          "evidence_query": 20,
+          "cairn_update": 23,
+          "cairn_read": 6,
+          "platform_report_save": 1,
+          "platform_report_submit": 1,
+          "platform_report_receipt": 1,
+          "cairn_checkpoint": 2,
+          "cairn_finish": 1
+        }
+      },
+      "nativeUsage": {
+        "host": "codex",
+        "rows": 204,
+        "sessionId": "01a151cb-a7fe-79c2-a48b-5fc9092aebc2",
+        "models": [
+          "gpt-6.1-sol"
+        ],
+        "providers": [
+          "openai"
+        ],
+        "efforts": [
+          "xhigh"
+        ],
+        "modelCalls": 22,
+        "tokens": {
+          "input": 1750403,
+          "output": 16131,
+          "cacheRead": 1621760,
+          "cacheWrite": 0,
+          "total": 1766534
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 1766534,
+      "usageLowerBound": false,
+      "blackboardUsage": null,
+      "findings": 9,
+      "inputHashes": [
+        "ecb34d56d5cf878274dd0dce69a8e1357b76430e8ed6e9b1ce9f90ccf2761e3c"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "513fffae7f3dcb121e7cd4dc22a2a83e3fafaf8d9d8c0d160f8f2f30d8504b1b",
+        "answer.json": "f19e4bb5826fef362d4f2feeef0323c50481906d20202778b2e69b7e1f26c534",
+        "receipt.json": "d8c72508e691e6de30be1287130c64760f214a8a8fa91ebb0532dd0b0a261586"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.94,
+        "fault_family": "memory",
+        "level": "pod",
+        "location": "node-5.recommendationservice-2",
+        "reason": "相对参考时刻前基线出现工作集18.0773倍、RSS21.4663倍峰值，随后failcnt新增2971原值且max_usage达到900配置限额；同族稳定。首次异常采样6520早于参考6532，桶语义未知。支持实例内存配额压力，不能证明泄漏、OOM kill或容器重启；currency既存压力及node-3较晚磁盘尖峰不列为本次首选。",
+        "service": "recommendationservice"
+      },
+      "grade": {
+        "case": "new-03",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647776532",
+          "level": "pod",
+          "cmdb_id": "recommendationservice-2",
+          "failure_type": "k8s容器内存负载"
+        },
+        "expectedFamily": "memory",
+        "predictions": [
+          {
+            "confidence": 0.94,
+            "fault_family": "memory",
+            "level": "pod",
+            "location": "node-5.recommendationservice-2",
+            "reason": "相对参考时刻前基线出现工作集18.0773倍、RSS21.4663倍峰值，随后failcnt新增2971原值且max_usage达到900配置限额；同族稳定。首次异常采样6520早于参考6532，桶语义未知。支持实例内存配额压力，不能证明泄漏、OOM kill或容器重启；currency既存压力及node-3较晚磁盘尖峰不列为本次首选。",
+            "service": "recommendationservice"
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "platform_issue_read": 2,
+        "platform_issue_update": 1,
+        "list_mcp_resource_templates": 1,
+        "list_mcp_resources": 1,
+        "cairn_start": 1,
+        "evidence_query": 20,
+        "cairn_update": 23,
+        "cairn_read": 6,
+        "platform_report_save": 1,
+        "platform_report_submit": 1,
+        "platform_report_receipt": 1,
+        "cairn_checkpoint": 2,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 1,
+      "platformTools": {
+        "platform_issue_read": 2,
+        "platform_issue_update": 1,
+        "list_mcp_resources": 1,
+        "list_mcp_resource_templates": 1,
+        "cairn_start": 1,
+        "evidence_query": 20,
+        "cairn_update": 23,
+        "cairn_read": 6,
+        "platform_report_save": 1,
+        "platform_report_submit": 1,
+        "platform_report_receipt": 1,
+        "cairn_checkpoint": 2,
+        "cairn_finish": 1
+      },
+      "toolAuditSource": "native rollout; platform event uploads may be incomplete"
+    }
+  ],
+  "previousSummary": {
+    "pi": {
+      "attempts": 3,
+      "runtimeCompleted": 3,
+      "cairnAndDeliveryCompleted": 3,
+      "correct": 3,
+      "falseCompletions": 0,
+      "secondsMean": 263.3333333333333,
+      "secondsMedian": 269.0,
+      "tokensMean": 2512382,
+      "tokensTotal": 7537146,
+      "usageLowerBoundCases": 0
+    },
+    "claude": {
+      "attempts": 3,
+      "runtimeCompleted": 3,
+      "cairnAndDeliveryCompleted": 2,
+      "correct": 3,
+      "falseCompletions": 0,
+      "secondsMean": 331.6666666666667,
+      "secondsMedian": 331.0,
+      "tokensMean": 2770201,
+      "tokensTotal": 8310603,
+      "usageLowerBoundCases": 0
+    },
+    "dsh": {
+      "attempts": 3,
+      "runtimeCompleted": 3,
+      "cairnAndDeliveryCompleted": 3,
+      "correct": 2,
+      "falseCompletions": 1,
+      "secondsMean": 215.33333333333334,
+      "secondsMedian": 205.0,
+      "tokensMean": 2214701.3333333335,
+      "tokensTotal": 6644104,
+      "usageLowerBoundCases": 3
+    }
+  },
+  "relativeToPiDeepSeek": {
+    "tokensPercentChange": -35.58697151415138,
+    "executionSecondsPercentChange": 36.70886075949369
+  },
+  "closeoutAudit": {
+    "at": "2026-10-19T01:42:32.847869+00:00",
+    "status": "verified",
+    "cases": [
+      {
+        "case": "new-01",
+        "identifier": "SHEN-28",
+        "nativeSessionId": "01a151c6-c5b3-7f41-88b9-300ad194bcad",
+        "nativeSHA256": "725219bd1104b3af88ddab92a7931d8fbc02b583983e070e4fb642787d39b2f2",
+        "usageLedgerMatchesCumulative": true,
+        "uniqueResponseRecords": 20,
+        "nativeToolCalls": 68,
+        "platformRecordedToolCalls": 59,
+        "queryLedgerEntries": 32,
+        "nativeToolErrors": [
+          {
+            "tool": "cairn_update",
+            "error": null,
+            "message": "{\"error\":\"invalid_model_input\",\"message\":\"finding.text: Invalid input: expected string, received undefined; finding: Unrecognized key: \\\"claim\\\"\"}"
+          },
+          {
+            "tool": "evidence_query",
+            "error": null,
+            "message": "data/limit must be <= 200"
+          },
+          {
+            "tool": "evidence_query",
+            "error": null,
+            "message": "data/limit must be <= 200"
+          },
+          {
+            "tool": "cairn_checkpoint",
+            "error": null,
+            "message": "{\"error\":\"invalid_model_input\",\"message\":\"artifacts.0: Invalid input: expected object, received string; artifacts.1: Invalid input: expected object, received string\"}"
+          }
+        ],
+        "queueAndPreparationSeconds": 19.0,
+        "seconds": 340.0,
+        "endToEndSeconds": 359.0
+      },
+      {
+        "case": "new-02",
+        "identifier": "SHEN-29",
+        "nativeSessionId": "01a151c7-38ee-7063-a31f-bdbb9a04a794",
+        "nativeSHA256": "0bfbd76b62fa22f89ec4f121774de727b400f2e7d9b96cac0210971aca99c2c6",
+        "usageLedgerMatchesCumulative": true,
+        "uniqueResponseRecords": 21,
+        "nativeToolCalls": 54,
+        "platformRecordedToolCalls": 37,
+        "queryLedgerEntries": 18,
+        "nativeToolErrors": [
+          {
+            "tool": "cairn_read",
+            "error": null,
+            "message": "{\"error\":\"no_task\",\"message\":\"Start or resume a Cairn goal in this session first.\"}"
+          },
+          {
+            "tool": "cairn_update",
+            "error": null,
+            "message": "{\"error\":\"invalid_model_input\",\"message\":\"finding.text: Invalid input: expected string, received undefined; finding: Unrecognized key: \\\"claim\\\"\"}"
+          },
+          {
+            "tool": "evidence_query",
+            "error": null,
+            "message": "data/limit must be <= 200"
+          },
+          {
+            "tool": "cairn_checkpoint",
+            "error": null,
+            "message": "{\"error\":\"invalid_model_input\",\"message\":\"artifacts.0: Invalid input: expected object, received string; artifacts.1: Invalid input: expected object, received string\"}"
+          }
+        ],
+        "queueAndPreparationSeconds": 48.0,
+        "seconds": 391.0,
+        "endToEndSeconds": 439.0
+      },
+      {
+        "case": "new-03",
+        "identifier": "SHEN-30",
+        "nativeSessionId": "01a151cb-a7fe-79c2-a48b-5fc9092aebc2",
+        "nativeSHA256": "af644dc291c5f4ba7742dd56c4dd54ecdc319935b6c50d1c7ed6d8db589d2bc8",
+        "usageLedgerMatchesCumulative": true,
+        "uniqueResponseRecords": 22,
+        "nativeToolCalls": 61,
+        "platformRecordedToolCalls": 61,
+        "queryLedgerEntries": 20,
+        "nativeToolErrors": [
+          {
+            "tool": "cairn_update",
+            "error": null,
+            "message": "{\"error\":\"invalid_model_input\",\"message\":\"finding.text: Invalid input: expected string, received undefined; finding: Unrecognized key: \\\"statement\\\"\"}"
+          },
+          {
+            "tool": "cairn_update",
+            "error": null,
+            "message": "{\"error\":\"not_found\",\"message\":\"Graph snapshot does not belong to this task or is unavailable\"}"
+          },
+          {
+            "tool": "cairn_checkpoint",
+            "error": null,
+            "message": "{\"error\":\"invalid_model_input\",\"message\":\"artifacts.0: Invalid input: expected object, received string; artifacts.1: Invalid input: expected object, received string\"}"
+          }
+        ],
+        "queueAndPreparationSeconds": 339.0,
+        "seconds": 349.0,
+        "endToEndSeconds": 688.0
+      }
+    ],
+    "formalCorrect": 2,
+    "reportsVerified": 3,
+    "cairnCompleted": 3,
+    "parallelOverlapSeconds": 19.0,
+    "regressionTestsPassed": 478,
+    "budgets": null,
+    "schemaErrorsRetriedWithoutHumanIntervention": true,
+    "diagnosisCorrectnessIndependentOfDelivery": true
+  },
+  "protocol": {
+    "at": "2026-10-19T01:35:04.545568+00:00",
+    "originalPromptUnchanged": true,
+    "promptCharacters": 777,
+    "coreFrozenUnchanged": true,
+    "queryHelperUnchanged": true,
+    "nativeConfigs": [
+      {
+        "runId": "01a151c6-7940-7ef4-8657-b07bce6fda54",
+        "issueId": "01a151c5-fc7e-72ec-ad73-33caea547ce3",
+        "onlyAuthorizedMCP": true
+      },
+      {
+        "runId": "01a151c6-775f-7425-be39-8cbc42b42daf",
+        "issueId": "01a151c5-fa28-7219-84c3-68e39fde2816",
+        "onlyAuthorizedMCP": true
+      },
+      {
+        "runId": "01a151c6-7bdb-71ab-bbc6-cdff2207dc5c",
+        "issueId": "01a151c5-fe80-7a0d-8d0a-c13b605e4b37",
+        "onlyAuthorizedMCP": true
+      }
+    ],
+    "sha256": {
+      "runtime/runtime/cairn.mjs": "dc48e2307bff94d5ca76f2b1fbb33b288f7088d2b8629a31871ed2e106bbc068",
+      "runtime/runtime/codex-native-mcp.mjs": "e266a092dcfafb5cc85f237c2ca053065351d831810156f8345fa5868f2cc265",
+      "codex-launch.py": "90e81a11ea7c228a7329b72c9b561d990acd90acfee3f4d00cdf9632b5143f72",
+      "agent-prompt.txt": "487adf18075d5a435859c1216c3ef41a6aca243bf6fc7a198f9cd4738a909b8f"
+    },
+    "componentAudit": {
+      "hookBundleByteIdenticalToFrozenCLI": false,
+      "identicalActiveModules": {
+        "src/adapters/hooks.ts": "f1f37bc6c390d415f9d25164558be679868558ac4800317418b336986b224d50",
+        "src/adapters/host-options.ts": "e0a5598726971c9b7e66ccecd42351fb3e61e237880acb8626d2aee4e0c8c1fc",
+        "src/adapters/usage.ts": "4e4cf5420acea83da36537ef705b935468fa24f394c7b9501e28ceb311abc974",
+        "src/core/engine.ts": "9313eb0c1984fbf157bbad75945bc9410e8b2253f670011a1829e82d4ef5f69e",
+        "src/core/store.ts": "17de07d8ef3a09d5d096ec0ab11bfcd91ac79ed0b20068c68f004e018626f2d4",
+        "src/tools.ts": "50e380366fd34341b289aa8a036e01c811331e0cddd4bda1f4a3b25c8e1994a2"
+      },
+      "changedBundleModules": [
+        "src/cli.ts",
+        "package.json",
+        "src/mcp.ts",
+        "src/ui/page.ts"
+      ],
+      "differenceScope": "Package description, UI labels, Claude-only MCP schema compatibility, and doctor output. Native Codex hook and task execution modules are identical."
+    }
+  },
+  "inputFilesPerCase": [
+    {
+      "case": "new-01",
+      "files": 57,
+      "sameOriginalInputs": true
+    },
+    {
+      "case": "new-02",
+      "files": 57,
+      "sameOriginalInputs": true
+    },
+    {
+      "case": "new-03",
+      "files": 57,
+      "sameOriginalInputs": true
+    }
+  ],
+  "excludedSetupRuns": [
+    {
+      "issueId": "01a151c3-1cdf-774c-a831-83522a68666a",
+      "identifier": "SHEN-25",
+      "reason": "Multica 0.6.3 inherited unrelated global MCP; replaced with isolated native per-run config before formal comparison."
+    },
+    {
+      "issueId": "01a151c3-2034-7346-9196-957a87b7a4d9",
+      "identifier": "SHEN-26",
+      "reason": "Multica 0.6.3 inherited unrelated global MCP; replaced with isolated native per-run config before formal comparison."
+    },
+    {
+      "issueId": "01a151c3-22cb-7260-8172-3501aac2087d",
+      "identifier": "SHEN-27",
+      "reason": "Multica 0.6.3 inherited unrelated global MCP; replaced with isolated native per-run config before formal comparison."
+    }
+  ],
+  "tokenScope": "Complete native main-thread cumulative token_count, independently matched against unique response_id token_usage_record records; input includes cached tokens; reasoning is already included in output; not a monetary bill."
+}

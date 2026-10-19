@@ -5,6 +5,7 @@ import { CairnError, type VerificationResult } from '../core/types.js';
 
 /** Trusted host configuration only; never interpreted from model input or task files. */
 export function hostOptions(env:NodeJS.ProcessEnv=process.env):EngineOptions {
+  env={...env}; // One run's trusted verifier environment cannot drift with a later session.
   const options:EngineOptions={};
   const deadline=env.CAIRN_DEADLINE,reserve=env.CAIRN_SUBMIT_RESERVE_MS;
   if(deadline&&!Number.isFinite(Date.parse(deadline)))throw new CairnError('invalid_budget','Invalid CAIRN_DEADLINE');

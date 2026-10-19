@@ -21,9 +21,9 @@ const server=createServer(async(req,res)=>{
   requestCount++;if(requestCount>25)throw new Error('Fixture exceeded request budget');
   const body=JSON.parse(raw),state=task();let operation,args;
   if(phase==='create'){
-   const operations=[['cairn_start',{evidence_mode:'captured',goal:'Verify marker',criteria:['File contains marker'],session_id:sessionId}],['Read',{file_path:join(root,'evidence.txt')}],['cairn_finish',{outcome:'suspended',summary:'Verified marker; reviewer pending',findings:[{key:'marker',text:'File contains marker',evidence:['E1']}],questions:['Reviewer acceptance pending']}]];
+   const operations=[['cairn_start',{evidence_mode:'captured',goal:'Verify marker',criteria:['File contains marker'],session_id:sessionId}],['Read',{file_path:join(root,'evidence.txt')}],['cairn_checkpoint',{summary:'Verified original marker',findings:[{key:'marker',text:'File contains marker',status:'supported',basis:'Read original marker',evidence:['E1'],covers:['c1']}],questions:['Reviewer acceptance pending']}],['cairn_finish',{outcome:'suspended',summary:'Reviewer pending'}]];
    [operation,args]=operations[step]??[];
-  }else{[operation,args]=[['cairn_resume',{task_id:state?.id,session_id:sessionId,takeover:true}],['cairn_finish',{summary:'Reviewer accepted the saved evidence',questions:[]}]][step]??[];}
+  }else{[operation,args]=[['cairn_resume',{task_id:state?.id,session_id:sessionId,takeover:true}],['cairn_checkpoint',{summary:'Reviewer accepted the saved evidence',questions:[]}],['cairn_finish',{}]][step]??[];}
   const tool=operation?body.tools?.find(t=>t.name===operation||t.name.endsWith(`__${operation}`)):undefined;
   if(operation&&!tool)throw new Error(`CLI did not expose ${operation}; available: ${(body.tools??[]).map(t=>t.name).join(',')}`);
   const block=tool?{type:'tool_use',id:`tool_${phase}_${step}`,name:tool.name,input:args}:{type:'text',text:'FIXTURE_DONE'};step++;
@@ -40,7 +40,7 @@ const server=createServer(async(req,res)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));env.ANTHROPIC_BASE_URL=`http://127.0.0.1:${server.address().port}`;
 async function launch(){
  const allowed=['Read',...['start','resume','read','checkpoint','finish'].map(name=>`mcp__plugin_cairn_cairn__cairn_${name}`)];
- const child=spawn('claude',['--plugin-dir',plugin,'--setting-sources','','--tools','default','--allowedTools',...allowed,'--session-id',sessionId,'--debug-file',join(root,`${phase}.debug.log`),'--output-format','stream-json','--verbose','--include-hook-events','-p',`Local fixture test: execute the provided Cairn actions for phase ${phase}.`],{cwd:root,env,stdio:['ignore','pipe','pipe']});let stdout='',stderr='';child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);
+ const child=spawn(process.env.CAIRN_CLAUDE_BIN??'claude',['--plugin-dir',plugin,'--setting-sources','','--tools','default','--allowedTools',...allowed,'--session-id',sessionId,'--debug-file',join(root,`${phase}.debug.log`),'--output-format','stream-json','--verbose','--include-hook-events','-p',`Local fixture test: execute the provided Cairn actions for phase ${phase}.`],{cwd:root,env,stdio:['ignore','pipe','pipe']});let stdout='',stderr='';child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);
  const timer=setTimeout(()=>child.kill('SIGTERM'),90000);const code=await new Promise((resolve,reject)=>{child.once('exit',resolve);child.once('error',reject);});clearTimeout(timer);
  writeFileSync(join(root,`${phase}.jsonl`),stdout,{mode:0o600});writeFileSync(join(root,`${phase}.stderr`),stderr,{mode:0o600});
  if(code!==0)throw new Error(`Claude CLI failed (${code}); logs: ${root}`);

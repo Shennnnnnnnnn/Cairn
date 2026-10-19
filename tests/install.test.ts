@@ -90,3 +90,18 @@ test('installed hooks use the installing Node runtime with safe paths in a non-l
  }
  rmSync(root,{recursive:true});
 });
+
+test('DSH overlay mounts before headless, remains idempotent, and preserves user edits',()=>{
+ const root=mkdtempSync(join(tmpdir(),'cairn-dsh-install-'));
+ try{
+  const result=install('dsh','project',root,bundles),path=join(root,'.cairn/installations/dsh/cordis.patch.json');
+  const patches=JSON.parse(readFileSync(path,'utf8'));
+  assert.equal(patches[0].insert[0].name,join(result.plugin,'runtime/dsh-extension.mjs'));
+  assert.ok(patches.find((p:any)=>p.id==='headless-runner').inject.includes('cairnReady'));
+  install('dsh','project',root,bundles);
+  writeFileSync(path,readFileSync(path,'utf8')+'\n');
+  assert.throws(()=>install('dsh','project',root,bundles),/edited/);
+  assert.equal(uninstall('dsh','project',root).removed,false);
+  assert.ok(existsSync(join(result.plugin,'runtime/dsh-extension.mjs')));
+ }finally{rmSync(root,{recursive:true,force:true});}
+});

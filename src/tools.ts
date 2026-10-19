@@ -52,20 +52,28 @@ const schemas = {
 // Hosts publish and enforce the small model protocol. SDK invoke retains the
 // historical parser, so integrations can migrate without exposing it to models.
 const modelFinding=finding.extend({key:text.max(160),text:text.max(1600),status:z.enum(['proposed','supported','refuted','inconclusive']),basis:text.max(2000).optional(),references:z.array(text.max(1000)).max(8).optional(),covers:z.array(text).max(100)});
-const modelSchemas={...schemas,
-  cairn_checkpoint:z.object({...checkpointFields,summary:text.max(1000).optional(),findings:z.array(modelFinding).max(12).optional(),task_id:text.optional(),progress_key:text.max(200).optional(),branch_action:z.enum(['claim','heartbeat','release','checkpoint','merge']).optional(),lease_token:text.optional(),lease_seconds:z.number().int().min(10).max(900).optional()}).strict(),
+type EvidenceMode='curated'|'captured';
+const modelSchemasFor=(mode:EvidenceMode)=>({...schemas,
+  cairn_update:schemas.cairn_update.safeExtend({finding:(mode==='curated'?finding.omit({evidence:true,against:true}):finding).extend({key:text.max(200)}).optional()}),
+  cairn_checkpoint:z.object({...checkpointFields,summary:text.max(1000).optional(),findings:z.array(mode==='curated'?modelFinding.omit({evidence:true,against:true}):modelFinding).max(12).optional(),task_id:text.optional(),progress_key:text.max(200).optional(),branch_action:z.enum(['claim','heartbeat','release','checkpoint','merge']).optional(),lease_token:text.optional(),lease_seconds:z.number().int().min(10).max(900).optional()}).strict(),
   cairn_finish:z.object({outcome:z.enum(['completed','suspended']).default('completed'),summary:text.max(1000).optional()}).strict(),
-};
+});
+const modelSchemas={curated:modelSchemasFor('curated'),captured:modelSchemasFor('captured')};
 // Transport compatibility only: decode one JSON object layer, then apply the
 // unchanged strict model schema. Never turn prose into facts or infer fields.
 export function prepareModelInput(name:string,input:unknown):unknown {
-  if(name!=='cairn_checkpoint'||!input||typeof input!=='object'||Array.isArray(input))return input;
+  if(!['cairn_checkpoint','cairn_update'].includes(name)||!input||typeof input!=='object'||Array.isArray(input))return input;
   const value={...input} as Record<string,unknown>;
-  if(typeof value.next==='string'&&!value.next.trim())delete value.next;
-  for(const field of ['findings','progress','branches','artifacts','handoffs'])if(Array.isArray(value[field]))value[field]=value[field].map(item=>{
+  const decode=(item:unknown)=>{
     if(typeof item!=='string'||item.length>32000)return item;
     try{const decoded=JSON.parse(item);return decoded&&typeof decoded==='object'&&!Array.isArray(decoded)?decoded:item;}catch{return item;}
-  });
+  };
+  if(name==='cairn_update'){
+    for(const field of ['finding','progress','branch','review','feedback'])if(value[field]!==undefined)value[field]=decode(value[field]);
+    return value;
+  }
+  if(typeof value.next==='string'&&!value.next.trim())delete value.next;
+  for(const field of ['findings','progress','branches','artifacts','handoffs'])if(Array.isArray(value[field]))value[field]=value[field].map(decode);
   return value;
 }
 const descriptions:Record<keyof typeof schemas,string> = {
@@ -78,15 +86,16 @@ const descriptions:Record<keyof typeof schemas,string> = {
 };
 
 export interface ToolDefinition { name:string; description:string; inputSchema:Record<string,unknown>; readOnly?:boolean }
-export function coreCatalog():ToolDefinition[] {
-  return Object.entries(modelSchemas).map(([name,schema]) => {
+export function coreCatalog(mode:EvidenceMode='curated'):ToolDefinition[] {
+  return Object.entries(modelSchemas[mode]).map(([name,schema]) => {
     const inputSchema=z.toJSONSchema(schema,{io:'input'}) as Record<string,unknown>;delete inputSchema.$schema;
     if(name==='cairn_update')inputSchema.oneOf=['branch','progress','finding','review','feedback'].map(key=>({required:[key]}));
     if(name==='cairn_checkpoint'){
       const properties=inputSchema.properties as Record<string,unknown>;
       inputSchema.anyOf=[...['findings','progress','branches','artifacts','handoffs'].map(field=>({type:'object',required:[field],properties:{[field]:{type:'array',minItems:1}}})),...['questions','next','report'].map(field=>({type:'object',required:[field],properties:{[field]:properties[field]}})),{type:'object',required:['branch_action','progress_key'],properties:{branch_action:{type:'string',enum:['claim','heartbeat','release','merge']},progress_key:properties.progress_key}}];
     }
-    return {name,description:descriptions[name as keyof typeof schemas],inputSchema,readOnly:name==='cairn_read'};
+    const grounds=['cairn_checkpoint','cairn_update'].includes(name)?mode==='curated'?' Curated mode: use basis and references; omit evidence and against.':' Captured mode: evidence and against name eligible Cairn observation IDs.':'';
+    return {name,description:descriptions[name as keyof typeof schemas]+grounds,inputSchema,readOnly:name==='cairn_read'};
   });
 }
 export function resolveSession(base:Session,input:{session_id?:string}):Session {
@@ -139,8 +148,9 @@ export class ToolRuntime {
         this.dynamic=[];this.validators.clear();this.catalogStatus={ok:false,error:(error as Error).message};
       }
     }
-    return [...coreCatalog(),...this.dynamic];
+    return [...coreCatalog(this.modelMode()),...this.dynamic];
   }
+  private modelMode():EvidenceMode {return this.bound?this.engine.active(this.bound)?.evidenceMode??'curated':'curated';}
   private session():Session {
     if(!this.bound)throw new CairnError('session_required','Bind this MCP connection with cairn_start or cairn_resume and the native session_id from startup. No session is inferred from recent activity.');
     return this.bound;
@@ -154,8 +164,13 @@ export class ToolRuntime {
     return {task,session};
   }
   async invokeModel(name:string,input:unknown,signal?:AbortSignal):Promise<unknown>{
-    if(!Object.hasOwn(modelSchemas,name))return this.invoke(name,input,signal);
-    const checked=(modelSchemas[name as keyof typeof modelSchemas] as z.ZodType<any>).safeParse(prepareModelInput(name,input??{}));
+    const mode=this.modelMode(),catalog=modelSchemas[mode];
+    if(!Object.hasOwn(catalog,name))return this.invoke(name,input,signal);
+    const prepared=prepareModelInput(name,input??{}),checked=(catalog[name as keyof typeof catalog] as z.ZodType<any>).safeParse(prepared);
+    if(!checked.success&&mode==='curated'&&prepared&&typeof prepared==='object'){
+      const value=prepared as any,findings=name==='cairn_update'?[value.finding]:name==='cairn_checkpoint'?value.findings:[];
+      if(Array.isArray(findings)&&findings.some(f=>f&&typeof f==='object'&&('evidence' in f||'against' in f)))throw new CairnError('invalid_evidence_mode','Curated findings omit evidence and against. Save the explanation in basis and file/URL/result references in references; no fields were saved.');
+    }
     if(!checked.success)throw new CairnError('invalid_model_input',name==='cairn_finish'?'finish accepts only outcome and a short summary. Save findings, covers, files and report with cairn_checkpoint, then cairn_finish {}.':checked.error.issues.slice(0,2).map(issue=>`${issue.path.join('.')}: ${issue.message}`).join('; ').slice(0,700));
     const parsed=checked.data;
     if(name!=='cairn_checkpoint'){

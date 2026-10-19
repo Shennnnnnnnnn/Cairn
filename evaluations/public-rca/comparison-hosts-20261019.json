@@ -1,0 +1,1495 @@
+{
+  "at": "2026-10-18T20:20:38.962448+00:00",
+  "graded": true,
+  "mainSessionTokensOnly": true,
+  "summary": {
+    "pi": {
+      "attempts": 3,
+      "runtimeCompleted": 3,
+      "cairnAndDeliveryCompleted": 3,
+      "correct": 3,
+      "falseCompletions": 0,
+      "secondsMean": 263.3333333333333,
+      "secondsMedian": 269.0,
+      "tokensMean": 2512382,
+      "tokensTotal": 7537146,
+      "usageLowerBoundCases": 0
+    },
+    "claude": {
+      "attempts": 3,
+      "runtimeCompleted": 3,
+      "cairnAndDeliveryCompleted": 2,
+      "correct": 3,
+      "falseCompletions": 0,
+      "secondsMean": 331.6666666666667,
+      "secondsMedian": 331.0,
+      "tokensMean": 2770201,
+      "tokensTotal": 8310603,
+      "usageLowerBoundCases": 0
+    },
+    "dsh": {
+      "attempts": 3,
+      "runtimeCompleted": 3,
+      "cairnAndDeliveryCompleted": 3,
+      "correct": 2,
+      "falseCompletions": 1,
+      "secondsMean": 215.33333333333334,
+      "secondsMedian": 205.0,
+      "tokensMean": 2214701.3333333335,
+      "tokensTotal": 6644104,
+      "usageLowerBoundCases": 3
+    }
+  },
+  "excludedSetupRuns": [
+    {
+      "host": "dsh",
+      "case": "new-01",
+      "runId": "01a15085-e4f3-708c-9c64-4323d59f97a1",
+      "reason": "Model transport inherited lower-case SOCKS proxy; no model result or diagnosis produced"
+    },
+    {
+      "host": "dsh",
+      "case": "new-02",
+      "runId": "01a15086-8fc8-7cc5-8ed6-c39eb45863eb",
+      "reason": "Same startup model transport issue before proxy normalization"
+    },
+    {
+      "host": "claude",
+      "case": "new-01",
+      "runId": "01a15085-e330-726f-afdd-464ed96db275",
+      "reason": "Multica strict MCP list omitted plugin Cairn service; application tools present but six Cairn tools absent"
+    },
+    {
+      "host": "claude",
+      "case": "new-02",
+      "runId": "01a1508c-2401-77d0-bfec-62fe6c33dba7",
+      "reason": "Before strict MCP/config-dir isolation: unrelated Gitea MCP was exposed and one lookup failed. Retained separately; no diagnostic selective rerun."
+    }
+  ],
+  "records": [
+    {
+      "host": "pi",
+      "case": "new-01",
+      "id": "01a15084-703a-7562-87f6-243c6d82fc3a",
+      "identifier": "SHEN-11",
+      "runId": "01a1509b-a576-78cd-b077-d49a5566e9cf",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_47632df2-494d-42c7-adf8-aecf3db8a669",
+      "cairnStatus": "completed",
+      "queryCount": 21,
+      "completed": true,
+      "nativeSessionId": "01a1509b-f5be-7081-929d-09a53ec1b58e",
+      "seconds": 340.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "429be5d363be9ec5ae9d7c7153cb1de44076bd11d6cb1b73139a95f059d16b18",
+      "nativeUsage": {
+        "host": "pi",
+        "rows": 74,
+        "sessionId": "01a1509b-f5be-7081-929d-09a53ec1b58e",
+        "models": [
+          "global:deepseek-v4.1-flash"
+        ],
+        "providers": [
+          "sub2api-copy-copy-2"
+        ],
+        "modelCalls": 27,
+        "tokens": {
+          "input": 2563658,
+          "output": 38567,
+          "cacheRead": 2433920,
+          "cacheWrite": 0,
+          "total": 2602225
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 2602225,
+      "usageLowerBound": false,
+      "blackboardUsage": {
+        "sources": [
+          "pi/native"
+        ],
+        "updatedAt": "2026-10-18T20:08:19.111Z",
+        "toolCalls": 25,
+        "cairnCalls": 4,
+        "toolErrors": 1,
+        "tokens": {
+          "input": 2563658,
+          "output": 38567,
+          "cacheRead": 2433920,
+          "cacheWrite": 0,
+          "reasoning": 17218
+        },
+        "modelCalls": 27
+      },
+      "findings": 7,
+      "inputHashes": [
+        "2dc5dbe26867efaa118249487270a10a6ce87c76b8600e5699369cb7330d7d7d"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "dd0060e86d6b998f6a90a6f6378dd12edb31c6ec0e344da96b3308075b2fc502",
+        "answer.json": "5b2f5347db45b16bce9515bf2d68df8645b6a1d048666c6a913c9ad288ce0cff",
+        "receipt.json": "d521b0a75c88a242b05a8b9c2ec60b7f6feffc4af84a977c6cc52efa1f690127"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.55,
+        "fault_family": "disk_io",
+        "level": "service",
+        "location": "shippingservice",
+        "reason": "shippingservice 全部 4 个副本（node-5.shippingservice-0/1/2、node-5.shippingservice2-0）在同一采样点 1647750900 同步出现块设备读阶跃：container_fs_reads_MB./dev/vda 由恒 0（1647750360-1647750840）升至中位 3497.58 MB/桶（×24～×58），container_fs_reads./dev/vda 由中位 0 升至约 2.8 万次/桶，且读落在整盘 /dev/vda 而分区 /dev/vda1 恒 0；同窗口宿主机 node-5 的 system.io.rkb_s 由 0 升至约 124250（单位推定 KB/s）、system.io.util 由 0 升至恒 50%、cpu.iowait 由 ≤0.06 升至 11.9-17.3%；其余 37 个容器读 I/O 全程为 0。业务侧仅 shippingservice-grpc 的 mrt 由中位 0.025 ms 恶化到 2.63 ms（×105），上游 checkoutservice-grpc ×1.18、frontend-http ×1.02，rr/sr 恒 100、count 基本不变，无重启。写入侧反而下降，故为读 I/O 而非写放大。",
+        "service": "shippingservice"
+      },
+      "grade": {
+        "case": "new-01",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647750907",
+          "level": "service",
+          "cmdb_id": "shippingservice",
+          "failure_type": "k8s容器读io负载"
+        },
+        "expectedFamily": "disk_io",
+        "predictions": [
+          {
+            "confidence": 0.55,
+            "fault_family": "disk_io",
+            "level": "service",
+            "location": "shippingservice",
+            "reason": "shippingservice 全部 4 个副本（node-5.shippingservice-0/1/2、node-5.shippingservice2-0）在同一采样点 1647750900 同步出现块设备读阶跃：container_fs_reads_MB./dev/vda 由恒 0（1647750360-1647750840）升至中位 3497.58 MB/桶（×24～×58），container_fs_reads./dev/vda 由中位 0 升至约 2.8 万次/桶，且读落在整盘 /dev/vda 而分区 /dev/vda1 恒 0；同窗口宿主机 node-5 的 system.io.rkb_s 由 0 升至约 124250（单位推定 KB/s）、system.io.util 由 0 升至恒 50%、cpu.iowait 由 ≤0.06 升至 11.9-17.3%；其余 37 个容器读 I/O 全程为 0。业务侧仅 shippingservice-grpc 的 mrt 由中位 0.025 ms 恶化到 2.63 ms（×105），上游 checkoutservice-grpc ×1.18、frontend-http ×1.02，rr/sr 恒 100、count 基本不变，无重启。写入侧反而下降，故为读 I/O 而非写放大。",
+            "service": "shippingservice"
+          },
+          {
+            "confidence": 0.25,
+            "fault_family": "memory",
+            "level": "service",
+            "location": "shippingservice",
+            "reason": "同一批 4 个副本的容器内存精确贴住各自 cgroup 上限：container_memory_usage_MB 20.60→255.95（上限 spec_memory_limit_MB 恒 256）、另一副本 28.39→127.97（上限 128），memory_max_usage_MB 达上限，累计计数器 memory_failcnt 由 1647750360-1647750840 恒 0 单调增至 2666908（差分约 4.4e3 次/s，全程无重置），是本次事件中最干净的绝对饱和信号。但 container_memory_rss 仅 14.72→33 MB（+18 MB），而 container_memory_cache 由 1.47 MB 涨到 224.45 MB，说明 256 MB 中约 224 MB 是文件页缓存而非匿名内存；匿名内存压测应使 cache 被回收而非膨胀，故内存饱和更可能是读 I/O 的次生结果，无法排除标签被记为 memory。",
+            "service": "shippingservice"
+          },
+          {
+            "confidence": 0.1,
+            "fault_family": "disk_io",
+            "level": "node",
+            "location": "node-5",
+            "reason": "宿主机 node-5 的 system.io.rkb_s（0→124250）、system.io.util（0→恒 50%）、system.io.r_s（0→约 977-1010）、system.cpu.iowait（≤0.06→11.9-17.3）、system.io.await（0→2.0-2.05）与故障窗口完全重合，具备节点级读 I/O 故障的外形。但读量按容器 cgroup 归账到 4 个 shippingservice 容器，node-5 上其它容器读 I/O 全程 0，同节点 cartservice/currencyservice/frontend 的 mrt 变化均 <3%，且 disk.readonly=0、disk.pct_usage 仅 7.44→7.70（非写满/只读故障），故 node-5 更可能是受害者与放大器而非源头。",
+            "service": null
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "read": 4,
+        "ls": 5,
+        "cairn_start": 1,
+        "evidence_query": 21,
+        "platform_issue_read": 1,
+        "platform_report_save": 1,
+        "platform_report_submit": 2,
+        "platform_report_receipt": 1,
+        "cairn_checkpoint": 1,
+        "cairn_update": 2,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 1
+    },
+    {
+      "host": "pi",
+      "case": "new-02",
+      "id": "01a15084-71fd-7ee6-951e-3c67f651ba05",
+      "identifier": "SHEN-12",
+      "runId": "01a150a1-65c9-7d93-bb02-32f212115b97",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_6e7ac9dc-05a5-4eb2-a361-aa4a0f67c2ea",
+      "cairnStatus": "completed",
+      "queryCount": 21,
+      "completed": true,
+      "nativeSessionId": "01a150a1-bf6c-72ee-9d83-4a25c2074010",
+      "seconds": 181.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "026c80b9fe833ddd57f11069ebd33bc023057a512dea3603e4cf32ead3ac002d",
+      "nativeUsage": {
+        "host": "pi",
+        "rows": 68,
+        "sessionId": "01a150a1-bf6c-72ee-9d83-4a25c2074010",
+        "models": [
+          "global:deepseek-v4.1-flash"
+        ],
+        "providers": [
+          "sub2api-copy-copy-2"
+        ],
+        "modelCalls": 24,
+        "tokens": {
+          "input": 2340378,
+          "output": 26173,
+          "cacheRead": 2205568,
+          "cacheWrite": 0,
+          "total": 2366551
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 2366551,
+      "usageLowerBound": false,
+      "blackboardUsage": {
+        "sources": [
+          "pi/native"
+        ],
+        "updatedAt": "2026-10-18T20:11:59.608Z",
+        "toolCalls": 29,
+        "cairnCalls": 4,
+        "toolErrors": 2,
+        "tokens": {
+          "input": 2340378,
+          "output": 26173,
+          "cacheRead": 2205568,
+          "cacheWrite": 0,
+          "reasoning": 9728
+        },
+        "modelCalls": 24
+      },
+      "findings": 10,
+      "inputHashes": [
+        "460b8b9351b8718d43fbb13d1f4b0805eac771af48af1afbeb3a1c3843c08939"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "ade006d7d06a0d4256a6ccf45c785095d5448c6f95ca08177926e3b175065030",
+        "answer.json": "5fd8b7c6ff84553226583ac8ddd1f0d20d232b4c8b2cd912a7c6514d54e2767e",
+        "receipt.json": "db8b7a9ca3d23be59cddf3f157eb6b710637bd6158614ca03699bf5b9d1e2363"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.72,
+        "fault_family": "cpu",
+        "level": "node",
+        "location": "node-2",
+        "reason": "全窗口唯一与故障时刻 1647762523 对齐的资源异常：node-2 的 system.cpu.user 从基线 10 点均值 2.022（区间 1.82-2.27，1647761940-1647762480）跳到故障后第一个采样点 1647762540 的 38.28（18.93 倍），1647762600 仍为 36.30，1647762660 回到 2.32；system.cpu.pct_usage 4.24→41.75/38.64→4.73；system.load.1 均值 1.161→峰值 5.21（4.49 倍），load.15 由 1.018 抬至 1.50-1.66 且到窗口末 1647763080 仍为 1.58 未回落。机制对照显示增量几乎全在 user 态（cpu.system 仅 1.20 倍、cpu.iowait 1.29 倍），因此排除 disk_io 与 network 驱动；全节点网络错误计数恒为 0、ping.can_connect 恒为 1，node-2 io.util 仅 0.525→0.767 且 io.await 反降。其余 5 个节点 cpu.user 均在噪声内（node-3 甚至下降）。不确定性：container 目录不含 node-2 上的任何 pod，无法归因到具体工作负载；service 层 rr/sr 恒 100、mrt 无退化，业务影响面不可判定；单位与 60s 桶语义未文档化。",
+        "service": null
+      },
+      "grade": {
+        "case": "new-02",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647762523",
+          "level": "node",
+          "cmdb_id": "node-2",
+          "failure_type": "node节点CPU故障"
+        },
+        "expectedFamily": "cpu",
+        "predictions": [
+          {
+            "confidence": 0.72,
+            "fault_family": "cpu",
+            "level": "node",
+            "location": "node-2",
+            "reason": "全窗口唯一与故障时刻 1647762523 对齐的资源异常：node-2 的 system.cpu.user 从基线 10 点均值 2.022（区间 1.82-2.27，1647761940-1647762480）跳到故障后第一个采样点 1647762540 的 38.28（18.93 倍），1647762600 仍为 36.30，1647762660 回到 2.32；system.cpu.pct_usage 4.24→41.75/38.64→4.73；system.load.1 均值 1.161→峰值 5.21（4.49 倍），load.15 由 1.018 抬至 1.50-1.66 且到窗口末 1647763080 仍为 1.58 未回落。机制对照显示增量几乎全在 user 态（cpu.system 仅 1.20 倍、cpu.iowait 1.29 倍），因此排除 disk_io 与 network 驱动；全节点网络错误计数恒为 0、ping.can_connect 恒为 1，node-2 io.util 仅 0.525→0.767 且 io.await 反降。其余 5 个节点 cpu.user 均在噪声内（node-3 甚至下降）。不确定性：container 目录不含 node-2 上的任何 pod，无法归因到具体工作负载；service 层 rr/sr 恒 100、mrt 无退化，业务影响面不可判定；单位与 60s 桶语义未文档化。",
+            "service": null
+          },
+          {
+            "confidence": 0.15,
+            "fault_family": "cpu",
+            "level": "pod",
+            "location": "node-6.productcatalogservice2-0",
+            "reason": "备选的 pod 级解释：该容器 CFS 节流在故障后升高，container_cpu_cfs_throttled_seconds 均值由 0.03375（max 0.0969）升至 0.18856（max 0.3023），5.59 倍；container_cpu_cfs_throttled_periods 均值 0.75（max 1.5）升至 4.17/1.83/3.50。但绝对量级小，且 1647762660 之后同量级值反复出现，更像负载抖动；同一容器的 container_cpu_usage_seconds 与 container_memory_working_set_MB 未见对齐跃升，container_cpu_load_average_10s 对全部 40 个 pod 恒为 0，故仅作为弱备选。",
+            "service": "productcatalogservice"
+          },
+          {
+            "confidence": 0.07,
+            "fault_family": "memory",
+            "level": "node",
+            "location": "node-6",
+            "reason": "保留的内存类替代解释：node-6 的 system.mem.free 从 1619 单调下降至 1156（-28.6%），但 system.mem.used 仅 10096→10109、system.mem.pct_usage 31.54→31.58、system.swap.used 恒为 0，且下降自 1647761940 即开始、早于故障时刻 1647762523，属背景趋势而非该时刻故障，故置信度很低。",
+            "service": null
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "read": 2,
+        "platform_issue_read": 1,
+        "ls": 4,
+        "cairn_start": 1,
+        "evidence_query": 23,
+        "cairn_checkpoint": 2,
+        "platform_report_save": 1,
+        "platform_report_submit": 1,
+        "platform_report_receipt": 1,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 1
+    },
+    {
+      "host": "pi",
+      "case": "new-03",
+      "id": "01a15084-7384-743e-b995-aa8a8bb7b2d5",
+      "identifier": "SHEN-13",
+      "runId": "01a150a4-b9ce-79f6-b2e0-31131fcbef7f",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_1dc908e8-92ce-4944-8d8c-ea42d679309b",
+      "cairnStatus": "completed",
+      "queryCount": 22,
+      "completed": true,
+      "nativeSessionId": "01a150a5-0cb2-7582-9b64-6be49629f6b8",
+      "seconds": 269.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "2dacdcd31a4d17bb6631149063878f7694ca0203e93c933aec305318df3f3411",
+      "nativeUsage": {
+        "host": "pi",
+        "rows": 83,
+        "sessionId": "01a150a5-0cb2-7582-9b64-6be49629f6b8",
+        "models": [
+          "global:deepseek-v4.1-flash"
+        ],
+        "providers": [
+          "sub2api-copy-copy-2"
+        ],
+        "modelCalls": 30,
+        "tokens": {
+          "input": 2528461,
+          "output": 39909,
+          "cacheRead": 2421760,
+          "cacheWrite": 0,
+          "total": 2568370
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 2568370,
+      "usageLowerBound": false,
+      "blackboardUsage": {
+        "sources": [
+          "pi/native"
+        ],
+        "updatedAt": "2026-10-18T20:17:03.754Z",
+        "toolCalls": 28,
+        "cairnCalls": 8,
+        "toolErrors": 4,
+        "tokens": {
+          "input": 2528461,
+          "output": 39909,
+          "cacheRead": 2421760,
+          "cacheWrite": 0,
+          "reasoning": 10654
+        },
+        "modelCalls": 30
+      },
+      "findings": 7,
+      "inputHashes": [
+        "ecb34d56d5cf878274dd0dce69a8e1357b76430e8ed6e9b1ce9f90ccf2761e3c"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "dea14c5adf5aa9480f144d63519195cddf46426bcb0edd9238ab69e3a5061c39",
+        "answer.json": "b6bbc48275154c8cff03da96ed7b50f8ee6b8a43dddb15699b2b904a61f669b7",
+        "receipt.json": "a12687bd9898e79cc9d7664290e3d0847e47a68c4d6ec70cb81152384d81214f"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.85,
+        "fault_family": "memory",
+        "level": "pod",
+        "location": "node-5.recommendationservice-2",
+        "reason": "容器内存序列在 1647776520 出现阶跃并持续到 1647776820：container_memory_usage_MB 由恒定的 46.57MB 升至 484.53→831.46→838.79MB，container_memory_rss 由 39182336B 升至 841099264B（+802MB，约 21.5 倍），随后回落到与故障前完全相同的 39182336B；同期 memory_max_usage_MB 高水位升至 900MB，恰等于该容器 spec_memory_limit_MB=900，memory_failcnt 累计计数器由 0 增至 2971（差分 +2971）；节点侧独立印证 node-5 system.mem.used 同步 +743MB（8403→9146MB）而全节点利用率仅 26.25%→28.64%，说明压力局限在 pod 而非节点耗尽；网络错误/丢包、container_fs_io_time_seconds、节点 CPU 均无对应变化。故障时刻 1647776532 落在 1647776520 与 1647776580 两个采样点之间，与阶跃起点一致。",
+        "service": "recommendationservice"
+      },
+      "grade": {
+        "case": "new-03",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647776532",
+          "level": "pod",
+          "cmdb_id": "recommendationservice-2",
+          "failure_type": "k8s容器内存负载"
+        },
+        "expectedFamily": "memory",
+        "predictions": [
+          {
+            "confidence": 0.85,
+            "fault_family": "memory",
+            "level": "pod",
+            "location": "node-5.recommendationservice-2",
+            "reason": "容器内存序列在 1647776520 出现阶跃并持续到 1647776820：container_memory_usage_MB 由恒定的 46.57MB 升至 484.53→831.46→838.79MB，container_memory_rss 由 39182336B 升至 841099264B（+802MB，约 21.5 倍），随后回落到与故障前完全相同的 39182336B；同期 memory_max_usage_MB 高水位升至 900MB，恰等于该容器 spec_memory_limit_MB=900，memory_failcnt 累计计数器由 0 增至 2971（差分 +2971）；节点侧独立印证 node-5 system.mem.used 同步 +743MB（8403→9146MB）而全节点利用率仅 26.25%→28.64%，说明压力局限在 pod 而非节点耗尽；网络错误/丢包、container_fs_io_time_seconds、节点 CPU 均无对应变化。故障时刻 1647776532 落在 1647776520 与 1647776580 两个采样点之间，与阶跃起点一致。",
+            "service": "recommendationservice"
+          },
+          {
+            "confidence": 0.08,
+            "fault_family": "cpu",
+            "level": "pod",
+            "location": "node-5.recommendationservice-2",
+            "reason": "同一 pod 的 container_cpu_usage_seconds 在 1647776520（1.419 核）、1647776820（1.445 核）、1647776880（1.396 核）三个采样点相对 0.23 核基线瞬时抬升，是唯一与内存事件同刻共变的其它资源。但 CPU 只在内存爬升与释放两端出现尖峰、无持续高负载，container_cpu_cfs_throttled_seconds 速率仅 0.0067→0.0150（绝对值极小），node-5 system.cpu.pct_usage 7.423%→7.375% 持平，因此 CPU 更可能是内存分配/释放的伴随开销，而非注入的资源类别。",
+            "service": "recommendationservice"
+          },
+          {
+            "confidence": 0.05,
+            "fault_family": "memory",
+            "level": "node",
+            "location": "node-5",
+            "reason": "node-5 的 system.mem.used 在 1647776520 由 8403MB 阶跃到 9146MB、峰值 9167MB，1647776820 回落 8419MB，system.mem.free 反向由 15588MB 降至 14773MB 后恢复 15600MB，与 pod 级事件时间完全重合。但节点总内存 32011MB、峰值利用率仅 28.64%，未出现节点级内存耗尽、swap 换页或同节点多 pod 同时受损，且增量（+743MB）可由单个 recommendationservice-2 pod 的增长解释，故节点级仅为低置信备选。",
+            "service": null
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "read": 4,
+        "ls": 2,
+        "evidence_query": 8,
+        "cairn_checkpoint": 3,
+        "cairn_update": 4,
+        "platform_report_save": 2,
+        "platform_report_submit": 1,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 0
+    },
+    {
+      "host": "claude",
+      "case": "new-01",
+      "id": "01a1509a-cd69-70ca-9c8d-875a4af223d0",
+      "identifier": "SHEN-20",
+      "runId": "01a1509b-1b88-7919-b840-dc7bc22a607b",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_2dd45c3f-bfcd-47f4-a0b1-11c279f6fe1d",
+      "cairnStatus": "completed",
+      "queryCount": 24,
+      "completed": true,
+      "nativeSessionId": "624b00fd-d8a4-49db-97a5-ec4d2d9e4afa",
+      "seconds": 330.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "9c5e0fc4508162af70dec807ed08be57135d03306d79f2da4d1d1cfe29c17c17",
+      "nativeUsage": {
+        "host": "claude",
+        "rows": 375,
+        "models": [
+          "deepseek-v4.1-flash"
+        ],
+        "providers": [],
+        "modelCalls": 24,
+        "tokens": {
+          "input": 2421308,
+          "output": 35032,
+          "cacheRead": 2220928,
+          "cacheWrite": 0,
+          "total": 2456340
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 2456340,
+      "usageLowerBound": false,
+      "blackboardUsage": {
+        "sources": [
+          "claude/native",
+          "claude/transcript"
+        ],
+        "updatedAt": "2026-10-18T20:08:03.227Z",
+        "toolCalls": 31,
+        "cairnCalls": 15,
+        "toolErrors": 4,
+        "tokens": {
+          "input": 2220942,
+          "output": 33472,
+          "cacheRead": 2076672,
+          "cacheWrite": 0,
+          "reasoning": 0
+        },
+        "modelCalls": 21
+      },
+      "findings": 9,
+      "inputHashes": [
+        "2dc5dbe26867efaa118249487270a10a6ce87c76b8600e5699369cb7330d7d7d"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "84391e9bdb813f3acc46bc2f9602aba29ad9ce1551ec54b0d23bf38493494055",
+        "answer.json": "fcb0ce6050b088d2030e7e4ba5af18017a82ca4ab30ce0495f03098476462e04",
+        "receipt.json": "b7a9a33ae067afe7b63da24fe8593ffa652ae2dcde34156d8dea412c0555ef36"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.82,
+        "fault_family": "disk_io",
+        "level": "service",
+        "location": "shippingservice",
+        "reason": "All four shippingservice pods on node-5 simultaneously show container block-device reads rising 7-18x, page cache growing ~211 MB (usage to ~256 MB cgroup ceiling), and node-5 disk r_s going from 0 to ~1000 IOPS with io.util 50 and iowait ~13% over the same 1647750900-1647751320 window, while every other node-5 container stays flat; shippingservice-grpc mrt peaks at 23.36 ms and checkoutservice rises 18.3%, with rr/sr staying 100.",
+        "service": "shippingservice"
+      },
+      "grade": {
+        "case": "new-01",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647750907",
+          "level": "service",
+          "cmdb_id": "shippingservice",
+          "failure_type": "k8s容器读io负载"
+        },
+        "expectedFamily": "disk_io",
+        "predictions": [
+          {
+            "confidence": 0.82,
+            "fault_family": "disk_io",
+            "level": "service",
+            "location": "shippingservice",
+            "reason": "All four shippingservice pods on node-5 simultaneously show container block-device reads rising 7-18x, page cache growing ~211 MB (usage to ~256 MB cgroup ceiling), and node-5 disk r_s going from 0 to ~1000 IOPS with io.util 50 and iowait ~13% over the same 1647750900-1647751320 window, while every other node-5 container stays flat; shippingservice-grpc mrt peaks at 23.36 ms and checkoutservice rises 18.3%, with rr/sr staying 100.",
+            "service": "shippingservice"
+          },
+          {
+            "confidence": 0.45,
+            "fault_family": "disk_io",
+            "level": "pod",
+            "location": "node-5.shippingservice-0",
+            "reason": "Representative pod of the affected set: container_fs_reads./dev/vda mean 17.55->123.84 reads/s (7.1x), memory_cache median 1,466,368->223,041,536 bytes (152x) while RSS only 14.7->33.5 MB, working set 19.1->149.3 MB, memory_usage 20.50->255.94 MB; listed separately because pod-level localization cannot be excluded if the injected workload was applied per pod.",
+            "service": "shippingservice"
+          },
+          {
+            "confidence": 0.18,
+            "fault_family": "disk_io",
+            "level": "node",
+            "location": "node-5",
+            "reason": "Host-level alternative: node-5 system.io.r_s 0->~1000, io.util 0->50, iowait 0.06->11.9-17.3%, await 0->2.01, load.1 0.31-0.72->2.7-5.35, all returning to baseline at 1647751380. Kept as a lower-ranked candidate because the read IO is charged only to the four shipping container cgroups and node-5 memory/CPU and the other ~30 node-5 containers are unaffected, which favors container-originated load over a host-originated stressor.",
+            "service": null
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "mcp__application__platform_issue_read": 2,
+        "mcp__cairn__cairn_start": 1,
+        "mcp__application__evidence_query": 27,
+        "mcp__cairn__cairn_update": 10,
+        "mcp__application__platform_report_save": 1,
+        "mcp__application__platform_report_submit": 1,
+        "mcp__cairn__cairn_checkpoint": 1,
+        "mcp__cairn__cairn_read": 1,
+        "mcp__cairn__cairn_finish": 1
+      },
+      "cairnStartCalls": 1
+    },
+    {
+      "host": "claude",
+      "case": "new-02",
+      "id": "01a1509a-e484-7126-92e8-ba667ce825c5",
+      "identifier": "SHEN-21",
+      "runId": "01a150a1-2fa3-78ca-a370-fb0a891b4db8",
+      "runtimeStatus": "completed",
+      "cairnTaskId": null,
+      "cairnStatus": null,
+      "queryCount": 29,
+      "completed": false,
+      "nativeSessionId": "4dff9b53-4532-4d40-9a07-1ec6ba121090",
+      "seconds": 334.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "5abf88887bdec0574a1e5b59c8fd5d5be0463f3bbd53bbad3083009d61da05f3",
+      "nativeUsage": {
+        "host": "claude",
+        "rows": 383,
+        "models": [
+          "deepseek-v4.1-flash"
+        ],
+        "providers": [],
+        "modelCalls": 37,
+        "tokens": {
+          "input": 3848829,
+          "output": 32623,
+          "cacheRead": 3671168,
+          "cacheWrite": 0,
+          "total": 3881452
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 3881452,
+      "usageLowerBound": false,
+      "blackboardUsage": null,
+      "findings": 0,
+      "inputHashes": [
+        "460b8b9351b8718d43fbb13d1f4b0805eac771af48af1afbeb3a1c3843c08939"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "ba38dced4cbc5341282b12cec2aae591c68568daf69f944b0bc7212f4bd437b6",
+        "answer.json": "a884f31460d720705adacbb5b19570514d7b8ab8e858068962fc7da5a5b404b7",
+        "receipt.json": "8117952a1a9c1e75b2aa02bb7976462a4fe4f1ce320e2a811574b91835748e97"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.82,
+        "fault_family": "cpu",
+        "level": "node",
+        "location": "node-2",
+        "reason": "node-2 在告警时刻 1647762523 之后的首个采样点 1647762540 起，system.cpu.user 由 2.27 升至 38.28、system.cpu.pct_usage 由 4.63 升至 41.75、system.load.1 由 1.01 升至 5.21，持续两个采样点后在 1647762660 回落；同一时刻其余 5 个节点 CPU 无变化，node-2 的内存、磁盘、网络错误指标无同步异常，因此最可能是节点级 CPU 资源故障。因提供的容器证据不含 node-2 的任何 pod，无法进一步定位到 pod/service。",
+        "service": null
+      },
+      "grade": {
+        "case": "new-02",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647762523",
+          "level": "node",
+          "cmdb_id": "node-2",
+          "failure_type": "node节点CPU故障"
+        },
+        "expectedFamily": "cpu",
+        "predictions": [
+          {
+            "confidence": 0.82,
+            "fault_family": "cpu",
+            "level": "node",
+            "location": "node-2",
+            "reason": "node-2 在告警时刻 1647762523 之后的首个采样点 1647762540 起，system.cpu.user 由 2.27 升至 38.28、system.cpu.pct_usage 由 4.63 升至 41.75、system.load.1 由 1.01 升至 5.21，持续两个采样点后在 1647762660 回落；同一时刻其余 5 个节点 CPU 无变化，node-2 的内存、磁盘、网络错误指标无同步异常，因此最可能是节点级 CPU 资源故障。因提供的容器证据不含 node-2 的任何 pod，无法进一步定位到 pod/service。",
+            "service": null
+          },
+          {
+            "confidence": 0.08,
+            "fault_family": "memory",
+            "level": "pod",
+            "location": "node-6.currencyservice2-0",
+            "reason": "该 pod 的 container_memory_working_set 长期贴近 128 MB limit（约 127.9 MB），container_memory_failcnt 以约 1.3–1.8×10^6/min 单调上升，是容器层唯一持续的内存压力信号；但其 before 与 after 上升速率一致，未在 1647762523 处发生速率变化，属长期背景而非本次时间局部事件，故置信度低。",
+            "service": "currencyservice"
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "mcp__application__platform_issue_read": 2,
+        "mcp__application__evidence_query": 30,
+        "mcp__application__platform_report_receipt": 2,
+        "mcp__application__platform_report_save": 1,
+        "mcp__application__platform_report_submit": 2
+      },
+      "cairnStartCalls": 0
+    },
+    {
+      "host": "claude",
+      "case": "new-03",
+      "id": "01a15084-7805-7522-820d-1a4589587307",
+      "identifier": "SHEN-16",
+      "runId": "01a15094-1841-73f9-87b8-7059ae1b6a6d",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_4a8a6f3e-e07f-43d1-abbe-0e477784328d",
+      "cairnStatus": "completed",
+      "queryCount": 33,
+      "completed": true,
+      "nativeSessionId": "13f50463-de62-41b9-be90-ef3c49bec351",
+      "seconds": 331.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "5f3a8ce12104fc81c2c8eaab3f86e1d2f254dc6183332050ee6790143376e649",
+      "nativeUsage": {
+        "host": "claude",
+        "rows": 336,
+        "models": [
+          "deepseek-v4.1-flash"
+        ],
+        "providers": [],
+        "modelCalls": 19,
+        "tokens": {
+          "input": 1940824,
+          "output": 31987,
+          "cacheRead": 1710976,
+          "cacheWrite": 0,
+          "total": 1972811
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": false,
+        "auxiliaryEvents": []
+      },
+      "tokens": 1972811,
+      "usageLowerBound": false,
+      "blackboardUsage": {
+        "sources": [
+          "claude/native",
+          "claude/transcript"
+        ],
+        "updatedAt": "2026-10-18T19:59:48.959Z",
+        "toolCalls": 37,
+        "cairnCalls": 5,
+        "toolErrors": 1,
+        "tokens": {
+          "input": 1749100,
+          "output": 30250,
+          "cacheRead": 1575168,
+          "cacheWrite": 0,
+          "reasoning": 0
+        },
+        "modelCalls": 16
+      },
+      "findings": 10,
+      "inputHashes": [
+        "ecb34d56d5cf878274dd0dce69a8e1357b76430e8ed6e9b1ce9f90ccf2761e3c"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "a1f1509e5f8dfed86c32b75d411d1689f9e5a7947433bdc167aecaeaf8ddb33a",
+        "answer.json": "924b18a9680a3480830613abb96158d23be39642054dacb1b87f5783e4ae555d",
+        "receipt.json": "464e43e15dbd15326d2129a6c895e969ab2e7df60b192f8a0ed46c927aa84bec"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.86,
+        "fault_family": "memory",
+        "level": "pod",
+        "location": "node-5.recommendationservice-2",
+        "reason": "该容器工作集内存由基线 46.3671875 升至峰值 838.1953125（18.077 倍，+791.83，单位按指标名推断为 MB），RSS 同步由 39,182,336 B 升至 841,099,264 B（21.466 倍）后回到原值，cache 峰值仅 25.28 MB 故增长为常驻内存；峰值达 900 MB cgroup 上限的 93.1%，max_usage 自 1647776880 起恰为 900，memory_failcnt 由 0 单调升至 2971。同服务其余三个副本与其余 39 个容器均无异常（次大 delta 仅 +2.548，ratio 1.0407），异常在容器维度唯一。container_start_time_seconds 全程恒为 1647523126，未观测到容器重建，故 OOM 重启仅为候选机制而非已证实结论。",
+        "service": "recommendationservice"
+      },
+      "grade": {
+        "case": "new-03",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647776532",
+          "level": "pod",
+          "cmdb_id": "recommendationservice-2",
+          "failure_type": "k8s容器内存负载"
+        },
+        "expectedFamily": "memory",
+        "predictions": [
+          {
+            "confidence": 0.86,
+            "fault_family": "memory",
+            "level": "pod",
+            "location": "node-5.recommendationservice-2",
+            "reason": "该容器工作集内存由基线 46.3671875 升至峰值 838.1953125（18.077 倍，+791.83，单位按指标名推断为 MB），RSS 同步由 39,182,336 B 升至 841,099,264 B（21.466 倍）后回到原值，cache 峰值仅 25.28 MB 故增长为常驻内存；峰值达 900 MB cgroup 上限的 93.1%，max_usage 自 1647776880 起恰为 900，memory_failcnt 由 0 单调升至 2971。同服务其余三个副本与其余 39 个容器均无异常（次大 delta 仅 +2.548，ratio 1.0407），异常在容器维度唯一。container_start_time_seconds 全程恒为 1647523126，未观测到容器重建，故 OOM 重启仅为候选机制而非已证实结论。",
+            "service": "recommendationservice"
+          },
+          {
+            "confidence": 0.08,
+            "fault_family": "memory",
+            "level": "node",
+            "location": "node-5",
+            "reason": "同一时段 node-5 的 system.mem.used 由 8403 升至 9167（+764），pct_usage 26.25%→28.64% 后回落至 26.30%，与 pod 增量量级一致。但节点总内存约 32 GB、使用率始终低于 29%、swap 全程为 0，未发生节点级耗尽；节点上升是该 pod 增长的后果，故仅作为同一信号的节点级替代表述保留。",
+            "service": null
+          },
+          {
+            "confidence": 0.06,
+            "fault_family": "disk_io",
+            "level": "node",
+            "location": "node-3",
+            "reason": "node-3 的 system.io.util 仅在 1647777000 单点升至 28.95%、io.await 48.67 ms，其余采样点为 0–0.3，前后窗口均值比 199.33 系单点造成；该点比题给时刻晚约 8 分钟，无服务侧对应劣化，且 node-3 在本数据集中无容器指标可交叉验证，证据不足以定性。",
+            "service": null
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "mcp__application__platform_issue_read": 1,
+        "mcp__cairn__cairn_start": 1,
+        "mcp__application__evidence_query": 34,
+        "mcp__cairn__cairn_checkpoint": 3,
+        "mcp__application__platform_report_save": 1,
+        "mcp__application__platform_report_submit": 1,
+        "mcp__application__platform_report_receipt": 1,
+        "mcp__cairn__cairn_finish": 1
+      },
+      "cairnStartCalls": 1
+    },
+    {
+      "host": "dsh",
+      "case": "new-01",
+      "id": "01a15084-792d-7478-ad96-48718a82b8e6",
+      "identifier": "SHEN-17",
+      "runId": "01a1508d-270b-7b27-a442-3191dcb951de",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_4bd94f81-5820-429d-817b-9c587f5416c4",
+      "cairnStatus": "completed",
+      "queryCount": 24,
+      "completed": true,
+      "nativeSessionId": "multica-c4bb801b-9c5f-405e-8b5c-c91bf6ca8b5e",
+      "seconds": 259.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "2648714a5bbcf2e89aad9a7c198414da96609749ead27a17344e47d2561e70c3",
+      "nativeUsage": {
+        "host": "dsh",
+        "rows": 165,
+        "sessionId": "multica-c4bb801b-9c5f-405e-8b5c-c91bf6ca8b5e",
+        "models": [
+          "global:deepseek-v4.1-flash"
+        ],
+        "providers": [
+          "cairn-shared"
+        ],
+        "modelCalls": 22,
+        "tokens": {
+          "input": 2121259,
+          "output": 47241,
+          "cacheRead": 2017280,
+          "cacheWrite": 0,
+          "total": 2168500
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": true,
+        "auxiliaryEvents": [
+          {
+            "type": "session/title-llm-request",
+            "keys": [
+              "titleProvider",
+              "messageSeqs",
+              "route",
+              "system",
+              "messages",
+              "maxTokens"
+            ]
+          }
+        ]
+      },
+      "tokens": 2168500,
+      "usageLowerBound": true,
+      "blackboardUsage": {
+        "sources": [
+          "dsh/native"
+        ],
+        "updatedAt": "2026-10-18T19:51:12.196Z",
+        "toolCalls": 30,
+        "cairnCalls": 5,
+        "toolErrors": 2,
+        "tokens": {
+          "input": 2121259,
+          "output": 47241,
+          "cacheRead": 2017280,
+          "cacheWrite": 0,
+          "reasoning": 0
+        },
+        "modelCalls": 22
+      },
+      "findings": 11,
+      "inputHashes": [
+        "2dc5dbe26867efaa118249487270a10a6ce87c76b8600e5699369cb7330d7d7d"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "874f0485be34dba5977c8b93a300391ede255498c010fb6c360e311452cf6c4e",
+        "answer.json": "071d992f2e2ccbc1ac2364467d921b3fa7868c4c5f3530c47763f82e4ccc6d02",
+        "receipt.json": "d0e72bab45788c234f918a19c3c9eccf659addc8a95514bc200f116b8d56de52"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.5,
+        "fault_family": "disk_io",
+        "level": "service",
+        "location": "shippingservice (node-5.shippingservice-0, node-5.shippingservice-1, node-5.shippingservice-2, node-5.shippingservice2-0 on node-5)",
+        "reason": "4 个 shippingservice 副本的页缓存被填至各自 cgroup 上限（cache 1,466,368 B→223,041,536 B，×152；RSS 仅 ×2.28），同期 node-5 读 IOPS 由恒 0 跃至 ≈977、io.util 恒为 50.0、await 0→2.03 ms、iowait 0→13~17%。40 个容器中只有这 4 个出现 cache 增长，说明读负载产生于容器内部；内存上限命中是读负载填满页缓存的下游结果。",
+        "service": "shippingservice"
+      },
+      "grade": {
+        "case": "new-01",
+        "validAnswer": true,
+        "top1Entity": false,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": false,
+        "rawJointTop1": false,
+        "top3Entity": false,
+        "reciprocalRank": 0,
+        "truth": {
+          "timestamp": "1647750907",
+          "level": "service",
+          "cmdb_id": "shippingservice",
+          "failure_type": "k8s容器读io负载"
+        },
+        "expectedFamily": "disk_io",
+        "predictions": [
+          {
+            "confidence": 0.5,
+            "fault_family": "disk_io",
+            "level": "service",
+            "location": "shippingservice (node-5.shippingservice-0, node-5.shippingservice-1, node-5.shippingservice-2, node-5.shippingservice2-0 on node-5)",
+            "reason": "4 个 shippingservice 副本的页缓存被填至各自 cgroup 上限（cache 1,466,368 B→223,041,536 B，×152；RSS 仅 ×2.28），同期 node-5 读 IOPS 由恒 0 跃至 ≈977、io.util 恒为 50.0、await 0→2.03 ms、iowait 0→13~17%。40 个容器中只有这 4 个出现 cache 增长，说明读负载产生于容器内部；内存上限命中是读负载填满页缓存的下游结果。",
+            "service": "shippingservice"
+          },
+          {
+            "confidence": 0.28,
+            "fault_family": "memory",
+            "level": "pod",
+            "location": "shippingservice pods on node-5 (cgroup memory limit saturation)",
+            "reason": "容器内存用量精确顶到 spec 上限：usage 中位 20.50/19.06/19.06/28.65 MB→255.94/255.94/255.91/127.95 MB，spec 为 256/256/256/128 MB，max_usage 恰为 256.0/128.0，memory.failcnt 由 0 升至 1.8e6~2.7e6。若出题方按“容器内存上限命中”标注，类别即为 memory；但增长 99% 落在 page cache 而非 RSS，且无 swap 活动。",
+            "service": "shippingservice"
+          },
+          {
+            "confidence": 0.2,
+            "fault_family": "disk_io",
+            "level": "node",
+            "location": "node-5",
+            "reason": "全部磁盘异常指标均为节点级且只出现在 node-5：io.util 5.02→35.105（×6.993，8 个样本恒为 50.0）、io.r_s 0→≈977、io.await 0→2.03、avg_q_sz 0→4.04~4.31、load.1 0.47→5.35，其余 5 个节点无变化。若标注粒度为节点，则对象为 node-5；但节点级工具不会使特定 4 个容器的 cgroup 页缓存增长到上限。",
+            "service": null
+          }
+        ]
+      },
+      "correct": false,
+      "businessDelivered": true,
+      "falseCompletion": true,
+      "harnessFalseCompletion": true,
+      "tools": {
+        "platform_issue_read": 2,
+        "cairn_read": 1,
+        "cairn_start": 1,
+        "evidence_query": 26,
+        "cairn_checkpoint": 3,
+        "platform_report_save": 1,
+        "platform_report_submit": 1,
+        "platform_report_receipt": 1,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 1
+    },
+    {
+      "host": "dsh",
+      "case": "new-02",
+      "id": "01a15084-7adc-7e20-bc10-487634911dda",
+      "identifier": "SHEN-18",
+      "runId": "01a15092-c6b1-7955-a0f3-3d7211257e3d",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_46c50608-1506-4587-9cea-4cb7413e5c2e",
+      "cairnStatus": "completed",
+      "queryCount": 22,
+      "completed": true,
+      "nativeSessionId": "multica-17be892e-6fbc-4672-9aad-32ff30db7126",
+      "seconds": 182.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "b4f40a7419ced5c9e057dd59fadafef492b287d4f0dc973ef672371ac6ebbe8f",
+      "nativeUsage": {
+        "host": "dsh",
+        "rows": 187,
+        "sessionId": "multica-17be892e-6fbc-4672-9aad-32ff30db7126",
+        "models": [
+          "global:deepseek-v4.1-flash"
+        ],
+        "providers": [
+          "cairn-shared"
+        ],
+        "modelCalls": 26,
+        "tokens": {
+          "input": 2734892,
+          "output": 26904,
+          "cacheRead": 2609920,
+          "cacheWrite": 0,
+          "total": 2761796
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": true,
+        "auxiliaryEvents": [
+          {
+            "type": "session/title-llm-request",
+            "keys": [
+              "titleProvider",
+              "messageSeqs",
+              "route",
+              "system",
+              "messages",
+              "maxTokens"
+            ]
+          }
+        ]
+      },
+      "tokens": 2761796,
+      "usageLowerBound": true,
+      "blackboardUsage": {
+        "sources": [
+          "dsh/native"
+        ],
+        "updatedAt": "2026-10-18T19:55:44.906Z",
+        "toolCalls": 28,
+        "cairnCalls": 13,
+        "toolErrors": 3,
+        "tokens": {
+          "input": 2734892,
+          "output": 26904,
+          "cacheRead": 2609920,
+          "cacheWrite": 0,
+          "reasoning": 0
+        },
+        "modelCalls": 26
+      },
+      "findings": 7,
+      "inputHashes": [
+        "460b8b9351b8718d43fbb13d1f4b0805eac771af48af1afbeb3a1c3843c08939"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "ac4a468ea1e94de350699911f2107d7a3eca5711da450cf09c6037bbb505324a",
+        "answer.json": "dcb5606244d02d43d5851fec557139d972a335598d8a62a890a170258688ade8",
+        "receipt.json": "961a8fbdd4e8e96b7e2001cac0c2d6e0f8f5b91ddd3875369515d7cd356e2f8f"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.72,
+        "fault_family": "cpu",
+        "level": "node",
+        "location": "node-2",
+        "reason": "node-2 的 system.cpu.pct_usage 在异常时刻 1647762523 之后的首个采样点起由 4.24% 基线跃至 41.75%（t=1647762540）与 38.64%（t=1647762600），9.85 倍于基线中位数，随后 1647762660 回落至 4.73%；抬升来自用户态 CPU（cpu.user 2.27→38.28）并伴随 load.1 1.01→5.21，而内存、磁盘 IO、网络错误、僵尸进程、ping 全部无变化，其余 5 个节点同窗口无同级异常。",
+        "service": null
+      },
+      "grade": {
+        "case": "new-02",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647762523",
+          "level": "node",
+          "cmdb_id": "node-2",
+          "failure_type": "node节点CPU故障"
+        },
+        "expectedFamily": "cpu",
+        "predictions": [
+          {
+            "confidence": 0.72,
+            "fault_family": "cpu",
+            "level": "node",
+            "location": "node-2",
+            "reason": "node-2 的 system.cpu.pct_usage 在异常时刻 1647762523 之后的首个采样点起由 4.24% 基线跃至 41.75%（t=1647762540）与 38.64%（t=1647762600），9.85 倍于基线中位数，随后 1647762660 回落至 4.73%；抬升来自用户态 CPU（cpu.user 2.27→38.28）并伴随 load.1 1.01→5.21，而内存、磁盘 IO、网络错误、僵尸进程、ping 全部无变化，其余 5 个节点同窗口无同级异常。",
+            "service": null
+          },
+          {
+            "confidence": 0.12,
+            "fault_family": "network",
+            "level": "node",
+            "location": "node-2",
+            "reason": "同一分钟 node-2 出现单点网络抬升（net.bytes_sent 581749 vs 其余 21-34 万、tcp.out_segs 5089 vs 约 1600-2400），可能先于/伴随 CPU 抬升；但重传率恒 0.06%、收发错误与丢包为 0，且同类单点尖峰在全集群多处出现，故仅作低置信度替代机制保留。",
+            "service": null
+          },
+          {
+            "confidence": 0.08,
+            "fault_family": "memory",
+            "level": "node",
+            "location": "node-6",
+            "reason": "node-6 的 system.mem.free 由 1619 MB 单调降至 1156 MB，看似内存压力；但前后斜率 -0.47/-0.35 MB/s 基本一致、mem.total 恒 32011 MB、mem.used 10096-10116 MB、mem.pct_usage 31.54-31.60% 平稳，在 1647762523 处无阶跃，判定为贯穿全窗口的既有缓降趋势而非本次故障。",
+            "service": null
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "platform_issue_read": 2,
+        "cairn_start": 1,
+        "cairn_update": 8,
+        "cairn_read": 1,
+        "evidence_query": 24,
+        "platform_report_save": 1,
+        "platform_report_submit": 1,
+        "platform_report_receipt": 1,
+        "cairn_checkpoint": 2,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 1
+    },
+    {
+      "host": "dsh",
+      "case": "new-03",
+      "id": "01a15084-7d02-783a-97f6-f5a985b50c01",
+      "identifier": "SHEN-19",
+      "runId": "01a15087-703e-7411-b833-6c50654a4d25",
+      "runtimeStatus": "completed",
+      "cairnTaskId": "task_f8ecc92c-f42d-4d43-87c9-f523bb7b472c",
+      "cairnStatus": "completed",
+      "queryCount": 17,
+      "completed": true,
+      "nativeSessionId": "multica-6e7d0465-c04b-4b87-879c-1e0bb982c0b4",
+      "seconds": 205.0,
+      "strictToolsOnly": true,
+      "platformVerified": true,
+      "noBudget": true,
+      "nativeTraceSHA256": "86c44c2cb311b238f7cb19e1442a1bcee993f86772f042e33e6f5ad4119d8f74",
+      "nativeUsage": {
+        "host": "dsh",
+        "rows": 140,
+        "sessionId": "multica-6e7d0465-c04b-4b87-879c-1e0bb982c0b4",
+        "models": [
+          "global:deepseek-v4.1-flash"
+        ],
+        "providers": [
+          "cairn-shared"
+        ],
+        "modelCalls": 19,
+        "tokens": {
+          "input": 1686897,
+          "output": 26911,
+          "cacheRead": 1576960,
+          "cacheWrite": 0,
+          "total": 1713808
+        },
+        "unknownUsageAttempts": 0,
+        "usageLowerBound": true,
+        "auxiliaryEvents": [
+          {
+            "type": "session/title-llm-request",
+            "keys": [
+              "titleProvider",
+              "messageSeqs",
+              "route",
+              "system",
+              "messages",
+              "maxTokens"
+            ]
+          }
+        ]
+      },
+      "tokens": 1713808,
+      "usageLowerBound": true,
+      "blackboardUsage": {
+        "sources": [
+          "dsh/native"
+        ],
+        "updatedAt": "2026-10-18T19:44:03.371Z",
+        "toolCalls": 23,
+        "cairnCalls": 5,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 1686897,
+          "output": 26911,
+          "cacheRead": 1576960,
+          "cacheWrite": 0,
+          "reasoning": 0
+        },
+        "modelCalls": 19
+      },
+      "findings": 10,
+      "inputHashes": [
+        "ecb34d56d5cf878274dd0dce69a8e1357b76430e8ed6e9b1ce9f90ccf2761e3c"
+      ],
+      "artifactHashes": {
+        "REPORT.md": "93710985788103b74de8eded53005a56bd1c6ee0c5bb14b7606563c6c211ce24",
+        "answer.json": "15049b0dac9fdc9f4ebb7401ed641843b078addd72ce4e5c08f0de1293b51948",
+        "receipt.json": "b5fd966b078f3f34d7df5bb58eb403bcbcdcb0cdc0a4ee152a8292f2192ce1d8"
+      },
+      "evidenceIsolationPassed": true,
+      "deliveryHashesPassed": true,
+      "prediction": {
+        "confidence": 0.82,
+        "fault_family": "memory",
+        "level": "pod",
+        "location": "node-5.recommendationservice-2",
+        "reason": "该容器内存在一个 60 s 采样内阶跃 18×（工作集 46.37 → 838.20 MB，用量 46.57 → 838.79 MB，峰值 1647776760），并真实触达 900 MB cgroup 上限（memory.failcnt 0 → 1485.5 → 2971，max_usage 顶到 900 MB = spec limit），把 node-5 整机已用内存推高 764 MB 且 swap 全程为 0；同期 40 个容器中第二名仅 +3.08 MB，同服务其余副本零变化，故为单 pod 内存耗尽。",
+        "service": "recommendationservice"
+      },
+      "grade": {
+        "case": "new-03",
+        "validAnswer": true,
+        "top1Entity": true,
+        "top1Family": true,
+        "top1Level": true,
+        "jointTop1": true,
+        "rawJointTop1": true,
+        "top3Entity": true,
+        "reciprocalRank": 1.0,
+        "truth": {
+          "timestamp": "1647776532",
+          "level": "pod",
+          "cmdb_id": "recommendationservice-2",
+          "failure_type": "k8s容器内存负载"
+        },
+        "expectedFamily": "memory",
+        "predictions": [
+          {
+            "confidence": 0.82,
+            "fault_family": "memory",
+            "level": "pod",
+            "location": "node-5.recommendationservice-2",
+            "reason": "该容器内存在一个 60 s 采样内阶跃 18×（工作集 46.37 → 838.20 MB，用量 46.57 → 838.79 MB，峰值 1647776760），并真实触达 900 MB cgroup 上限（memory.failcnt 0 → 1485.5 → 2971，max_usage 顶到 900 MB = spec limit），把 node-5 整机已用内存推高 764 MB 且 swap 全程为 0；同期 40 个容器中第二名仅 +3.08 MB，同服务其余副本零变化，故为单 pod 内存耗尽。",
+            "service": "recommendationservice"
+          },
+          {
+            "confidence": 0.12,
+            "fault_family": "memory",
+            "level": "node",
+            "location": "node-5",
+            "reason": "备选层级：node-5 的 system.mem.used 8403 → 9167（+764 MB）、free 15588 → 14773、pct_usage 26.25% → 28.64% 与故障时刻对齐。但整机仅 28.6% 未饱和、无换页，且增量与单 pod 增量同量级、其余容器变动 ≤3.08 MB，故节点更可能是传导对象而非根因；若验收以节点为粒度，则落在 node-5 的 memory 上。",
+            "service": null
+          }
+        ]
+      },
+      "correct": true,
+      "businessDelivered": true,
+      "falseCompletion": false,
+      "harnessFalseCompletion": false,
+      "tools": {
+        "platform_issue_read": 1,
+        "cairn_start": 1,
+        "platform_issue_update": 2,
+        "evidence_query": 17,
+        "platform_report_receipt": 2,
+        "cairn_checkpoint": 3,
+        "platform_report_save": 1,
+        "platform_report_submit": 1,
+        "cairn_finish": 1
+      },
+      "cairnStartCalls": 1
+    }
+  ],
+  "sourceInputHashesMatch": true,
+  "sourceUnchanged": true,
+  "crossTaskBlackboardReads": false,
+  "model": "global:deepseek-v4.1-flash",
+  "versions": {
+    "pi": "1.3.0",
+    "claude": "2.1.302",
+    "dsh": "0.2.1-rc.2"
+  },
+  "graderHash": "5fd6df906ba658c9b06e7e60f63d5909c5827c4dbc4caa56560c6cd30515b13c",
+  "labelManifestHash": "0ba0c74d2e9921d9604fecee9ddb522b76a9324acf6278f6fd1699ef8de8f097",
+  "productionSmoke": {
+    "projectId": "f220244c-8731-4eba-8c44-2a37cbaebe38",
+    "status": "passed",
+    "input": "/Users/shen/Documents/1028-emergency-pk/validation/agent-interface-20261019/INPUT.md",
+    "issues": [
+      {
+        "host": "pi",
+        "id": "01a150af-9929-7349-8cab-258ffb13bdeb",
+        "identifier": "SHEN-22"
+      },
+      {
+        "host": "claude",
+        "id": "01a150af-9a7c-7ae9-85a3-b0de2f707203",
+        "identifier": "SHEN-23"
+      },
+      {
+        "host": "dsh",
+        "id": "01a150af-9bd7-7b15-b40a-300bdb479c2e",
+        "identifier": "SHEN-24"
+      }
+    ],
+    "results": [
+      {
+        "host": "pi",
+        "id": "01a150af-9929-7349-8cab-258ffb13bdeb",
+        "identifier": "SHEN-22",
+        "runtimeStatus": "completed",
+        "runId": "01a150af-9d11-775f-8ad0-0e9756794a24",
+        "error": null,
+        "sessionId": "01a150af-e738-7615-b143-c250692c282c",
+        "taskId": "task_8fb8f827-c379-4cf4-b687-5d9b4c257a80",
+        "cairnStatus": "completed",
+        "receiptConfirmed": true,
+        "output": "/Users/shen/Documents/1028-emergency-pk/.cairn/deliveries/01a150af-9929-7349-8cab-258ffb13bdeb/01a150af-e738-7615-b143-c250692c282c/output",
+        "passed": true
+      },
+      {
+        "host": "claude",
+        "id": "01a150af-9a7c-7ae9-85a3-b0de2f707203",
+        "identifier": "SHEN-23",
+        "runtimeStatus": "completed",
+        "runId": "01a150af-9dee-712b-a923-2c6222ba967f",
+        "error": null,
+        "sessionId": "2eb06e2d-ae67-4a2d-bad9-8c8045d782d9",
+        "taskId": "task_abf2de2e-1222-4099-b77d-47bce3b7cfe6",
+        "cairnStatus": "completed",
+        "receiptConfirmed": true,
+        "output": "/Users/shen/Documents/1028-emergency-pk/.cairn/deliveries/01a150af-9a7c-7ae9-85a3-b0de2f707203/2eb06e2d-ae67-4a2d-bad9-8c8045d782d9/output",
+        "passed": true
+      },
+      {
+        "host": "dsh",
+        "id": "01a150af-9bd7-7b15-b40a-300bdb479c2e",
+        "identifier": "SHEN-24",
+        "runtimeStatus": "completed",
+        "runId": "01a150af-9ebb-70d2-abee-21a3aa0368e2",
+        "error": null,
+        "sessionId": "multica-cf46c110-cf23-49bb-992c-efe9888a677c",
+        "taskId": "task_5e0e4f60-f2d1-471a-a497-5f15b9591145",
+        "cairnStatus": "completed",
+        "receiptConfirmed": true,
+        "output": "/Users/shen/Documents/1028-emergency-pk/.cairn/deliveries/01a150af-9bd7-7b15-b40a-300bdb479c2e/multica-cf46c110-cf23-49bb-992c-efe9888a677c/output",
+        "passed": true
+      }
+    ],
+    "checkedAt": "2026-10-18T20:25:45.713364+00:00"
+  },
+  "closeoutAudit": {
+    "at": "2026-10-18T20:28:56.897990+00:00",
+    "productionSmoke": [
+      {
+        "host": "pi",
+        "identifier": "SHEN-22",
+        "goalBeforeRead": true,
+        "deliveryIndependentlyVerified": true,
+        "taskComplete": true,
+        "reportSHA256": "81b5180373c4ffd88b5ff765423cf4272bf7f9a3821e475967e4f3c61b4c4276"
+      },
+      {
+        "host": "claude",
+        "identifier": "SHEN-23",
+        "goalBeforeRead": true,
+        "deliveryIndependentlyVerified": true,
+        "taskComplete": true,
+        "reportSHA256": "8546fa27fe4e8fbf0697808a3d8c0fbd143bae30f0c64484309b42c54e1491c4"
+      },
+      {
+        "host": "dsh",
+        "identifier": "SHEN-24",
+        "goalBeforeRead": true,
+        "deliveryIndependentlyVerified": true,
+        "taskComplete": true,
+        "reportSHA256": "aa96c6fcf0661bc82ae43f452507065167417d8132945774b53f9ca13fe2aa9d"
+      }
+    ],
+    "agentConfigurations": [
+      {
+        "host": "pi",
+        "agentId": "37be3089-9aa1-431f-a02d-a82cccb5f272",
+        "name": "Cairn 排障助手",
+        "model": "sub2api-copy-copy-2/global:deepseek-v4.1-flash",
+        "instructionsCharacters": 785
+      },
+      {
+        "host": "claude",
+        "agentId": "3b47980d-03d0-4fd1-a678-9b7469b02bf1",
+        "name": "Cairn 排障助手 · Claude",
+        "model": "global:deepseek-v4.1-flash",
+        "instructionsCharacters": 785
+      },
+      {
+        "host": "dsh",
+        "agentId": "150faf51-90d2-4efc-9c69-5ccfeca61fd3",
+        "name": "Cairn 排障助手 · DSH",
+        "model": "cairn-shared/global%3Adeepseek-v4.1-flash",
+        "instructionsCharacters": 785
+      }
+    ],
+    "ccSwitchClaudeProxy": [
+      {
+        "case": "new-01",
+        "requests": 25,
+        "allExpectedProvider": true,
+        "models": [
+          "deepseek-v4.1-flash"
+        ],
+        "inputTokenSemanticsCodes": [
+          2
+        ],
+        "proxyRecordedInput": 201772,
+        "proxyRecordedCacheRead": 2382848,
+        "proxyRecordedOutput": 46005,
+        "nativeRecordedInput": 2421308,
+        "nativeRecordedOutput": 35032
+      },
+      {
+        "case": "new-02",
+        "requests": 37,
+        "allExpectedProvider": true,
+        "models": [
+          "deepseek-v4.1-flash"
+        ],
+        "inputTokenSemanticsCodes": [
+          2
+        ],
+        "proxyRecordedInput": 177692,
+        "proxyRecordedCacheRead": 3748736,
+        "proxyRecordedOutput": 26807,
+        "nativeRecordedInput": 3848829,
+        "nativeRecordedOutput": 32623
+      },
+      {
+        "case": "new-03",
+        "requests": 19,
+        "allExpectedProvider": true,
+        "models": [
+          "deepseek-v4.1-flash"
+        ],
+        "inputTokenSemanticsCodes": [
+          2
+        ],
+        "proxyRecordedInput": 228475,
+        "proxyRecordedCacheRead": 1753088,
+        "proxyRecordedOutput": 41750,
+        "nativeRecordedInput": 1940824,
+        "nativeRecordedOutput": 31987
+      }
+    ],
+    "tokenScope": "Comparison uses native main-session records. Proxy and native cache accounting differ; complete billing is not claimed.",
+    "regressionTests": 475,
+    "modelProbe": {
+      "chat": "deepseek-v4.1-flash",
+      "claudeViaCCSwitch": "deepseek-v4.1-flash"
+    },
+    "dshPlatformBridgeCommit": "e29aae228449dfe50e88af60ef4281e38ca44e2a"
+  }
+}

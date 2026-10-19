@@ -25,7 +25,7 @@ test('global installer accepts directory arguments literally and rejects invalid
   assert.deepEqual(parseOptions(['--target=multica', '--agent', '排障助手', '--workspace-id=workspace-1', '--db', 'shared state.db', '--adopt']), {
     target: 'multica', agent: '排障助手', workspaceId: 'workspace-1', db: resolve('shared state.db'), adopt: true,
   });
-  for (const target of ['pi', 'claude', 'codex']) assert.deepEqual(parseOptions(['--target', target]), { target });
+  for (const target of ['pi', 'claude', 'codex', 'dsh']) assert.deepEqual(parseOptions(['--target', target]), { target });
   assert.throws(() => parseOptions(['--target', 'other']), /--target must be one of/);
   for (const args of [['--agent', 'a'], ['--workspace-id', 'w'], ['--db', 'state.db'], ['--adopt'], ['--target', 'codex', '--db', 'state.db']]) {
     assert.throws(() => parseOptions(args), /requires --target multica/);
@@ -83,7 +83,7 @@ test('global installer forwards integration arguments literally to the installed
 });
 
 test('global installer supports each native target and discovers the actual npm prefix', () => {
-  for (const target of ['pi', 'claude', 'codex']) {
+  for (const target of ['pi', 'claude', 'codex', 'dsh']) {
     const fixture = installerFixture();
     try {
       const result = fixture.invoke(['--target', target]);
@@ -134,7 +134,7 @@ test('built runtimes expose only Node builtin external imports', async () => {
   }
 });
 
-test('packed global install works offline away from the checkout and supplies all three native packages', { timeout: 90000 }, async () => {
+test('packed global install works offline away from the checkout and supplies all four native packages', { timeout: 90000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "cairn global space'$(false)-"));
   const checkout = join(root, 'checkout'), prefix = join(root, 'global prefix'), workspace = join(root, 'workspace');
   mkdirSync(join(checkout, 'scripts'), { recursive: true });
@@ -179,7 +179,7 @@ test('packed global install works offline away from the checkout and supplies al
       } finally { await client.close(); }
     };
     await probeMcp(command, 'mcp');
-    for (const target of ['pi', 'claude', 'codex']) {
+    for (const target of ['pi', 'claude', 'codex', 'dsh']) {
       const output = JSON.parse(invoke(['install', '--target', target, '--root', workspace]));
       const plugin = output.plugin as string;
       assert.ok(plugin.startsWith(workspace));

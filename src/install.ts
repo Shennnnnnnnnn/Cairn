@@ -8,7 +8,7 @@ import { CairnError, type Host } from './core/types.js';
 import { VERSION } from './version.js';
 
 export type Target=Exclude<Host,'mcp'>;
-type Change={file:string;kind:'json'|'toml'|'array';keys?:string[];before?:unknown;value:unknown};
+type Change={file:string;kind:'json'|'toml'|'array'|'file';keys?:string[];before?:unknown;value:unknown};
 type Receipt={target:Target;version:string;installedAt:string;plugin:string;changes:Change[];ownedPaths?:string[];ownedContent?:Record<string,string>};
 const shellQuote=(value:string)=>`'${value.replaceAll("'","'\\''")}'`;
 const codexRegistration=/^\s*\[\s*mcp_servers\s*\.\s*(?:cairn|"cairn"|'cairn')\s*\]\s*(?:#.*)?$/m;
@@ -51,6 +51,11 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
   const file=join(loc.base,'.claude','settings.json');
   planJson(file,['extraKnownMarketplaces','cairn-local'],{source:{source:'directory',path:loc.dir}});
   planJson(file,['enabledPlugins','cairn@cairn-local'],true);
+ }else if(target==='dsh'){
+  const file=join(loc.dir,'cordis.patch.json'),value=JSON.stringify([{insert:[{id:'cairn',name:join(loc.plugin,'runtime/dsh-extension.mjs')}]},{id:'headless-runner',inject:['headlessStartup','cairnReady']}],null,2)+'\n';
+  const old=existsSync(file)?readFileSync(file,'utf8'):undefined,owned=previous?.changes.find(c=>c.file===file&&c.kind==='file');
+  if(old!==undefined&&old!==value&&(!owned||old!==owned.value))throw new CairnError('install_conflict',`The DSH overlay was edited at ${file}; preserve it before updating`);
+  changes.push({file,kind:'file',before:owned?owned.before:old,value});
  }else{
   const file=join(loc.base,'.codex','config.toml'),current=existsSync(file)?readFileSync(file,'utf8'):'';
   const previousBlock=previous?.changes.find(c=>c.kind==='toml'&&c.file===file);
@@ -77,7 +82,7 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
  // Preflight completes before any configuration or plugin files are modified.
  mkdirSync(loc.dir,{recursive:true});
  const staging=join(loc.dir,`plugin-${process.pid}`);rmSync(staging,{recursive:true,force:true});cpSync(source,staging,{recursive:true});
- if(target!=='pi'){
+ if(target==='claude'||target==='codex'){
   const mcpFile=join(staging,'.mcp.json'),mcp=readJson(mcpFile);mcp.mcpServers.cairn.command=process.execPath;write(mcpFile,JSON.stringify(mcp,null,2)+'\n');
   const hookFile=join(staging,'hooks/hooks.json'),hookConfig=readJson(hookFile);
   for(const entries of Object.values(hookConfig.hooks) as any[])for(const entry of entries)for(const hook of entry.hooks??[])if(hook.type==='command')hook.command=`${shellQuote(process.execPath)} ${shellQuote(join(loc.plugin,'scripts/hook.mjs'))}`;
@@ -88,7 +93,8 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
  if(target==='codex')write(join(loc.dir,'.agents/plugins/marketplace.json'),JSON.stringify({name:'cairn-local',plugins:[{name:'cairn',source:{source:'local',path:'./plugin'},policy:{installation:'AVAILABLE',authentication:'ON_INSTALL'},category:'Productivity'}]},null,2));
  if(target==='claude')write(join(loc.dir,'.claude-plugin/marketplace.json'),JSON.stringify({name:'cairn-local',owner:{name:'Cairn'},plugins:[{name:'cairn',source:'./plugin'}]},null,2));
  for(const c of changes){
-  if(c.kind==='toml'){
+  if(c.kind==='file')write(c.file,c.value as string);
+  else if(c.kind==='toml'){
    const original=existsSync(c.file)?readFileSync(c.file,'utf8'):'';
    const prior=previous?.changes.find(p=>p.kind==='toml'&&p.file===c.file);
    write(c.file,`${(prior?original.replace(prior.value as string,''):original).trimEnd()}\n\n${c.value}\n`);
@@ -103,14 +109,17 @@ export function install(target:Target,scope:'project'|'user'='project',root?:str
  }
  const receipt:Receipt={target,version:VERSION,installedAt:new Date().toISOString(),plugin:loc.plugin,changes,ownedPaths,ownedContent:Object.fromEntries(ownedPaths.map(path=>[path,fingerprint(path)!]))};
  write(loc.receipt,JSON.stringify(receipt,null,2));
- return {target,scope,plugin:loc.plugin,next:target==='codex'?'Restart a trusted project session, then review and trust Cairn hooks with /hooks.':'Start a new CLI session and load Cairn. Existing model and approval settings are preserved.'};
+ return {target,scope,plugin:loc.plugin,...(target==='dsh'?{patch:join(loc.dir,'cordis.patch.json')}:{}),next:target==='dsh'?`Load the owned overlay with dsh --profile headless --patch ${shellQuote(join(loc.dir,'cordis.patch.json'))}. Existing DSH profiles and model settings are preserved.`:target==='codex'?'Restart a trusted project session, then review and trust Cairn hooks with /hooks.':'Start a new CLI session and load Cairn. Existing model and approval settings are preserved.'};
 }
 export function uninstall(target:Target,scope:'project'|'user'='project',root?:string){
  const loc=location(target,scope,root);if(!existsSync(loc.receipt))return {removed:false};
  const receipt:Receipt=readJson(loc.receipt),retained:string[]=[];
  for(const c of receipt.changes){
   if(!existsSync(c.file))continue;
-  if(c.kind==='toml'){
+  if(c.kind==='file'){
+   if(readFileSync(c.file,'utf8')!==c.value){retained.push(c.file);continue;}
+   if(typeof c.before==='string')write(c.file,c.before);else rmSync(c.file);
+  }else if(c.kind==='toml'){
    const data=readFileSync(c.file,'utf8');if(data.includes(c.value as string))write(c.file,data.replace(c.value as string,''));else retained.push(c.file);
   }else{
    const data=readJson(c.file);

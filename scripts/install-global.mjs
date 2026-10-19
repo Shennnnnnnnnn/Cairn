@@ -6,7 +6,7 @@ import { basename, delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const targets = ['pi', 'claude', 'codex', 'multica'];
+const targets = ['pi', 'claude', 'codex', 'dsh', 'multica'];
 
 function validateOptions(options) {
   if (options.target !== undefined && !targets.includes(options.target)) throw new Error(`--target must be one of: ${targets.join(', ')}.`);
@@ -102,7 +102,7 @@ export function installGlobal(options) {
 if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     const options = parseOptions(process.argv.slice(2));
-    if (options.help) process.stdout.write('Usage: npm run install:global -- [--prefix DIR] [--cache DIR] [--offline]\n       [--target pi|claude|codex|multica]\n       [--agent NAME_OR_ID] [--workspace-id ID] [--db PATH] [--adopt]\nBuild Cairn, then install a packed copy with npm. No sudo or shell-profile changes.\n--target also installs the selected integration using the installed command in your current directory.\n--agent, --workspace-id, --db and --adopt apply only to --target multica.\nMultica uses its shared default database unless --db overrides it; the integration saves the MCP/UI database preference.\nWithout --target, only the global command is installed.\n');
+    if (options.help) process.stdout.write('Usage: npm run install:global -- [--prefix DIR] [--cache DIR] [--offline]\n       [--target pi|claude|codex|dsh|multica]\n       [--agent NAME_OR_ID] [--workspace-id ID] [--db PATH] [--adopt]\nBuild Cairn, then install a packed copy with npm. No sudo or shell-profile changes.\n--target also installs the selected integration using the installed command in your current directory.\n--agent, --workspace-id, --db and --adopt apply only to --target multica.\nMultica uses its shared default database unless --db overrides it; the integration saves the MCP/UI database preference.\nWithout --target, only the global command is installed.\n');
     else installGlobal(options);
   } catch (error) {
     process.stderr.write(`Cairn global installation failed: ${error.message}\n${error.message.startsWith('Global package installed, but') ? 'The global command is installed. Resolve the integration error, then retry cairn install with the same target and options.\n' : 'For an unwritable npm prefix, retry with --prefix DIR and add its bin directory to PATH.\n'}`);

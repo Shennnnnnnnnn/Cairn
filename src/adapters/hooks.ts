@@ -12,7 +12,7 @@ export function observedCapabilities(seen:Record<string,string>):Capabilities{
 /** Only our actual host namespace is exempt from capture and strict native-tool gating. */
 export function isCairnTool(host:Host,name:string){
  const local=/^cairn_(?:start|resume|read|update|checkpoint|finish|tool_[A-Za-z0-9_-]+)$/;
- if(host==='pi')return local.test(name);
+ if(host==='pi'||host==='dsh')return local.test(name);
  const prefix=host==='claude'?/^mcp__(?:plugin_cairn_cairn|cairn)__/:/^mcp__cairn__/;
  return prefix.test(name)&&local.test(name.replace(prefix,''));
 }
@@ -86,7 +86,7 @@ export function handleNative(engine:Engine,host:Host,event:NativeEvent):{context
   return {};
  }
  const task=event.type.startsWith('PostToolUse')&&nativeCallId?engine.store.taskForCall(nativeCallId)??currentTask:currentTask;
- const marker=host==='pi'?'Cairn tools are bound to this native Pi session. Omit session_id; do not invent one.':`Cairn host=${host} session_id=${session.sessionId}. Supply this real session_id only on the first cairn_start or cairn_resume of this MCP connection; subsequent calls are already bound. Never guess a session id.`;
+ const marker=host==='pi'||host==='dsh'?`Cairn tools are bound to this native ${host==='pi'?'Pi':'DSH'} session. Omit session_id; do not invent one.`:`Cairn host=${host} session_id=${session.sessionId}. Supply this real session_id only on the first cairn_start or cairn_resume of this MCP connection; subsequent calls are already bound. Never guess a session id.`;
  if(task&&['SessionStart','SessionEnd','Settled','Interrupt'].includes(event.type))engine.recordExecution(task.id,session,event.type==='Interrupt'||event.type==='Settled'&&event.aborted?'interrupted':event.type==='SessionStart'?'running':event.type==='Settled'?'settled':'closed');
  if(event.type==='SessionStart'){
   if(!task)return {context:`${marker} Cairn is enabled only after starting or resuming a task.`};

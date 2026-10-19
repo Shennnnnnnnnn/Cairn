@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md) | [Documentation index](docs/README.zh-CN.md)
 
-**Goals, evidence and recoverable progress inside Pi, Claude Code and Codex.**
+**Goals, evidence and recoverable progress inside Pi, Claude Code, Codex and DeepSeek Harness.**
 
 Cairn 4.9 provides **start, resume, read, update, checkpoint and finish**. General tasks use **curated evidence** by default: the agent works with any available host tools, then immediately saves each meaningful state change, conclusion, supporting explanations and file/link references. Cairn does not record those tool calls or their results.
 
@@ -49,8 +49,11 @@ cd /path/to/your-project
 cairn install --target pi
 cairn install --target claude
 cairn install --target codex
+cairn install --target dsh
 cairn ui
 ```
+
+DSH installation returns an owned overlay path. Load it with `dsh --profile headless --patch /absolute/path/cordis.patch.json "Task goal"`. DSH keeps model configuration and execution; verified with DSH 0.2.1-rc.2. Reuse the insert entry for other profiles; its headless dependency applies only to headless. The optional scheduler still supports Pi/Codex executors.
 
 Start a new host session. In Codex, trust the project and review Cairn hooks with `/hooks`. Add `--scope user` for personal installation across projects or `--root DIR` for an explicit installation root.
 
@@ -233,11 +236,12 @@ User interruption is authoritative, suspended work has no continuation prompts, 
 | Host | Integration | Progress and recovery |
 | --- | --- | --- |
 | Pi | Self-contained native package, extension and skill | Native identity; changed checkpoints and compaction restore context; immediate semantic updates |
+| DSH | Cordis plugin and owned overlay | Native session identity, six shared tools, numeric usage and stop/recovery events |
 | Claude Code | Local marketplace plugin with skills, hooks and stdio MCP | Startup ID binds the first start/resume; immediate semantic updates |
 | Codex | Project/user hooks, MCP and skill; a marketplace package is also built | Same identity binding; immediate semantic updates; optional captured plan-event mapping with a valid task/epoch association |
 | Multica | Managed MCP and shared skill on its local runtime | Automatic MCP identity; immediate update/resume/finish; shared dashboard database |
 
-Packages under `dist/plugins/{pi,claude,codex}` include their runtime. Codex project installation uses scoped hooks/MCP/skill registration rather than automatic global plugin-cache activation.
+Packages under `dist/plugins/{pi,claude,codex,dsh}` include their runtime. Codex project installation uses scoped hooks/MCP/skill registration rather than automatic global plugin-cache activation.
 
 Other clients can run the shared MCP server and load `skills/cairn`:
 

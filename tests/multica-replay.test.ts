@@ -1,0 +1,58 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,cpSync,existsSync,realpathSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {AjvJsonSchemaValidator} from '@modelcontextprotocol/sdk/validation/ajv';
+import {registerMulticaPlatform} from '../src/adapters/multica-platform.js';
+
+const {registerReplayTools}=await import(pathToFileURL(resolve('evaluations/public-rca/multica-replay-tools.mjs')).href);
+test('replay queries, references and read scopes follow isolated native task contexts',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'multica-query-')),tools=new Map<string,any>(),handlers=new Map<string,any[]>();
+ const context=(id:string)=>{const cwd=join(root,id);mkdirSync(join(cwd,'.multica'),{recursive:true});writeFileSync(join(cwd,'.multica/daemon_task_context.json'),JSON.stringify({issue_id:id,agent_id:'agent'}));
+  for(const name of ['a','b']){const dir=join(cwd,'cases',name,'evidence');mkdirSync(dir,{recursive:true});
+   writeFileSync(join(dir,'raw.csv'),'timestamp,cmdb_id,kpi_name,value\n1,node,metric,\n2,node,metric,0\n3,node,metric,10\n4,node,metric,5\n');
+   writeFileSync(join(dir,'wide.csv'),'timestamp,service,mrt,sr\n1,service,4,100\n2,service,8,100\n');
+  }return {cwd,sessionManager:{getSessionId:()=>id}};};
+ const a=context('a'),b=context('b'),bindings=join(root,'bindings.json'),sourceRoot=join(root,'retained-input');
+ cpSync(join(a.cwd,'cases'),join(sourceRoot,'cases'),{recursive:true});
+ writeFileSync(bindings,JSON.stringify({issues:{a:{relativeCasePath:'cases/a'},b:{relativeCasePath:'cases/b'}}}));
+ const pi={registerTool:(t:any)=>tools.set(t.name,t),on:(n:string,h:any)=>handlers.set(n,[...(handlers.get(n)??[]),h])};
+ const register=(pi:any,settings:any,options:any)=>registerMulticaPlatform(pi,settings,{...options,env:{},run:async()=>{throw Error('No network should be called');}});
+ const artifactRoot=join(root,'deliveries');
+ registerReplayTools(pi,register,{bindings,sourceRoot,platform:{cli:'/unused',serverUrl:'https://example.test',workspaceId:'w',artifactRoot},runtimeRoot:join(root,'runtime')});
+ const call=async(name:string,input:any,ctx:any)=>(await tools.get(name).execute('call',input,undefined,undefined,ctx)).details;
+ try{
+  for(const ctx of [a,b])for(const h of handlers.get('session_start')??[])await h({},ctx);
+  const compare=await call('evidence_query',{action:'compare',files:['evidence/raw.csv'],before:[1,2],after:[3,4]},a);
+  assert.equal(compare.result.items[0].before.n,1);assert.equal(compare.result.items[0].before.mean,0);assert.equal(compare.result.items[0].missingValues,1);
+  const rate=await call('evidence_query',{action:'series',files:['evidence/raw.csv'],mode:'rate'},a);
+  assert.equal(rate.result.items[0].negativeIntervals,1);assert.equal(rate.result.items[0].points.length,1);
+  const calculation=await call('evidence_query',{action:'calculate',calculation:{operation:'ratio',operands:[{result_ref:compare.result_ref,pointer:'/items/0/after/max'},{constant:100}]}},a);
+  assert.equal(calculation.result.value,0.1);
+  const zero=await call('evidence_query',{action:'calculate',calculation:{operation:'ratio',operands:[{result_ref:compare.result_ref,pointer:'/items/0/after/max'},{result_ref:compare.result_ref,pointer:'/items/0/before/mean'}]}},a);
+  assert.equal(zero.result.value,null);
+  const wide=await call('evidence_query',{action:'compare',files:['evidence/wide.csv'],before:[1,1],after:[2,2]},b);
+  assert.equal(wide.result.items.length,2);assert.equal(wide.issueId,'b');assert.notEqual(wide.result_ref,compare.result_ref);
+  const candidate={location:'node',level:'node',service:null,fault_family:'unknown',confidence:0.5,reason:'Evidence remains limited'};
+  const evidence=[{result_ref:compare.result_ref,statement:'The reported metric rises'},{result_ref:rate.result_ref,statement:'The decreasing interval is excluded'}];
+  const input={report:'Reported results '+compare.result_ref+' '+rate.result_ref,answer:{candidates:[candidate],evidence}};
+  const save=tools.get('platform_report_save'),validate=new AjvJsonSchemaValidator().getValidator(save.parameters);
+  assert.equal(validate(input).valid,true);
+  assert.equal(validate({...input,answer:{...input.answer,evidence:[{ref:compare.result_ref,statement:'Wrong field'}]}}).valid,false);
+  const saved=await call('platform_report_save',input,a);
+  await assert.rejects(call('platform_report_save',input,b),/from this Issue/);
+  const guard=handlers.get('tool_call')![0]!;
+  const ownBundle=join(artifactRoot,'a','a','.managed/bundles',saved.bundle_id,'answer.json');
+  assert.equal(guard({toolName:'read',input:{path:ownBundle}},a),undefined);
+  assert.equal(guard({toolName:'read',input:{path:ownBundle}},b).block,true);
+  assert.equal(guard({toolName:'ls',input:{path:sourceRoot}},a),undefined);
+  assert.equal(guard({toolName:'ls',input:{path:join(a.cwd,'cases')}},a),undefined);
+  assert.equal(guard({toolName:'grep',input:{path:sourceRoot,pattern:'.'}},a).block,true);
+  assert.equal(guard({toolName:'read',input:{path:join(a.cwd,'cases/b/evidence/raw.csv')}},a).block,true);
+  assert.equal(guard({toolName:'read',input:{path:join(a.cwd,'cases/a/evidence/raw.csv')}},a),undefined);
+  assert.ok(compare.result.items[0].file.startsWith(realpathSync(sourceRoot)));
+  rmSync(a.cwd,{recursive:true,force:true});assert.equal(existsSync(compare.result.items[0].file),true);
+ }finally{rmSync(root,{recursive:true,force:true});}
+});

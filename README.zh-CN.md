@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文 | [文档导航](docs/README.zh-CN.md)
 
-**为 Pi、Claude Code、Codex 保留目标、证据链和可恢复的进度。**
+**为 Pi、Claude Code、Codex、DeepSeek Harness 保留目标、证据链和可恢复的进度。**
 
 Cairn 4.9 提供六个工具：**开始、恢复、读取、即时更新、恢复摘要、结束**。普通任务默认使用 `curated` 模式：AI 自主调用宿主已有工具，每次有意义的状态变化立即保存，保留结论、整理后的依据和文件／链接引用，**Cairn 不记录这些工具调用及原始结果**。
 
@@ -22,7 +22,7 @@ Cairn 4.9 提供六个工具：**开始、恢复、读取、即时更新、恢�
 
 | 接入 | Token | 工具次数 |
 |---|---|---|
-| Pi 原生扩展 | 原生 `message_end` 的主会话用量 | 原生返回事件，业务工具与 Cairn 分开 |
+| Pi / DSH 原生扩展 | 原生 `message_end` 的主会话用量 | 原生返回事件，业务工具与 Cairn 分开 |
 | Claude Code / Codex 原生 hooks | 从 hooks 指定的本机会话文件中增量提取已知格式的数值用量，属于兼容适配；不导入正文 | 原生返回/失败事件 |
 | 可选 Pi/Codex 调度器 | 各阶段宿主返回的用量，缓存包含在输入 | 宿主阶段报告的调用次数；不冒充原生返回事件统计 |
 | 仅 MCP（包括当前 Multica 接入） | 宿主未提供，显示 `—` | 无法观测宿主其他工具，显示 `—` |
@@ -70,8 +70,11 @@ cd /path/to/your-project
 cairn install --target pi
 cairn install --target claude
 cairn install --target codex
+cairn install --target dsh
 cairn ui
 ```
+
+DSH 安装返回独立的 `cordis.patch.json` 路径，用 `dsh --profile headless --patch /absolute/path/cordis.patch.json "任务目标"` 加载；模型仍由 DSH 配置。该 overlay 不修改既有 profile 和模型。已通过 DSH 0.2.1-rc.2 真实 CLI 创建、增量事实、挂起和跨会话恢复验收；其他 profile 可复用其中的 `insert` 条目，headless 启动依赖仅用于 headless。
 
 安装后开启新的 CLI 会话。Codex 需要信任项目，并通过 `/hooks` 检查和信任 Cairn hooks。跨项目使用可增加 `--scope user`；`--root DIR` 可指定安装根目录。
 
@@ -357,11 +360,12 @@ cairn export TASK_ID --format html --out evidence.html
 
 用户中断优先，暂停后没有续跑提示；完成检查的补充提示有次数上限。
 
-## 三种 CLI 的适配
+## 四种 CLI 的适配
 
 | 宿主 | 安装形态 | 进度与恢复 |
 | --- | --- | --- |
 | Pi | 自包含原生 package、扩展和共享 skill | 自动绑定原生会话；状态变更／压缩后恢复摘要；update 即时保存业务状态 |
+| DSH | Cordis 原生扩展与独立 overlay | 自动绑定真实会话；复用六工具和完成检查；采集原生数字用量、失败缺测与停止/恢复事件 |
 | Claude Code | 本地 marketplace 插件，含 skills、hooks、stdio MCP | 首次 start／resume 使用启动 hook 的真实 ID；update 即时保存业务状态 |
 | Codex | 项目／用户 hooks、MCP、skill；同时构建 marketplace 包 | 同样绑定身份；update 即时保存业务状态；captured 计划事件需可靠任务／代次关联 |
 | Multica | 本机运行时上的受管 MCP 与共享 skill | 自动连接身份；即时 update／恢复／完成；与看板同库 |
@@ -489,3 +493,5 @@ Cairn 将目标、证据、人工提示和恢复状态保存在通用 CLI 工作
 新版完整演示见[即时状态与原生生命周期实跑](docs/examples/immediate-state.zh-CN.md)：实际修复离线报价串价，并按自然时间回放自动生命周期、业务复核和完成。
 
 提示词的职责划分及本次实际发送正文见[主／子 Agent 实发提示词](docs/examples/actual-agent-prompts.zh-CN.md)。
+
+本轮 Pi / Claude / DSH 同模型实测与三次通用任务验收，见[三宿主对比（2026-10-19）](evaluations/public-rca/comparison-hosts-20261019.zh-CN.md)。

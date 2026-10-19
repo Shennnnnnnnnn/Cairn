@@ -1,7 +1,7 @@
 {
   "name": "cairn",
   "version": "4.9.0",
-  "description": "Goal and evidence plugin for Pi, Claude Code and Codex",
+  "description": "Goal and evidence plugin for Pi, Claude Code, Codex and DeepSeek Harness",
   "type": "module",
   "exports": { ".": { "types": "./dist/types/index.d.ts", "import": "./dist/index.js" } },
   "types": "./dist/types/index.d.ts",
