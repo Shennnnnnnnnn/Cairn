@@ -101,7 +101,7 @@ export class CliHostExecutor implements HostExecutor {
       record({ type: 'host.refused', requestId: request.id, phase: request.phase, error: reason });
       return { output: '', sessionRef, error: reason };
     }
-    record({ type: 'host.started', requestId: request.id, taskId: request.taskId, phase: request.phase, host: options.executor, requestedModel: options.model, requestedProvider: options.provider, requestedEffort: options.effort, startedAt, resumed: !!request.resume, sessionRef, repair: request.repair, contextMode: request.contextMode });
+    record({ type: 'host.started', requestId: request.id, taskId: request.taskId, phase: request.phase, host: options.executor, requestedModel: options.model, requestedProvider: options.provider, requestedEffort: options.effort, startedAt, resumed: !!request.resume, sessionRef, repair: request.repair, contextMode: request.contextMode, sessionMode: request.sessionMode });
     const consume = (line: string) => {
       let event: any;
       try { event = JSON.parse(line); } catch { record({ type: 'host.unparsed', bytes: Buffer.byteLength(line) }); return; }

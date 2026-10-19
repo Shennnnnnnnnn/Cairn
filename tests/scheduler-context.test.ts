@@ -31,7 +31,7 @@ for(const mode of ['fresh-full','reuse-delta'] as const)test(`Coordinator ${mode
       const proposal=full.findings.find((f:any)=>f.key.startsWith('branch:'));
       assert.equal(proposal.status,'proposed');assert.deepEqual(proposal.covers,[]);
       return reply({decision:'complete',checkpoint:{findings:[{key:proposal.key,text:'The versions differ as documented',status:'supported',basis:'Compared both original headers',covers:['c1']}]}});
-    }},{coordinatorMode:mode}).run(task.id);
+    }},{sessionMode:'multi',coordinatorMode:mode}).run(task.id);
     assert.equal(result.status,'completed',result.reason);assert.equal(reasons,2);
     assert.deepEqual(requests.map(r=>r.phase),['bootstrap','reason','explore','reason']);
   }finally{store.close();rmSync(cwd,{recursive:true,force:true});}
@@ -62,7 +62,7 @@ for(const mode of ['fresh-full','reuse-delta'] as const)test(`Direct completion 
   const owner={host:'mcp' as const,sessionId:'owner',cwd},task=engine.create(owner,{origin:'Documented source',goal:'Read the documented version',criteria:['The version is documented'],evidenceMode:'curated'});
   let calls=0;
   try{
-    const result=await new Scheduler(engine,owner,{async execute(request){calls++;assert.equal(request.phase,'bootstrap');return {output:JSON.stringify({decision:'complete',checkpoint:{findings:[{key:'version',text:'Version one',status:'supported',basis:'Read the source header',covers:['c1']}]}})};}},{coordinatorMode:mode}).run(task.id);
+    const result=await new Scheduler(engine,owner,{async execute(request){calls++;assert.equal(request.phase,'bootstrap');return {output:JSON.stringify({decision:'complete',checkpoint:{findings:[{key:'version',text:'Version one',status:'supported',basis:'Read the source header',covers:['c1']}]}})};}},{sessionMode:'multi',coordinatorMode:mode}).run(task.id);
     assert.equal(result.status,'completed',result.reason);assert.equal(calls,1);
   }finally{store.close();rmSync(cwd,{recursive:true,force:true});}
 });

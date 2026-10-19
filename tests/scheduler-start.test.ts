@@ -63,7 +63,7 @@ test('Auto routes pending human feedback to review without guessing difficulty f
   try{
     const task=f.store.get(f.task.id);task.goal='复杂多分支 I/O memory security '+ 'Compare the original source. '.repeat(40);
     f.store.save(task,'test.goal',{},f.engine.at());f.engine.addHint(task.id,'Preserve the original source and check carefully');
-    const result=await new Scheduler(f.engine,f.owner,{async execute(request){assert.equal(request.phase,'reason');const saved=JSON.parse(request.prompt.split('Saved blackboard:\n')[1]!);const value=JSON.parse(complete().output);return {output:JSON.stringify({...value,review:{snapshot:saved.globalReview.snapshot,summary:'Reviewed the human input and saved evidence'}})};}}).run(task.id);
+    const result=await new Scheduler(f.engine,f.owner,{canResume:()=>true,async execute(request){assert.equal(request.phase,'reason');const saved=JSON.parse(request.prompt.split('Saved blackboard:\n')[1]!);const value=JSON.parse(complete().output);return {sessionRef:request.resume??'native:review',output:JSON.stringify({...value,review:{snapshot:saved.globalReview.snapshot,summary:'Reviewed the human input and saved evidence'}})};}}).run(task.id);
     assert.equal(result.status,'completed');assert.equal(f.store.get(task.id).scheduler!.start!.basis,'saved-state');
   }finally{f.close();}
 });
@@ -99,7 +99,7 @@ for(const mode of ['fresh-full','reuse-delta'] as const)test(`Reason-first prese
         assert.equal(proposal.status,'proposed');assert.deepEqual(proposal.covers,[]);
         return reply({decision:'complete',checkpoint:{findings:[{key:proposal.key,text:proposal.text,status:'supported',basis:'Owner compared the original headers',covers:['c1']}]}});
       },
-    },{startMode:'reason-first',coordinatorMode:mode}).run(f.task.id);
+    },{sessionMode:'multi',startMode:'reason-first',coordinatorMode:mode}).run(f.task.id);
     assert.equal(result.status,'completed',result.reason);assert.equal(result.phases,3);
     assert.deepEqual(requests.map(r=>r.phase),['reason','explore','reason']);
   }finally{f.close();}
@@ -108,7 +108,7 @@ for(const mode of ['fresh-full','reuse-delta'] as const)test(`Reason-first prese
 for(const first of ['bootstrap-first','reason-first'] as const)test(`Resume preserves the saved ${first} decision across reload and a changed flag`,async()=>{
   const f=fixture();
   try{
-    const firstRun=await new Scheduler(f.engine,f.owner,{async execute(){return {output:'{"decision":"suspend","reason":"Need an additional source"}'};}},{startMode:first}).run(f.task.id);
+    const firstRun=await new Scheduler(f.engine,f.owner,{async execute(){return {output:'{"decision":"suspend","reason":"Need an additional source"}'};}},{sessionMode:'multi',startMode:first}).run(f.task.id);
     assert.equal(firstRun.status,'suspended');
     const saved=f.store.get(f.task.id).scheduler!.start;f.store.close();
     const store=new Store(f.path),engine=new Engine(store);

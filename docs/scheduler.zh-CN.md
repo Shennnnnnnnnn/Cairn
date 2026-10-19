@@ -23,7 +23,12 @@ cairn submit --title "核对项目清单" \
 
 cairn run TASK_ID --executor pi \
   --model global:deepseek-v4.1-flash --effort high \
-  --parallel 2 --start-mode auto --takeover
+  --start-mode auto --takeover
+
+# 或在首次 run 时选择多会话，允许按需独立 Explore。
+cairn run TASK_ID --executor pi \
+  --model global:deepseek-v4.1-flash --effort high \
+  --session-mode multi --parallel 2 --takeover
 
 cairn status TASK_ID
 cairn graph TASK_ID --format timeline
@@ -33,12 +38,12 @@ cairn graph TASK_ID --format timeline
 
 ```sh
 cairn run TASK_ID --executor codex \
-  --model gpt-6.1-sol --effort xhigh --parallel 2 --takeover
+  --model gpt-6.1-sol --effort xhigh --session-mode multi --parallel 2 --takeover
 ```
 
 `submit` 先持久化目标，尚未启动模型。`run` 创建独立的通用 MCP 协调身份；已有任务属于其他会话时，必须显式 `--takeover`。可用 `--session-id ID` 指定协调身份；这个 ID 不冒充 Pi／Codex 的原生会话 ID。接管遵守既有 owner epoch 和租约检查。
 
-`--parallel` 为 1–32，默认 1，限制同时执行的探索分支数量。它是进程资源并发设置，不是工具调用、token、费用或总运行时间预算。单次 Bootstrap／Reason 与一批 Explore 交替执行，不额外维持空转的模型会话。
+`--session-mode` 默认 `single`，控制是否允许独立 Explore；`--parallel` 只控制探索并发数。两者不能混为一谈：`multi --parallel 1` 仍会另外创建 Explore 会话。并发是资源设置，不是工具调用、token、费用或总运行时间预算。
 
 `--model` 始终原样交给宿主解析，模型 ID 中的冒号不会被 Cairn 拆成 provider。例如 `global:deepseek-v4.1-flash` 可以是某个已配置 Pi provider 下的完整模型 ID。需要消除 Pi 中的 provider 歧义时，另加 `--provider YOUR_PI_PROVIDER`；SDK 对应 `CliHostOptions.provider`。该参数仅支持 Pi，不改变模型 ID；Codex 不接受此 Pi 专用参数。provider 的实际名称以宿主配置为准。
 
@@ -46,9 +51,21 @@ cairn run TASK_ID --executor codex \
 
 可通过 `--db FILE`、`--root DIR` 指定数据库和工作区，`--log-dir DIR` 指定调度审计目录。需要自定义宿主启动方式时，用可信的 `--executor-command PATH` 与可重复的 `--executor-arg ARG` 设置可执行文件和 argv 前缀；参数通过 `spawn` 传递，不解释为 shell 命令。
 
+## 会话策略
+
+新任务的自动调度默认使用 `--session-mode single`。Bootstrap、Reason 和 Explore 依次恢复同一个 Pi/Codex 原生会话，采用增量黑板输入；首次输入及调度器重启后的输入是完整黑板。探索仍按 Intent 保存提案，再由 Reason 检查依据后赋予覆盖。这保留原版的黑板闭环，但同一模型的后续审核不能算独立模型验证。分支的 MCP 租约身份仅隔离写权限，不代表另一个原生模型会话。
+
+需要并行核对互不依赖的材料、隔离不同假设的探索上下文，或一个方向等待时仍有其他独立工作，可显式选择 `--session-mode multi --parallel 2`。Reason 根据目标、证据缺口和协调成本决定提出哪些 Intent；没有必要就不派发 Explore。此模式默认 `fresh-full`，保留原版每次 Reason 重新读取完整黑板的策略；可另选 `reuse-delta` 复用协调会话。Explore 各自新建原生会话，只提交提案，不能直接完成主目标。
+
+单会话要求 `parallel=1`、`coordinator-mode=reuse-delta`。矛盾配置会在接管或启动宿主前拒绝，不能用 `--parallel 2` 隐式开启多会话。SDK 对应 `SchedulerOptions.sessionMode`，取值 `single | multi`；未显式选择的新任务使用 single。自定义 executor 应返回可靠的 `sessionRef` 并实现 `canResume`；多阶段单会话无法确认原会话可恢复时保存缺口并停止，不用新会话冒充延续。
+
+策略在首次派发前保存为 `scheduler.policy_selected`，`status` 的 `scheduler.execution` 与看板时间线显示会话模式、上下文模式和并发数。恢复时未指定的参数沿用已保存策略和单会话定位，重启后的增量游标重新从完整输入建立。在途阶段未处理完不能切换会话模式。没有策略字段的旧调度任务按原多会话语义恢复；阶段已结清后，可显式 `--session-mode single` 切换。切换模式会重新建立协调上下文，保留已存事实和验收门槛。
+
+六工具接入仍由当前宿主推进，共享 skill 推荐先在主会话执行；确有独立问题与预期收益时才使用宿主原生委派。CLI 会话策略约束的是 Scheduler 创建的会话；它不替用户配置宿主之外的代理扩展，也不提供操作系统级进程隔离。
+
 ## 启动策略
 
-`--start-mode` 与协调上下文策略 `--coordinator-mode` 独立。SDK 对应 `SchedulerOptions.startMode`，默认 `auto`。
+`--start-mode` 与会话策略 `--session-mode` 独立。SDK 对应 `SchedulerOptions.startMode`，默认 `auto`。
 
 | 启动策略 | 首次执行 | 适用情况 |
 |---|---|---|
@@ -62,13 +79,13 @@ cairn run TASK_ID --executor codex \
 
 启动策略只决定首次进入。暂停恢复、重新接管或再次 `run` 会保留已保存的选择与进度，先处理在途阶段；更换参数不会重跑已执行的 Bootstrap，也不能绕过原生进程退出检查。旧任务没有选择记录时保留既有恢复语义，不伪造历史入口。需要对两种入口做实验，应创建输入相同的新任务，不能把重跑同一个已执行任务当成消融。
 
-此选项是在 Round15 封存之后新增；此前模型成绩没有比较 Bootstrap-first 与 Reason-first，也没有覆盖本次新增的自动选路。当前回归只验证执行路径、状态恢复与验收，不能据此声称准确率或耗时改善。
+此选项是在 Round15 封存之后新增；此前模型成绩没有比较 Bootstrap-first 与 Reason-first，也没有覆盖本次新增的自动选路。当前回归只验证执行路径、状态恢复与验收，不能据此声称准确率或耗时改善。单/多会话对照的历史结果见[多分支实验](../evaluations/multibranch/comparison.zh-CN.md)；该轮冻结 4.9.0、早于本次会话策略变更，不代表本次实现的复测成绩。
 
 ## 自动闭环保存什么
 
 1. **入口选择** 按 `start-mode` 决定先直接执行还是先审核。进入 **Bootstrap** 时先尝试原始目标；能完成的任务提交有依据的事实后直接验收，否则保存事实与缺口，再进入 Reason。
 2. **Reason** 读取已保存的黑板、提示、提案和验收缺口，审核已有发现，并生成有区分力的探索 Intent。事实或提示发生有效变化时会重新审核；心跳时间变化不会单独触发推理。
-3. **Explore** 在宿主原生会话中执行一个明确 Intent。不同分支使用协调身份和租约隔离，只能提交 `proposed` 发现，不能给主目标授予覆盖或宣布完成。
+3. **Explore** 执行一个明确 Intent。single 在同一原生会话中逐项执行，multi 创建独立会话并按并发设置执行。不同工作项使用协调身份和租约隔离，只能提交 `proposed` 发现，不能给主目标授予覆盖或宣布完成。
 4. **审核与回写** 将提交的分支提案合入主黑板，但不自动提升为 `supported`。Reason 必须按完整 key 更新发现，给出依据、引用与明确的 criterion coverage。
 5. **完成验收** 走现有 `engine.finishVerified(...)`，检查已保存事实和覆盖、要求的产物及可选宿主验证器。未通过时反馈缺口，继续探索或挂起。
 
@@ -76,9 +93,9 @@ cairn run TASK_ID --executor codex \
 
 阶段输出的字段、数组上限和文本长度由同一份 schema 生成紧凑提示并执行校验，避免提示遗漏实际限制。支持原始 JSON 或包住完整结果的一层 JSON 代码围栏；不从解释性文字中猜测结果。不合法的 Intent 会在提交前被拒绝；owner 的事实、计划、产物与阶段交接通过同一次 checkpoint 保存，避免格式失败留下部分覆盖。
 
-默认 `--coordinator-mode fresh-full` 与原版一致：每次 Reason 新建宿主会话并发送完整公开黑板。它不继承 Bootstrap 的原生对话；完整图保留已保存的发现、来源、Intent 和提示。新会话不等于独立正确性证明，未保存的原生上下文也不会自动进入黑板。
+多会话默认 `--coordinator-mode fresh-full` 与原版一致：每次 Reason 新建宿主会话并发送完整公开黑板。它不继承 Bootstrap 的原生对话；完整图保留已保存的发现、来源、Intent 和提示。新会话不等于独立正确性证明，未保存的原生上下文也不会自动进入黑板。
 
-可选 `--coordinator-mode reuse-delta` 在同一次 `run` 内复用已确认退出的协调会话。首次输入完整黑板，后续发送发生变化的记录、删除记录 ID，以及始终保留的目标、约束和完成条件。增量附带不可变完整快照路径及 SHA-256；历史压缩后应读取完整快照。创建快照失败或使用内存数据库时回退完整输入。游标仅记录实际派发的输入，接管或重启后重建完整输入。快照位于 `.cairn/scheduler-context/`，遵循工作区数据生命周期。Explore 在两种模式中都使用独立会话。
+多会话可选 `--coordinator-mode reuse-delta` 在同一次 `run` 内复用已确认退出的协调会话；单会话默认在各阶段复用原生会话并使用此增量方式。首次输入完整黑板，后续发送发生变化的记录、删除记录 ID，以及始终保留的目标、约束和完成条件。增量附带不可变完整快照路径及 SHA-256；历史压缩后应读取完整快照。创建快照失败或使用内存数据库时回退完整输入。游标仅记录实际派发的输入，接管或重启后重建完整输入。快照位于 `.cairn/scheduler-context/`，遵循工作区数据生命周期。仅多会话策略中的 Explore 使用独立原生会话。
 
 阶段输出继续只保存必要增量。Explore 只需返回 keyed findings 的文字与可选依据，宿主赋予 `proposed` 和空覆盖；显式越权的状态或覆盖仍被拒绝。`next` 字符串列表可以无损转为换行文本，非字符串和超长值仍拒绝。完成与新 Intent 互斥，避免一边宣布完成一边登记必需探索。来源、对象范围、时间、单位与缺测说明继续保存在可选的 `basis` 和 `references` 中；没有新增领域必填字段。
 
@@ -144,7 +161,8 @@ const executor: HostExecutor = {
 
 try {
   const result = await new Scheduler(engine, owner, executor, {
-    maxParallel: 2, coordinatorMode: 'fresh-full', startMode: 'auto',
+    sessionMode: 'single', startMode: 'auto',
+    // 独立探索：sessionMode: 'multi', maxParallel: 2
   }).run(task.id);
   console.log(result);
 } finally {
@@ -154,7 +172,7 @@ try {
 
 接入已有任务时，先由调用者显式执行 `engine.resume(taskId, owner, true)` 接管，再调用 `run`。配置宿主完成验证器时，使用已有 `EngineOptions.completionVerifier`；CLI 则沿用 `CAIRN_VERIFY_COMMAND` 等可信宿主设置。
 
-自定义 `HostExecutor.execute(request, signal)` 接收 `phase`、`prompt`、`cwd`、可选分支和 `resume`；`contextMode` 区分完整、增量和纠错输入，`repair` 提供原始阶段 ID、次数和校验问题。它应尽早调用 `request.onSession(sessionRef)`，在返回的 `output` 中提供最后一条公开 assistant JSON，并如实返回 `error`／`interrupted`／`metrics`。`resume` 要恢复指定原生会话；不能用新会话替代。正常 Reason 复用和跨调度进程恢复需实现 `canResume(sessionRef, cwd)`，确认原执行已退出；检查返回 false 时保留缺口，不启动竞争会话。阶段输出的 JSON 格式由调度器提示提供，业务输入不需要维护框架内部的 claim ID。
+自定义 `HostExecutor.execute(request, signal)` 接收 `phase`、`prompt`、`cwd`、可选分支和 `resume`；`sessionMode` 标明会话策略，`contextMode` 区分完整、增量和纠错输入，`repair` 提供原始阶段 ID、次数和校验问题。它应尽早调用 `request.onSession(sessionRef)`，在返回的 `output` 中提供最后一条公开 assistant JSON，并如实返回 `error`／`interrupted`／`metrics`。`resume` 要恢复指定原生会话；不能用新会话替代。正常 Reason 复用和跨调度进程恢复需实现 `canResume(sessionRef, cwd)`，确认原执行已退出；检查返回 false 时保留缺口，不启动竞争会话。阶段输出的 JSON 格式由调度器提示提供，业务输入不需要维护框架内部的 claim ID。
 
 默认 CLI 审计位于 `<workspace>/.cairn/scheduler/` 的独立调用目录，包含阶段提示、经过筛选的公开事件和指标。Cairn 不把 private thinking 复制到这些审计事件或阶段结果；原生宿主自己的会话文件由宿主管理。早期重试错误会保留，最终成功以最后的宿主终态为准；缺测或可能遗漏的 token 标记为下界，不能按零费用解释。请求的模型／effort 与实际观测值分开记录；流中没有提供实际值时保持缺测。
 

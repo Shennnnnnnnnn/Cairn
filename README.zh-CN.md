@@ -116,11 +116,11 @@ npm run install:global -- --target multica --agent "排障助手" --workspace-id
 
 ```sh
 cairn run TASK_ID --executor pi --model global:deepseek-v4.1-flash \
-  --effort high --parallel 2 --takeover
+  --effort high --takeover
 # 或 --executor codex --model gpt-6.1-sol --effort xhigh
 ```
 
-调度器通过宿主原生执行首轮尝试或黑板审核，再按需探索与验收。默认 `--start-mode auto`：新目标先 Bootstrap，已有事实、开放问题或工作进展先 Reason；可显式选 `bootstrap-first` 或 `reason-first`。自动选路不增加模型调用，选择与原因在派发前保存，恢复不会把任务倒回起点。默认 `--coordinator-mode fresh-full` 与原版一致，每次 Reason 新建会话、读取完整公开图；可选 `--coordinator-mode reuse-delta` 复用协调会话与增量输入。Explore 始终使用独立会话；支持 general curated 任务，工具与权限仍归宿主。`--parallel` 只限制同时探索的分支数，不设轮数、token 或总耗时预算；没有有效进展或宿主无法继续时保存缺口并退出。已有任务接管必须明确 `--takeover`。使用 `cairn serve`、`status`、`graph --format timeline` 查看已保存进展。详见[可选调度层与恢复边界](docs/scheduler.zh-CN.md)。
+调度器通过宿主原生执行首轮尝试或黑板审核，再按需探索与验收。默认 `--start-mode auto`：新目标先 Bootstrap，已有事实、开放问题或工作进展先 Reason；可显式选 `bootstrap-first` 或 `reason-first`。自动选路不增加模型调用，选择与原因在派发前保存，恢复不会把任务倒回起点。新调度任务默认 `--session-mode single`，Bootstrap、Reason 与逐项 Explore 复用同一原生会话、读取增量黑板。按需加 `--session-mode multi --parallel 2` 才允许独立 Explore，由 Reason 判断需要哪些探索；多会话默认 `fresh-full`，保留原版每次 Reason 读取完整图的设计，也可选 `reuse-delta` 复用协调会话。策略与单会话定位随恢复保留，status 与时间线可查看。支持 general curated 任务，工具与权限仍归宿主。`--parallel` 只限制同时探索的分支数，不设轮数、token 或总耗时预算；没有有效进展或宿主无法继续时保存缺口并退出。已有任务接管必须明确 `--takeover`。使用 `cairn serve`、`status`、`graph --format timeline` 查看已保存进展。详见[可选调度层与恢复边界](docs/scheduler.zh-CN.md)。
 
 ## 模型的最短使用流程
 
@@ -370,7 +370,7 @@ cairn export TASK_ID --format html --out evidence.html
 | Codex | 项目／用户 hooks、MCP、skill；同时构建 marketplace 包 | 同样绑定身份；update 即时保存业务状态；captured 计划事件需可靠任务／代次关联 |
 | Multica | 本机运行时上的受管 MCP 与共享 skill | 自动连接身份；即时 update／恢复／完成；与看板同库 |
 
-构建产物位于 `dist/plugins/{pi,claude,codex}`，每包包含自己的运行时。Codex 项目级安装使用原生配置登记，不依赖全局插件缓存自动激活。
+构建产物位于 `dist/plugins/{pi,claude,codex,dsh}`，每包包含自己的运行时。Codex 项目级安装使用原生配置登记，不依赖全局插件缓存自动激活。
 
 其他 MCP 客户端可运行共享服务并加载 `skills/cairn`：
 

@@ -62,7 +62,7 @@ test('Real scheduler and worker leases renew across long native phases', { concu
           assert.equal(request.phase, 'reason'); reasons++;
           return reasons === 1 ? reply({ decision: 'continue' }) : reviewed(request);
         } };
-        const result = await new Scheduler(f.engine, f.owner, executor, { leaseSeconds }).run(f.task.id);
+        const result = await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi', leaseSeconds }).run(f.task.id);
         assert.equal(result.status, 'completed', result.reason); assert.deepEqual(phases, ['bootstrap', 'reason', 'explore', 'reason']);
         const saved = f.store.get(f.task.id);
         assert.equal(saved.status, 'completed'); assert.equal(saved.progress?.[0]?.branchStatus, 'merged');

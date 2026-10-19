@@ -145,6 +145,11 @@ export function projectEvent(row: { seq: number; kind: string; at: string; paylo
   else if(row.kind==='outcome.assessed'){status=value(payload.assessment?.status);summary=value(payload.assessment?.summary);detail=`${value(payload.assessment?.reviewer)} · ${value(payload.assessment?.scope)}`;}
   else if(row.kind==='host.execution'){summary=`宿主状态：${value(payload.state)}（与任务完成状态独立）`;}
   else if(row.kind==='budget.conclude_requested'){summary=`收尾提醒：${value(payload.stage)}`;}
+  else if(row.kind==='scheduler.policy_selected'){
+    title='选择会话策略';status=value(payload.sessionMode);
+    summary=payload.sessionMode==='single'?'单会话 · 按顺序探索':'多会话 · 按需独立 Explore';
+    detail=`${value(payload.coordinatorMode)} · 最大探索并发 ${Number(payload.maxParallel??1)}`;
+  }
   else if(row.kind==='scheduler.start_selected'){
     title='选择启动方式';status=value(payload.selected);
     summary=`${value(payload.requested)} → ${value(payload.selected)}`;detail=value(payload.reason);
@@ -153,7 +158,7 @@ export function projectEvent(row: { seq: number; kind: string; at: string; paylo
     status=value(payload.status);
     summary=[value(payload.phase),value(payload.branch?.title??payload.branch),value(payload.error??payload.reason)].filter(Boolean).join(' · ')||value(payload.status)||'保存调度状态';
     const usage=payload.metrics?.usage;
-    detail=[value(payload.sessionRef),usage?`记录 tokens：输入 ${Number(usage.input_tokens??0)}，输出 ${Number(usage.output_tokens??0)}`:'',typeof payload.metrics?.wallSeconds==='number'?`宿主耗时：${payload.metrics.wallSeconds.toFixed(1)} 秒`:''].filter(Boolean).join('\n');
+    detail=[value(payload.sessionMode)?`会话策略：${value(payload.sessionMode)}`:'',value(payload.sessionRef),usage?`记录 tokens：输入 ${Number(usage.input_tokens??0)}，输出 ${Number(usage.output_tokens??0)}`:'',typeof payload.metrics?.wallSeconds==='number'?`宿主耗时：${payload.metrics.wallSeconds.toFixed(1)} 秒`:''].filter(Boolean).join('\n');
   }
   else if (row.kind === 'usage.updated') { summary='已同步宿主的数值统计，不包含工具参数、结果或对话。'; }
   else if (row.kind === 'task.resumed') { summary = payload.takeover ? '新会话接管目标，继续已有结论与未解决问题。' : '继续当前会话保存的目标与进展。'; }

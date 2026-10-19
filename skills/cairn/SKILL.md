@@ -41,7 +41,7 @@ Use `cairn_checkpoint` for changed findings, recovery questions/next, explicit a
 
 ## Delegation and ownership
 
-Choose whether to delegate and how many helpers are useful from independent questions, current evidence, expected latency, coordination cost and actual host/user limits. Zero helpers is valid. Use the host's native delegation; continue independent work and reassess as results arrive.
+Default to working in the current host session. Delegate only when a bounded independent question, current evidence and expected latency or isolation benefit justify the coordination cost, within actual host/user limits. Zero helpers is valid; difficulty or parallel capacity alone does not require delegation. Use the host's native delegation; continue independent work and reassess as results arrive.
 
 Each helper gets a bounded question, relevant inputs, permitted actions, expected evidence and stopping condition. The main agent owns the root goal, reviews returned results and records acceptance; helpers do not start/resume/take over/finish it. A saved branch does not launch a process. Stop obsolete running helpers through the host and record the stopping reason.
 
@@ -64,4 +64,4 @@ Resume the saved task explicitly; changing owners requires takeover. Review save
 
 ## Optional orchestration
 
-The default six-tool integration uses this host's normal tool loop. Only an explicit cairn run or SDK Scheduler enables automatic Bootstrap/Reason/Explore. auto uses saved work or pending review to choose Reason-first; otherwise Bootstrap attempts the original goal directly. Explicit bootstrap-first/reason-first override the initial route, while recovery preserves saved phases. The scheduler delegates execution to the host, not a separate model API. Its owner results use the same global snapshot review gate; worker results remain proposed. Read [references/harness.md](references/harness.md) for artifact, handoff and lease payloads when needed.
+The default six-tool integration uses this host's normal tool loop. Only an explicit cairn run or SDK Scheduler enables automatic Bootstrap/Reason/Explore. auto uses saved work or pending review to choose Reason-first; otherwise Bootstrap attempts the original goal directly. Explicit bootstrap-first/reason-first override the initial route, while recovery preserves saved phases. New scheduler tasks default to session-mode single: Bootstrap, Reason and sequential Explore reuse one native session. Explicit session-mode multi permits separate Explore only as needed; parallel=1 alone does not imply one session. Saved policy survives resume. The scheduler delegates execution to the host, not a separate model API. Its owner results use the same global snapshot review gate; worker results remain proposed. Read [references/harness.md](references/harness.md) for artifact, handoff and lease payloads when needed.

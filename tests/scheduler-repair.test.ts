@@ -34,7 +34,7 @@ test('Reason repairs an overlong references array in the same session without lo
       assert.deepEqual(f.store.get(f.task.id).claims.map(c=>c.key),['seed']);
       return result(complete());
     }};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'completed',run.reason);assert.equal(reasons,2);
     assert.equal(f.store.get(f.task.id).claims.find(c=>c.key==='answer')?.references,undefined,'The host must not silently truncate or fabricate references');
     assert.ok(f.store.events(f.task.id).some(e=>e.kind==='scheduler.repair_requested'));
@@ -50,7 +50,7 @@ test('A repeated output error ends correction even when a different error interv
       reasons++;assert.ok(reasons<=3,'Repeated invalid output must not loop');
       return result(reasons===2?{decision:'complete',unexpected:'field'}:oversized());
     }};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'failed');assert.match(run.reason!,/repeated.*output|same.*error/i);assert.equal(reasons,3);
     assert.deepEqual(f.store.get(f.task.id).claims.map(c=>c.key),['seed']);
   }finally{f.close();}
@@ -66,7 +66,7 @@ test('A hint arriving during output correction still invalidates the old Reason 
       if(request.repair)return result(complete('discarded-output'));
       if(reasons===3)assert.ok(request.prompt.includes('Inspect the changed requirement'));const saved=JSON.parse(request.prompt.split('Saved blackboard:\n')[1]!);return result({...complete('fresh-review'),review:{snapshot:saved.globalReview.snapshot,summary:'Reviewed changed requirement and updated findings'}});
     }};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'completed',run.reason);assert.equal(reasons,4);
     assert.ok(f.store.events(f.task.id).some(e=>e.kind==='scheduler.stale_reason'));
     assert.ok(!f.store.get(f.task.id).claims.some(c=>c.key==='discarded-output'));
@@ -77,7 +77,7 @@ test('An invalid intent cannot partially commit its accompanying supported findi
   const f=fixture();
   try{
     const executor:HostExecutor={execute:async()=>({output:JSON.stringify({...complete(),intents:[{key:'inspect',title:'Inspect another input',from:['missing-source']}]})})};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'failed');
     const saved=f.store.get(f.task.id);assert.deepEqual(saved.claims,[]);assert.deepEqual(saved.criteria[0]!.claimIds,[]);assert.deepEqual(saved.progress??[],[]);
   }finally{f.close();}
@@ -91,7 +91,7 @@ for(const toolCalls of [1,undefined])test(`Correction rejects ${toolCalls===unde
       if(!request.repair)return result(oversized());
       return {...result(complete()),metrics:toolCalls===undefined?{}:{toolCalls}};
     }};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'failed');assert.match(run.reason!,/tool|action/i);
     assert.ok(!f.store.get(f.task.id).claims.some(c=>c.key==='answer'));
   }finally{f.close();}
@@ -114,7 +114,7 @@ test('Reused Reason receives deltas plus an accessible complete snapshot, while 
       assert.ok(proposal);assert.equal(proposal.status,'proposed');assert.deepEqual(proposal.covers,[]);
       return result({decision:'complete',checkpoint:{findings:[{key:proposal.key,text:proposal.text,status:'supported',basis:'Owner independently checked the referenced result',covers:['c1']}]}});
     }};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'completed',run.reason);assert.equal(reasons,2);
   }finally{f.close();}
 });
@@ -123,7 +123,7 @@ test('An unavailable coordinator does not launch a competing native session',asy
   const f=fixture();let calls=0;
   try{
     const executor:HostExecutor={canResume:()=>false,execute:async()=>{calls++;return result(seed());}};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'failed');assert.match(run.reason!,/availability|competing/);assert.equal(calls,1);
     assert.deepEqual(f.store.get(f.task.id).claims.map(c=>c.key),['seed']);
   }finally{f.close();}
@@ -138,7 +138,7 @@ test('Abort during output correction preserves accepted facts and never applies 
       if(!request.repair)return result(oversized());
       controller.abort();return result(complete());
     }};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id,controller.signal);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id,controller.signal);
     assert.equal(run.status,'interrupted');assert.equal(calls,3);
     assert.deepEqual(f.store.get(f.task.id).claims.map(c=>c.key),['seed']);
   }finally{f.close();}
@@ -154,7 +154,7 @@ test('An unsafe snapshot directory falls back to complete context without follow
       assert.equal(request.contextMode,'full');assert.ok(board(request).findings.some((c:any)=>c.key==='seed'));
       assert.equal(board(request).fullSnapshot,undefined);return result(complete());
     }};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'completed',run.reason);assert.equal(calls,2);assert.deepEqual(readdirSync(outside),[]);
     assert.ok(f.store.events(f.task.id).some(e=>e.kind==='scheduler.context_projection_failed'));
   }finally{f.close();rmSync(outside,{recursive:true,force:true});}
@@ -167,7 +167,7 @@ for(const sessionRef of [undefined,'possibly-live-coordinator'])test(`Recovered 
     saved.scheduler={version:1,epoch:saved.owner.epoch,bootstrapDone:true,sequence:1,status:'running',failedBranches:[],inflight:[{id:'old-reason',phase:'reason',startedAt:saved.createdAt,fingerprint:'old',sessionRef}]};
     f.store.save(saved,'test.crash',{},f.engine.at());
     const executor:HostExecutor={canResume:()=>false,execute:async()=>{calls++;return result(complete());}};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.equal(run.status,'failed');assert.equal(calls,0);assert.equal(f.store.get(f.task.id).scheduler?.inflight[0]?.id,'old-reason');
   }finally{f.close();}
 });
@@ -184,7 +184,7 @@ for(const boundReference of [false,true])test(`A Reason artifact-only repair ${b
       writeFileSync(join(f.cwd,'result.txt'),request.phase==='bootstrap'?'bad':'good');
       return result(request.phase==='bootstrap'?{decision:'complete',checkpoint:{findings:[{...fact(),...(boundReference?{references:['result.txt']}:{})}]}}:{decision:'complete'});
     }};
-    const run=await new Scheduler(f.engine,f.owner,executor,{coordinatorMode:'reuse-delta'}).run(f.task.id);
+    const run=await new Scheduler(f.engine,f.owner,executor,{sessionMode:'multi',coordinatorMode:'reuse-delta'}).run(f.task.id);
     assert.ok(!f.store.events(f.task.id).some(e=>e.kind==='scheduler.stale_reason'),'Native deliverable writes do not constitute an external blackboard change');
     assert.equal(run.status,boundReference?'suspended':'completed',run.reason);
     assert.equal(checks,boundReference?1:2);

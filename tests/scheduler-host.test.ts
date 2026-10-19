@@ -327,6 +327,50 @@ test('run CLI requires explicit takeover before changing ownership or launching 
   } finally { store.close(); f.cleanup(); }
 });
 
+for(const host of ['pi','codex'] as const)test('run CLI defaults to one resumable '+host+' session across real child processes',()=>{
+  const f=fixture(String.raw`
+const {appendFileSync,readFileSync,existsSync}=await import('node:fs');
+const calls=existsSync('calls.jsonl')?readFileSync('calls.jsonl','utf8').trim().split('\n').length:0;
+appendFileSync('calls.jsonl',JSON.stringify(args)+'\n');
+const answer=calls===0
+  ?{decision:'continue',checkpoint:{findings:[{key:'seed',text:'Observed local source',status:'supported',basis:'Read source header',covers:[]}]}}
+  :{decision:'complete',checkpoint:{findings:[{key:'answer',text:'Documented result',status:'supported',basis:'Checked source header',covers:['c1']}]}};
+if(args.includes('--session')){
+  appendFileSync(args[args.indexOf('--session')+1],JSON.stringify({type:'session',id:'fixture-session'})+'\n');
+  emit({type:'message_end',message:{role:'assistant',stopReason:'stop',content:[{type:'text',text:JSON.stringify(answer)}],usage:{input:1,output:1}}});
+}else{
+  emit({type:'thread.started',thread_id:'fixture-thread'});
+  emit({type:'item.completed',item:{type:'agent_message',text:JSON.stringify(answer)}});
+  emit({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}});
+}
+`,host);
+  const database=join(f.root,'state.db'),store=new Store(database),owner={host:'mcp' as const,sessionId:'submitted-owner',cwd:f.root};
+  try{
+    const task=new Engine(store).create(owner,{origin:'Local source',goal:'Read a documented result',criteria:['A grounded result'],evidenceMode:'curated'});
+    const result=spawnSync(process.execPath,['--import','tsx',join(process.cwd(),'src/cli.ts'),'run',task.id,'--root',f.root,'--db',database,'--executor',host,'--model','fixture-model','--takeover','--executor-command',process.execPath,'--executor-arg',join(f.root,'native.mjs')],{encoding:'utf8',env:{...process.env,CAIRN_HOST:'mcp'}});
+    assert.equal(result.status,0,result.stderr);assert.equal(JSON.parse(result.stdout).status,'completed',result.stdout);
+    const calls=readFileSync(join(f.root,'calls.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line) as string[]);
+    assert.equal(calls.length,2);
+    if(host==='pi')assert.equal(calls[0]![calls[0]!.indexOf('--session')+1],calls[1]![calls[1]!.indexOf('--session')+1]);
+    else{assert.equal(calls[0]!.includes('resume'),false);assert.deepEqual(calls[1]!.slice(0,3),['exec','resume','fixture-thread']);}
+    assert.equal(store.get(task.id).scheduler!.execution!.sessionMode,'single');
+    assert.equal(store.events(task.id).filter(e=>e.kind==='scheduler.dispatched').length,2);
+  }finally{store.close();f.cleanup();}
+});
+
+test('run CLI rejects contradictory session options before takeover or native execution',()=>{
+  const f=fixture(''),database=join(f.root,'state.db'),store=new Store(database),owner={host:'mcp' as const,sessionId:'submitted-owner',cwd:f.root};
+  try{
+    const task=new Engine(store).create(owner,{origin:'Local source',goal:'Preserve owner on invalid policy',criteria:['Grounded result'],evidenceMode:'curated'});
+    for(const flags of [['--session-mode','invalid'],['--parallel','2'],['--coordinator-mode','fresh-full'],['--session-mode','single','--parallel','2']]){
+      const result=spawnSync(process.execPath,['--import','tsx',join(process.cwd(),'src/cli.ts'),'run',task.id,'--root',f.root,'--db',database,'--executor','pi','--model','fixture-model','--takeover',...flags,'--executor-command',process.execPath,'--executor-arg',join(f.root,'native.mjs')],{encoding:'utf8',env:{...process.env,CAIRN_HOST:'mcp'}});
+      assert.equal(result.status,1);assert.match(result.stderr,/session.mode|Single-session/);
+      assert.equal(store.get(task.id).owner.sessionId,owner.sessionId);assert.equal(store.get(task.id).scheduler,undefined);
+      assert.equal(existsSync(join(f.root,'argv.json')),false);
+    }
+  }finally{store.close();f.cleanup();}
+});
+
 test('run CLI selects the initial mode and rejects invalid modes before takeover or native execution',()=>{
   const f=fixture(`emit({type:'message_end',message:{role:'assistant',stopReason:'stop',content:[{type:'text',text:JSON.stringify({decision:'complete',checkpoint:{findings:[{key:'answer',text:'Observed fixture result',status:'supported',basis:'Read the local fixture',covers:['c1']}]}})}],usage:{input:1,output:1}}});`);
   const database=join(f.root,'state.db'),store=new Store(database),engine=new Engine(store);

@@ -27,7 +27,7 @@ test('Bootstrap directly saves facts and completes through the configured finish
   const calls: string[] = [];
   try {
     const executor: HostExecutor = { execute: async request => { calls.push(request.phase); return reply(complete()); } };
-    const result = await new Scheduler(f.engine, f.owner, executor).run(f.task.id);
+    const result = await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id);
     assert.equal(result.status, 'completed'); assert.equal(checks, 1); assert.deepEqual(calls, ['bootstrap']);
     const task = f.store.get(f.task.id);
     assert.equal(task.status, 'completed'); assert.equal(task.verification?.status, 'passed');
@@ -58,7 +58,7 @@ test('Reason dispatches parallel Explore branches and must explicitly review ful
       assert.deepEqual(f.store.get(f.task.id).criteria.map(c => c.claimIds), [[], []], 'Merging worker results must not grant coverage');
       return reply({ decision: 'complete', checkpoint: { findings: proposals.map((claim: any, index: number) => ({ key: claim.key, text: claim.text, status: 'supported', basis: 'Owner independently reviewed the referenced source', covers: [`c${index + 1}`] })) } });
     } };
-    const result = await new Scheduler(f.engine, f.owner, executor, { maxParallel: 2 }).run(f.task.id);
+    const result = await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi', maxParallel: 2 }).run(f.task.id);
     assert.equal(result.status, 'completed'); assert.equal(maximum, 2); assert.equal(reasons, 2);
     assert.deepEqual(calls, ['bootstrap', 'reason', 'explore', 'explore', 'reason']);
     const task = f.store.get(f.task.id), reviewed = task.claims.filter(c => c.key?.startsWith('branch:'));
@@ -74,7 +74,7 @@ for (const questionsOnly of [false, true]) {
         calls++; if (calls > 3) throw new Error('No-progress review must not repeat');
         return reply(questionsOnly ? { decision: 'continue', checkpoint: { questions: [request.phase === 'bootstrap' ? 'Source unavailable' : 'Still need that source'] } } : { decision: 'continue' });
       } };
-      const result = await new Scheduler(f.engine, f.owner, executor).run(f.task.id);
+      const result = await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id);
       assert.equal(result.status, 'suspended'); assert.equal(calls, questionsOnly ? 2 : 1);
       assert.equal(f.store.get(f.task.id).status, 'suspended'); assert.equal(f.store.get(f.task.id).claims.length, 0);
     } finally { f.close(); }
@@ -86,14 +86,14 @@ test('Two scheduler instances cannot share a live task lease; public projections
   let calls = 0;
   try {
     const executor: HostExecutor = { execute: async () => { calls++; started.resolve(); return release.promise; } };
-    const running = new Scheduler(f.engine, f.owner, executor).run(f.task.id);
+    const running = new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id);
     await started.promise;
     const task = f.store.get(f.task.id), projection = publicTask(task);
     assert.ok(task.scheduler?.lease?.token);
     assert.equal(Reflect.has(projection.scheduler!.lease!, 'token'), false);
     assert.equal(projection.scheduler!.lease!.expiresAt, task.scheduler!.lease!.expiresAt);
     assert.ok(f.store.get(f.task.id).scheduler?.lease?.token, 'Redaction must not mutate stored lease credentials');
-    await assert.rejects(new Scheduler(f.engine, f.owner, executor).run(f.task.id), /live task lease/);
+    await assert.rejects(new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id), /live task lease/);
     assert.equal(calls, 1);
     release.resolve(reply(complete()));
     assert.equal((await running).status, 'completed');
@@ -110,7 +110,7 @@ test('A new human hint arriving during Reason invalidates its old candidate and 
       assert.ok(board(request).hints.some((hint: any) => hint.text === 'Check the newly supplied source'));
       return reply({...complete('fresh-review'),review:{snapshot:board(request).globalReview.snapshot,summary:'Reconciled the new source, saved findings and goal coverage'}});
     } };
-    const running = new Scheduler(f.engine, f.owner, executor).run(f.task.id);
+    const running = new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id);
     await started.promise;
     f.engine.addHint(f.task.id, 'Check the newly supplied source');
     release.resolve(reply(complete('stale-review')));
@@ -127,7 +127,7 @@ for (const takeover of [false, true]) {
     const f = fixture(), started = deferred<void>(), release = deferred<HostResult>();
     try {
       const executor: HostExecutor = { execute: async request => { request.onSession?.('native-old-session'); started.resolve(); return release.promise; } };
-      const running = new Scheduler(f.engine, f.owner, executor).run(f.task.id);
+      const running = new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id);
       await started.promise;
       const nextOwner = { ...f.owner, sessionId: 'replacement-owner' };
       if (takeover) f.engine.resume(f.task.id, nextOwner, true); else f.engine.suspendByHuman(f.task.id);
@@ -157,7 +157,7 @@ for(const hostFailure of [false,true])test(`${hostFailure?'Failed native Explore
       assert.equal(proposal.status, 'proposed');
       return reply({ decision: 'complete', checkpoint: { findings: [{ ...grounded(proposal.key), text: proposal.text }] } });
     } };
-    assert.equal((await new Scheduler(f.engine, f.owner, executor).run(f.task.id)).status, 'completed');
+    assert.equal((await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id)).status, 'completed');
     assert.deepEqual(calls.map(c => c.phase), ['bootstrap', 'reason', 'explore', hostFailure?'conclude':'explore', 'reason']);
   } finally { f.close(); }
 });
@@ -170,7 +170,7 @@ test('Abort stops the active native phase without conclude or a replacement laun
       await new Promise<void>(resolve => signal!.addEventListener('abort', () => resolve(), { once: true }));
       return { output: '', sessionRef: 'interrupted-native-session', interrupted: true };
     } };
-    const running = new Scheduler(f.engine, f.owner, executor).run(f.task.id, controller.signal);
+    const running = new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id, controller.signal);
     await started.promise; controller.abort();
     assert.equal((await running).status, 'interrupted'); assert.deepEqual(calls, ['bootstrap']);
     const task = f.store.get(f.task.id);
@@ -230,7 +230,7 @@ test('The same rejected candidate cannot endlessly repeat host acceptance checks
       phases++; if (phases > 3) throw new Error('Unchanged completion loop');
       return reply(request.phase === 'bootstrap' ? complete() : { decision: 'complete', checkpoint: { questions: ['Same unsupported completion, rephrased'] } });
     } };
-    const result = await new Scheduler(f.engine, f.owner, executor).run(f.task.id);
+    const result = await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id);
     assert.equal(result.status, 'suspended'); assert.equal(phases, 2); assert.equal(checks, 1);
     assert.match(result.reason!, /unchanged candidate already failed completion/);
     const task = f.store.get(f.task.id);
@@ -243,7 +243,7 @@ test('A pre-aborted scheduler request cannot acquire a lease or mutate task stat
   try {
     const before = f.store.get(f.task.id), events = f.store.events(f.task.id).length;
     const executor: HostExecutor = { execute: async () => { calls++; return reply(complete()); } };
-    await assert.rejects(new Scheduler(f.engine, f.owner, executor).run(f.task.id, controller.signal), /aborted/i);
+    await assert.rejects(new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id, controller.signal), /aborted/i);
     assert.deepEqual(f.store.get(f.task.id), before); assert.equal(f.store.events(f.task.id).length, events); assert.equal(calls, 0);
   } finally { f.close(); }
 });
@@ -257,7 +257,7 @@ test('An interrupted Reason candidate cannot reuse its reviewed fingerprint with
     old.scheduler.reasonFingerprint = schedulerFingerprint(f.engine, old);
     f.store.save(old, 'test.crash', {}, f.engine.at());
     const executor: HostExecutor = { canResume:sessionRef=>sessionRef==='closed-reason-session',execute: async request => { calls++; assert.equal(request.phase, 'reason'); return reply(complete('fresh-review')); } };
-    assert.equal((await new Scheduler(f.engine, f.owner, executor).run(f.task.id)).status, 'completed');
+    assert.equal((await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id)).status, 'completed');
     assert.equal(calls, 1);
     const task = f.store.get(f.task.id); assert.ok(task.claims.some(c => c.key === 'fresh-review')); assert.ok(!task.claims.some(c => c.key === 'discarded-review'));
   } finally { f.close(); }
@@ -271,7 +271,7 @@ for (const canResume of [undefined, () => false]) {
       old.scheduler = { version: 1, epoch: old.owner.epoch, bootstrapDone: true, sequence: 1, status: 'running', failedBranches: [], inflight: [{ id: 'old-bootstrap', phase: 'bootstrap', startedAt: old.createdAt, fingerprint: 'old', sessionRef: 'possibly-live-native-session' }] };
       f.store.save(old, 'test.crash', {}, f.engine.at());
       const executor: HostExecutor = { canResume, execute: async () => { calls++; return reply(complete()); } };
-      const result = await new Scheduler(f.engine, f.owner, executor).run(f.task.id);
+      const result = await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id);
       assert.equal(result.status, 'failed'); assert.match(result.reason!, /process exit is unknown|still running/); assert.equal(calls, 0);
       const task = f.store.get(f.task.id); assert.notEqual(task.status, 'completed'); assert.equal(task.claims.length, 0); assert.equal(task.scheduler?.inflight[0]?.sessionRef, 'possibly-live-native-session');
     } finally { f.close(); }
@@ -294,7 +294,7 @@ for (const sourceAlias of [false, true]) {
         const proposal = board(request).findings.find((claim: any) => claim.key.startsWith('branch:'));
         return reply({ decision: 'complete', checkpoint: { findings: [{ ...grounded(proposal.key), text: proposal.text }] } });
       } };
-      assert.equal((await new Scheduler(f.engine, f.owner, executor).run(f.task.id)).status, 'completed');
+      assert.equal((await new Scheduler(f.engine, f.owner, executor, { sessionMode: 'multi' }).run(f.task.id)).status, 'completed');
       assert.deepEqual(calls, ['reason', 'explore', 'reason']);
     } finally { f.close(); }
   });

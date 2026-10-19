@@ -129,8 +129,16 @@ export interface SchedulerFlight {
   candidate?:unknown;
 }
 export type SchedulerStartMode = 'auto'|'bootstrap-first'|'reason-first';
+export type SchedulerSessionMode = 'single'|'multi';
+export interface SchedulerPolicy {
+  sessionMode:SchedulerSessionMode;coordinatorMode:'fresh-full'|'reuse-delta';maxParallel:number;
+}
 export interface SchedulerState {
   version:1; epoch:number; bootstrapDone:boolean; sequence:number;
+  /** Saved execution policy; legacy dispatchers without this field retain multi-session recovery. */
+  execution?:SchedulerPolicy;
+  /** Single-session locator survives dispatcher restart; no native transcript is copied. */
+  coordinator?:{started:boolean;sessionRef?:string};
   /** Initial entry selection; recovery keeps the saved phase instead of restarting it. */
   start?:{requested:SchedulerStartMode;selected:Exclude<SchedulerStartMode,'auto'>;basis:'explicit'|'saved-state'|'new-task';reason:string};
   status:'running'|'idle'|'failed'|'interrupted'|'completed'|'suspended';
